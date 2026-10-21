@@ -965,6 +965,13 @@ def make_handler(app, trusted, port):
                 self.store_call(app.store.set_catalog, cat_id, enabled=action == "enable")
             elif action in ("up", "down"):
                 self.store_call(app.store.set_catalog, cat_id, move=-1 if action == "up" else 1)
+            elif action == "branch":
+                branch = str(body.get("branch") or "").strip()
+                if not branch:
+                    raise ApiError(tr("Некорректное имя ветки"))
+                self.store_call(app.store.set_catalog, cat_id, branch=branch)
+            elif action == "token":
+                self.store_call(app.store.set_token, cat_id, str(body.get("token") or ""))
             else:
                 raise ApiError(tr("Неизвестное действие"))
             app.store.refresh()

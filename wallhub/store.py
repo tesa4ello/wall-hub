@@ -63,10 +63,14 @@ def now():
 
 
 class Store:
-    def __init__(self, config, modules_dir, token_path, builtin_ids, on_change=lambda: None, fetch=None):
+    def __init__(self, config, modules_dir, token_path, builtin_ids, on_change=lambda: None, fetch=None,
+                 tokens_dir=None):
         self.config = config
         self.dir = modules_dir
+        # Общий токен (тот же, что у обновления панели) и свои токены каталогов:
+        # tokens_dir/<id каталога>, права 600. Наружу отдаём только «задан ли».
         self.token_path = token_path
+        self.tokens_dir = tokens_dir or os.path.join(os.path.dirname(modules_dir), "store-tokens")
         self.builtin_ids = set(builtin_ids)
         self.on_change = on_change
         self.fetch = fetch or self._fetch
@@ -130,19 +134,55 @@ class Store:
             raise StoreError("Нет такого каталога")
         self.config.update({"store": {"catalogs": [c for c in extra if c["id"] != cat_id]}})
         self.index.pop(cat_id, None)
+        self.set_token(cat_id, "")
 
     # --- GitHub -----------------------------------------------------------------
 
-    def _token(self):
+    def _own_token_path(self, cat_id):
+        return os.path.join(self.tokens_dir, cat_id)
+
+    @staticmethod
+    def _read(path):
         try:
-            with open(self.token_path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return f.read().strip()
         except OSError:
             return ""
 
-    def _fetch(self, url, accept="application/vnd.github+json", limit=MAX_ARCHIVE):
+    def _token(self, cat_id):
+        """Свой токен каталога, а без него — общий."""
+        return self._read(self._own_token_path(cat_id)) or self._read(self.token_path)
+
+    def token_state(self, cat_id):
+        """"own" — у каталога свой токен, "shared" — действует общий, "" — без токена."""
+        if self._read(self._own_token_path(cat_id)):
+            return "own"
+        return "shared" if self._read(self.token_path) else ""
+
+    def set_token(self, cat_id, token):
+        """Свой токен каталога; пустой — удалить (снова действует общий)."""
+        if cat_id != "main" and not any(c["id"] == cat_id for c in self.catalogs()) and token:
+            raise StoreError("Нет такого каталога")
+        token = (token or "").strip()
+        path = self._own_token_path(cat_id)
+        if not token:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        else:
+            if len(token) > 500 or any(c.isspace() for c in token):
+                raise StoreError("Некорректный токен")
+            os.makedirs(self.tokens_dir, mode=0o700, exist_ok=True)
+            tmp = path + ".tmp"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(token)
+            os.replace(tmp, path)
+        self.index.pop(cat_id, None)
+
+    def _fetch(self, url, accept="application/vnd.github+json", limit=MAX_ARCHIVE, token=""):
         headers = {"Accept": accept, "User-Agent": "wallhub-store"}
-        token = self._token()
         if token:
             headers["Authorization"] = f"Bearer {token}"
         try:
@@ -161,8 +201,9 @@ class Store:
     def _refresh_one(self, cat):
         api = f"https://api.github.com/repos/{cat['repo']}"
         try:
-            commit = json.loads(self.fetch(f"{api}/commits/{cat['branch']}"))["sha"]
-            raw = self.fetch(f"{api}/contents/catalog.json?ref={commit}", accept="application/vnd.github.raw")
+            token = self._token(cat["id"])
+            commit = json.loads(self.fetch(f"{api}/commits/{cat['branch']}", token=token))["sha"]
+            raw = self.fetch(f"{api}/contents/catalog.json?ref={commit}", accept="application/vnd.github.raw", token=token)
             data = json.loads(raw)
             modules = [m for m in data.get("modules", []) if isinstance(m, dict) and ID_RE.match(str(m.get("id", "")))]
         except StoreError as e:
@@ -214,7 +255,8 @@ class Store:
             entry = self.index.get(cat["id"], {}) if cat["enabled"] else {}
             catalogs.append({k: cat[k] for k in ("id", "repo", "branch", "enabled", "main")} | {
                 "error": entry.get("error"), "error_args": entry.get("error_args", {}),
-                "commit": entry.get("commit", ""), "fetched_at": entry.get("fetched_at")})
+                "commit": entry.get("commit", ""), "fetched_at": entry.get("fetched_at"),
+                "token": self.token_state(cat["id"])})
             for m in entry.get("modules", []):
                 if m["id"] in seen:
                     continue  # побеждает каталог выше по списку
@@ -254,7 +296,7 @@ class Store:
             cat = next(c for c in self.catalogs() if c["id"] == row["catalog"])
             commit = self.index[cat["id"]]["commit"]
             data = self.fetch(f"https://api.github.com/repos/{cat['repo']}/tarball/{commit}",
-                              accept="application/vnd.github+json")
+                              accept="application/vnd.github+json", token=self._token(cat["id"]))
             target = self._unpack(data, module_id, f"{row['version']}-{commit[:7]}")
             module = read(module_id, target, "installed")
             if module.error:
