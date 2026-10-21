@@ -85,8 +85,8 @@ export function destroyAll(instances) {
 }
 
 export async function loadCatalog() {
-  const { widgets, providers, i18n } = await api.get("/catalog");
+  const { widgets, providers, i18n, modules } = await api.get("/catalog");
   // Переводы модулей (названия виджетов, настроек и тексты внутри виджетов).
   addTranslations(i18n);
-  return { widgets: Object.fromEntries(widgets.map((w) => [w.id, w])), providers };
+  return { widgets: Object.fromEntries(widgets.map((w) => [w.id, w])), providers, modules };
 }

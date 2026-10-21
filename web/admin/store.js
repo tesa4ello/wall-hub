@@ -13,6 +13,47 @@ export class StorePanel {
     this.ctx = ctx;
     this.data = null;
     this.busy = null; // id модуля или "refresh", пока идёт запрос
+    this.settingsFor = null; // id модуля, чья страница настроек открыта
+    this.page = null; // смонтированный admin.js модуля
+  }
+
+  // Загруженный на панели модуль (из /api/catalog) или undefined.
+  loadedModule(id) {
+    return this.ctx.modules().find((x) => x.id === id && !x.error);
+  }
+
+  // Страница настроек модуля: его admin.js, export mount(el, {api, t}).
+  renderSettings() {
+    const id = this.settingsFor;
+    const m = this.data?.modules.find((x) => x.id === id);
+    return `
+      <h1>${esc(m ? this.tr(m, m.title) : id)}</h1>
+      <div class="row-buttons flush"><button class="btn btn-small" data-store-back>← ${t("Модули")}</button></div>
+      <div id="module-admin"></div>`;
+  }
+
+  async mount() {
+    this.destroy();
+    const el = document.getElementById("module-admin");
+    const id = this.settingsFor;
+    if (!el || !id) return;
+    try {
+      const mod = await import(`/modules/${id}/admin.js`);
+      if (this.settingsFor !== id || !el.isConnected) return;
+      this.page = mod.mount(el, { api, t }) || null;
+    } catch (e) {
+      console.error("module admin failed", id, e);
+      el.innerHTML = `<div class="panel"><div class="item error">${esc(t("Страница настроек модуля не загрузилась"))}</div></div>`;
+    }
+  }
+
+  destroy() {
+    try {
+      this.page?.destroy?.();
+    } catch (e) {
+      console.error(e);
+    }
+    this.page = null;
   }
 
   async load(path = "/store", body) {
@@ -27,10 +68,15 @@ export class StorePanel {
   }
 
   render() {
+    if (this.settingsFor) return this.renderSettings();
     const d = this.data;
     if (!d) return `<h1>${t("Модули")}</h1><div class="empty">${t("Загрузка…")}</div>`;
     const names = Object.fromEntries(d.catalogs.map((c) => [c.id, c.repo]));
-    const rows = d.modules.map((m) => this.renderModule(m, names)).join("");
+    // Модули не из каталогов (папка разработчика): показываем, чтобы их можно было настроить.
+    const known = new Set(d.modules.map((m) => m.id));
+    const local = this.ctx.modules().filter((m) => m.source !== "builtin" && !m.error && !known.has(m.id))
+      .map((m) => ({ ...m, widgets: [], local: true }));
+    const rows = [...d.modules, ...local].map((m) => this.renderModule(m, names)).join("");
     return `
       <h1>${t("Модули")}</h1>
       <section class="panel list">
@@ -61,10 +107,15 @@ export class StorePanel {
     const busy = this.busy === m.id;
     let state = "";
     let actions = "";
-    if (m.builtin) {
+    if (m.local) {
+      state = t("Из папки модулей");
+      const loaded = this.loadedModule(m.id);
+      if (loaded?.admin) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
+      if (loaded?.backend_error) state += ` · ${t("серверная часть не запустилась: {error}", { error: loaded.backend_error })}`;
+    } else if (m.builtin) {
       state = t("Входит в ядро");
     } else if (!m.compatible && !m.installed) {
-      state = m.backend ? t("Нужна серверная часть, эта версия панели её пока не поддерживает") : t("Не подходит к этой версии панели");
+      state = t("Не подходит к этой версии панели");
     } else {
       if (m.installed) {
         state = m.update ? t("Установлена {old}, доступна {new}", { old: m.installed, new: m.version }) : t("Установлена {version}", { version: m.installed });
@@ -72,6 +123,9 @@ export class StorePanel {
       }
       if (!m.installed) actions += `<button class="btn btn-primary btn-small" data-store-install="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${busy ? t("Ставлю…") : t("Установить")}</button>`;
       if (m.update) actions += `<button class="btn btn-primary btn-small" data-store-install="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${busy ? t("Обновляю…") : t("Обновить")}</button>`;
+      const loaded = this.loadedModule(m.id);
+      if (loaded?.admin) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
+      if (loaded?.backend_error) state += ` · ${t("серверная часть не запустилась: {error}", { error: loaded.backend_error })}`;
       if (m.installed) actions += `<button class="btn btn-small" data-store-remove="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${t("Удалить")}</button>`;
     }
     const widgets = m.widgets.map((w) => `<span class="chip">${icon(w.icon || "grid", "icon tiny")} ${esc(this.tr(m, w.title))}</span>`).join("");
@@ -123,7 +177,13 @@ export class StorePanel {
     const b = e.target.closest("button");
     if (!b) return false;
     const d = b.dataset;
-    if ("storeRefresh" in d) {
+    if (d.storeSettings) {
+      this.settingsFor = d.storeSettings;
+      this.ctx.render();
+    } else if ("storeBack" in d) {
+      this.settingsFor = null;
+      this.ctx.render();
+    } else if ("storeRefresh" in d) {
       await this.run("refresh", () => this.load("/store/refresh", {}));
     } else if (d.storeInstall) {
       const m = this.data.modules.find((x) => x.id === d.storeInstall);

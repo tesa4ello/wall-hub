@@ -825,3 +825,126 @@ class ProvidersTest(unittest.TestCase):
             config = Config(os.path.join(tmp, "c.json"))
             config.update({"weather": {"keys": {"yandex": "x" * 20}}})
             self.assertNotIn("keys", config.public()["weather"])
+
+
+class BackendsTest(unittest.TestCase):
+    MAIN = '''
+from . import helper
+
+STATE = {"stopped": 0}
+
+
+def setup(ctx):
+    def hello(body, query):
+        if query.get("fail"):
+            raise ctx.Error("Нет сервера {name}", name=query["fail"])
+        return {"hello": helper.NAME, "settings": ctx.settings()}
+
+    def save(body, query):
+        ctx.save_settings(body)
+
+    ctx.route("GET", "hello", hello)
+    ctx.route("POST", "save", save, admin=True)
+
+    def stop():
+        STATE["stopped"] += 1
+    return stop
+'''
+
+    def make(self, root, version, main=MAIN):
+        from wallhub.modules import read
+        path = os.path.join(root, version)
+        os.makedirs(os.path.join(path, "backend"))
+        with open(os.path.join(path, "module.json"), "w") as f:
+            json.dump({"id": "srv", "version": "1.0.0", "core": "1", "title": "S", "backend": "backend/main.py"}, f)
+        with open(os.path.join(path, "backend", "main.py"), "w") as f:
+            f.write(main)
+        with open(os.path.join(path, "backend", "helper.py"), "w") as f:
+            f.write("NAME = %r\n" % version)
+        return read("srv", path, "installed")
+
+    def test_lifecycle(self):
+        from wallhub.backends import Backends, ModuleError
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            host = Backends(config, os.path.join(tmp, "data"))
+            v1 = self.make(tmp, "v1")
+            host.sync({"srv": v1})
+            self.assertTrue(os.path.isdir(os.path.join(tmp, "data", "srv")))
+            handler, admin = host.find("srv", "GET", "hello")
+            self.assertFalse(admin)
+            self.assertEqual(handler({}, {})["hello"], "v1")
+            save, admin = host.find("srv", "POST", "save")
+            self.assertTrue(admin)
+            save({"servers": ["a"]}, {})
+            save({"servers": []}, {})
+            self.assertEqual(config.get("module_settings"), {"srv": {"servers": []}})
+            with self.assertRaises(ModuleError):
+                handler({}, {"fail": "x"})
+            stopped = host.running["srv"]["stop"].__globals__["STATE"]
+            # Та же версия: не перезапускается. Новая: старая останавливается.
+            host.sync({"srv": v1})
+            self.assertEqual(stopped["stopped"], 0)
+            host.sync({"srv": self.make(tmp, "v2")})
+            self.assertEqual(stopped["stopped"], 1)
+            self.assertEqual(host.find("srv", "GET", "hello")[0]({}, {})["hello"], "v2")
+            host.sync({})
+            self.assertIsNone(host.find("srv", "GET", "hello"))
+            self.assertEqual(host.running, {})
+
+    def test_broken_setup(self):
+        from wallhub.backends import Backends
+        with tempfile.TemporaryDirectory() as tmp:
+            host = Backends(Config(os.path.join(tmp, "c.json")), os.path.join(tmp, "data"))
+            bad = self.make(tmp, "v1", main="def setup(ctx):\n    ctx.route('GET', 'x', None)\n    raise RuntimeError('boom')\n")
+            host.sync({"srv": bad})
+            self.assertIn("boom", host.errors["srv"])
+            self.assertEqual(host.routes, {})
+            self.assertEqual(host.running, {})
+
+    def test_choice_option(self):
+        meta = {"options": [{"key": "server", "type": "choice", "title": "S", "source": "servers"}]}
+        self.assertEqual(desktops.clean_options(meta, {"server": "x" * 100})["server"], "x" * 64)
+        self.assertEqual(desktops.clean_options(meta, {})["server"], "")
+
+
+@unittest.skipUnless(__import__("shutil").which("ssh-keygen"), "нужен ssh-keygen")
+class SshKeysTest(unittest.TestCase):
+    def test_store(self):
+        import stat
+        import subprocess
+        from wallhub.sshkeys import SshKeyError, SshKeys
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "ssh")
+            keys = SshKeys(root)
+            keys.ensure_default()
+            self.assertEqual(stat.S_IMODE(os.stat(root).st_mode), 0o700)
+            (panel,) = keys.list()
+            self.assertEqual(panel["id"], "panel")
+            self.assertTrue(panel["public_key"].startswith("ssh-ed25519 "))
+            self.assertNotIn("PRIVATE", json.dumps(keys.list()))
+            path = keys.path("panel")
+            self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+            self.assertIsNone(keys.path("../etc"))
+            # Удалённый ключ по умолчанию не создаётся заново.
+            keys.delete("panel")
+            keys.ensure_default()
+            self.assertEqual(keys.list(), [])
+            # Импорт: ключ без пароля принимается, мусор и ключ с паролем — нет.
+            src = os.path.join(tmp, "k")
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", src], check=True)
+            with open(src) as f:
+                kid = keys.import_key("Мой", f.read())
+            self.assertEqual(keys.list()[0]["title"], "Мой")
+            with open(src + ".pub") as f:
+                self.assertEqual(keys.list()[0]["public_key"].split()[1], f.read().split()[1])
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "secret", "-f", src + "p"], check=True)
+            with open(src + "p") as f, self.assertRaises(SshKeyError):
+                keys.import_key("С паролем", f.read())
+            with self.assertRaises(SshKeyError):
+                keys.import_key("Мусор", "hello")
+            with self.assertRaises(SshKeyError):
+                keys.generate("  ")
+            keys.rename(kid, "Новое")
+            # Отвергнутые ключи не оставили файлов.
+            self.assertEqual(set(os.listdir(root)), {"keys.json", ".initialized", f"id_{kid}", f"id_{kid}.pub"})

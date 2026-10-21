@@ -163,11 +163,24 @@ Widgets come from modules. A module is a folder `web/modules/<module>/`:
 - `module.json`: the title and the list of widget types, each with an `id`,
   title, icon, sizes (`size.default/min/max` in cells), `card` (whether to draw
   a backing card), a settings schema (`bool`, `text`, `number`, `select`,
-  `providers`) and translations (`i18n`);
+  `providers`, `location`, `choice` with choices served by the module backend)
+  and translations (`i18n`);
 - `module.js`: exports `widgets = {id: mount}`, where
   `mount(el, {options, api, sound})` returns `{destroy()}`; `sound.play(name?)` plays a notification sound on the panel (respecting the sound settings and quiet hours; silent in the admin preview);
 - `module.css`: styles. Prefer `cqw`/`cqh` units: a widget is a container, so
-  its content fits any size.
+  its content fits any size;
+- `admin.js` (optional): the module settings page, `mount(el, {api, t})`,
+  opened by the "Settings" button on the "Modules" tab;
+- `backend/` (optional, `"backend": "backend/main.py"` in module.json): the
+  server part. The core imports it in its own process (`wallhub/backends.py`)
+  and calls `setup(ctx)`: `ctx.route(method, path, handler, admin=False)` adds
+  a route `/api/m/<module>/<path>` (for the panel screen and the admin; with
+  `admin=True` for the admin only), `ctx.settings()`/`ctx.save_settings()`
+  keep the module settings in the config, `ctx.data_dir` is its folder in
+  `/var/lib/wallhub/module-data/`, and `ctx.ssh_keys()`, `ctx.ssh_key_path(id)`
+  and `ctx.ssh_known_hosts()` give access to the panel SSH keys. A function
+  (or an object with `stop()`) returned from `setup` is called when the module
+  is removed or updated.
 
 A widget type is `module/widget` (for example, `clock/clock`). One type can be
 placed any number of times, each instance with its own settings. The layout is
@@ -187,7 +200,8 @@ trusting its code. Private catalogs need a GitHub token with read access to
 their repositories; it is the same token as for updates and can be set on the
 "Modules" or "Updates" tab. Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
 `previous` point to versions); the service installs them itself, without root.
-Modules with a server part are not supported yet. Each `module.json` has `id`, `version` and
+Module server parts run inside the core process (see above); their data in
+`/var/lib/wallhub/module-data/<id>/` is kept when the module is removed. Each `module.json` has `id`, `version` and
 `core`, the major version of the core module API (`CORE_API` in
 `wallhub/__init__.py`); a store module with a different `core` is not loaded.
 A widget whose module is missing stays on its desktop as a placeholder.
@@ -200,6 +214,16 @@ There is no gear icon; the interface is touch only:
   Wi‑Fi, theme, "Settings" and the new version notice;
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
+
+### SSH keys
+
+The panel connects to servers over SSH itself (for example, from the server
+monitoring module), so the keys live in the core: `/var/lib/wallhub/ssh/`
+(0700, service only, `wallhub/sshkeys.py`). An ed25519 "Panel key" is created
+on first start. The "SSH keys" tab in the admin creates more keys, imports
+your own (without a passphrase), copies the public key for `authorized_keys`
+and deletes keys. Private keys are never sent out; modules only get the path
+to a key file and the shared `known_hosts`.
 
 ### Sound
 

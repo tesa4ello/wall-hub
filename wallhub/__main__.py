@@ -54,6 +54,7 @@ def main():
     stop.wait()
     for server in servers:
         server.shutdown()
+    app.backends.stop_all()
 
 
 if __name__ == "__main__":

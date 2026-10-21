@@ -25,6 +25,8 @@ from urllib.parse import parse_qs, urlsplit
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
+from .backends import Backends, ModuleError
+from .sshkeys import SshKeyError, SshKeys
 from .modules import Registry
 from .store import Store, StoreError
 from .location import MODES as LOCATION_MODES, LocationError, Locator
@@ -193,6 +195,11 @@ class App:
         # номер растёт с каждой просьбой, киоск играет, когда номер сменился.
         self.sound = {"seq": 0, "name": ""}
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
+        # Серверные части модулей: запускаются здесь и при каждой смене модулей.
+        self.ssh = SshKeys(os.path.join(state_dir, "ssh"))
+        self.ssh.ensure_default()
+        self.backends = Backends(config, os.path.join(state_dir, "module-data"), self.ssh)
+        self.backends.sync(self.modules.loaded())
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
                            on_change=self.modules_changed)
@@ -216,6 +223,7 @@ class App:
 
     def modules_changed(self):
         i18n.load(self.web_root, self.modules.loaded())
+        self.backends.sync(self.modules.loaded())
         self.modules_rev += 1
         self.config.notify()
 
@@ -411,6 +419,9 @@ def make_handler(app, trusted, port):
         def handle_api(self, method, path, query):
             # Язык общий для экрана и админки: ошибки API приходят на нём же.
             i18n.set_language(app.config.get("ui", "language"))
+            if path.startswith("/m/"):
+                self.handle_module_api(method, path[len("/m/"):], query)
+                return
             route = ROUTES.get((method, path))
             if route is None:
                 self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
@@ -437,6 +448,34 @@ def make_handler(app, trusted, port):
                 self.send_json(*result)
             else:
                 self.send_json(result if result is not None else {"ok": True})
+
+        def handle_module_api(self, method, rest, query):
+            """/api/m/<модуль>/<путь>: маршруты серверных частей модулей.
+            Экрану панели и вошедшим в админку; admin=True — только админке."""
+            module_id, _, path = rest.partition("/")
+            route = app.backends.find(module_id, method, path)
+            if route is None:
+                self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
+                return
+            handler, admin_only = route
+            allowed = app.sessions.valid(self.session_token()) if admin_only else self.authorized()
+            if not allowed:
+                self.send_error_json(tr("Нужно войти"), HTTPStatus.UNAUTHORIZED)
+                return
+            try:
+                body = self.read_json(MAX_BODY) if method == "POST" else None
+                result = handler(body, {k: v[0] for k, v in query.items()})
+            except ApiError as e:
+                self.send_error_json(str(e), e.code)
+                return
+            except ModuleError as e:
+                self.send_error_json(e.text(), HTTPStatus.BAD_REQUEST)
+                return
+            except Exception:
+                log.exception("API модуля %s: %s %s", module_id, method, path)
+                self.send_error_json(tr("Внутренняя ошибка"), HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
+            self.send_json(result if result is not None else {"ok": True})
 
         # --- маршруты API ------------------------------------------------
 
@@ -678,7 +717,7 @@ def make_handler(app, trusted, port):
                 "widgets": list(desktops.load_catalog(loaded).values()),
                 "providers": status.catalog(),
                 "i18n": {code: i18n.module_catalog(loaded, code) for code in i18n.languages()},
-                "modules": [m.info() for _, m in sorted(found.items())],
+                "modules": [dict(m.info(), backend_error=app.backends.errors.get(k)) for k, m in sorted(found.items())],
             }
 
         # Wi‑Fi
@@ -812,6 +851,28 @@ def make_handler(app, trusted, port):
                 except (subprocess.SubprocessError, OSError) as e:
                     log.warning("update check after channel change failed: %s", e)
 
+        # SSH-ключи панели: приватные части наружу не отдаются.
+
+        def api_ssh_keys(self, **_):
+            return {"keys": app.ssh.list()}
+
+        def api_ssh_keys_action(self, body, **_):
+            action = body.get("action")
+            try:
+                if action == "generate":
+                    app.ssh.generate(body.get("title"))
+                elif action == "import":
+                    app.ssh.import_key(body.get("title"), body.get("private"))
+                elif action == "rename":
+                    app.ssh.rename(str(body.get("id", "")), body.get("title"))
+                elif action == "delete":
+                    app.ssh.delete(str(body.get("id", "")))
+                else:
+                    raise ApiError(tr("Неизвестное действие"))
+            except SshKeyError as e:
+                raise ApiError(tr(e.message, **e.params))
+            return {"keys": app.ssh.list()}
+
         def api_sound_test(self, body, **_):
             name = body.get("name") or app.config.get("ui", "sound_name")
             if name not in SOUNDS:
@@ -925,6 +986,8 @@ def make_handler(app, trusted, port):
         ("POST", "/update/token"): (H.api_update_token, False),
         ("POST", "/update/run"): (H.api_update_run, False),
         ("POST", "/sound/test"): (H.api_sound_test, False),
+        ("GET", "/ssh/keys"): (H.api_ssh_keys, False),
+        ("POST", "/ssh/keys"): (H.api_ssh_keys_action, False),
         ("GET", "/store"): (H.api_store, False),
         ("POST", "/store/refresh"): (H.api_store_refresh, False),
         ("POST", "/store/install"): (H.api_store_install, False),

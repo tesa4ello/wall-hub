@@ -552,3 +552,9 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
   .item-options { margin-left: 0; }
   .inline-form .btn { flex: 1 1 auto; }
 }
+
+/* --- SSH-ключи --------------------------------------------------------------- */
+.ssh-public { display: block; width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; color: var(--muted); font-size: 12px; line-height: 1.4; resize: none; word-break: break-all; }
+.ssh-private { flex-wrap: wrap; }
+.ssh-private textarea { flex: 1 1 100%; width: 100%; margin-left: 0; font-size: 12px; }

@@ -178,7 +178,7 @@ export class DesktopEditor {
     const w = this.widget(this.selected);
     const meta = this.catalog[w.type] || { title: w.type, options: [] };
     const lim = this.limits(meta);
-    const fields = (meta.options || []).map((o) => this.renderOption(o, w.options[o.key])).join("");
+    const fields = (meta.options || []).map((o) => this.renderOption(o, w.options[o.key], meta)).join("");
     return `
       <div class="props-title">${esc(t(meta.title))}<button class="btn btn-small" data-deselect>${t("Готово")}</button></div>
       <p class="muted small">${esc(t(meta.description || ""))}</p>
@@ -191,8 +191,32 @@ export class DesktopEditor {
       <button class="btn btn-small btn-danger" data-remove>${icon("trash")} ${t("Убрать со стола")}</button>`;
   }
 
-  renderOption(o, value) {
+  // Варианты опции «choice» отдаёт серверная часть модуля: GET /api/m/<модуль>/<source>.
+  choicesFor(module, source) {
+    this.choices ??= {};
+    const id = `${module}/${source}`;
+    if (!(id in this.choices)) {
+      this.choices[id] = null;
+      api.get(`/m/${id}`)
+        .then((list) => { this.choices[id] = Array.isArray(list) ? list : []; })
+        .catch(() => { this.choices[id] = []; })
+        .then(() => this.render());
+    }
+    return this.choices[id];
+  }
+
+  renderOption(o, value, meta = {}) {
     const key = esc(o.key);
+    if (o.type === "choice") {
+      const list = this.choicesFor(meta.module, o.source);
+      if (!list) return `<label class="prop"><span>${esc(t(o.title))}</span><select disabled><option>${t("Загрузка…")}</option></select></label>`;
+      // Сохранённое значение показываем, даже если его уже нет в списке.
+      const all = value && !list.some(([v]) => v === value) ? [[value, value], ...list] : list;
+      return `<label class="prop"><span>${esc(t(o.title))}</span><select data-opt="${key}">
+        <option value="" ${value ? "" : "selected"}>${esc(t("Не выбрано"))}</option>
+        ${all.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`).join("")}
+      </select></label>`;
+    }
     if (o.type === "bool") {
       return `<label class="check prop-check"><input type="checkbox" data-opt="${key}" ${value ? "checked" : ""}> ${esc(t(o.title))}</label>`;
     }

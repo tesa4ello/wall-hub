@@ -44,6 +44,9 @@ class Module:
             "description": self.meta.get("description", ""),
             "source": self.source,
             "error": self.error,
+            # admin.js: своя страница настроек модуля в админке.
+            "admin": os.path.isfile(os.path.join(self.path, "admin.js")),
+            "backend": bool(self.meta.get("backend")),
         }
 
 

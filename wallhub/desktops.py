@@ -98,6 +98,9 @@ def clean_options(meta, options, providers=()):
             value = [v for v in dict.fromkeys(value) if v in providers]
         elif kind == "location":
             value = clean_location(value)
+        elif kind == "choice":
+            # Варианты знает серверная часть модуля, ядро хранит только строку.
+            value = str(value or "")[:64]
         else:
             continue
         result[key] = value
