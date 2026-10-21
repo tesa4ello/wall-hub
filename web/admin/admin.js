@@ -12,10 +12,11 @@ const TABS = [
   { id: "display", title: "Экран", icon: "display" },
   { id: "modules", title: "Модули", icon: "gear" },
   { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
+  { id: "updates", title: "Обновления", icon: "refresh" },
   { id: "system", title: "Система", icon: "info" },
 ];
 
-const state = { tab: "display", config: null, catalog: null, wifi: null, time: null, info: null };
+const state = { tab: "display", config: null, catalog: null, wifi: null, time: null, info: null, update: null };
 
 // Админка следует теме компьютера, на котором её открыли.
 const media = matchMedia("(prefers-color-scheme: light)");
@@ -86,11 +87,12 @@ function show(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   if (tab === "wifi") loadWifi(false);
   if (tab === "system") loadSystem();
+  if (tab === "updates") loadUpdate();
   render();
 }
 
 function render() {
-  const views = { display: renderDisplay, modules: renderModules, wifi: renderWifi, system: renderSystem };
+  const views = { display: renderDisplay, modules: renderModules, wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   $("content").innerHTML = views[state.tab]();
 }
 
@@ -297,6 +299,76 @@ function renderSystem() {
     </section>`;
 }
 
+// --- обновления ------------------------------------------------------------------
+
+// Пока обновлятор работает, статус опрашивается каждые 2 секунды.
+let updatePoll = null;
+
+async function loadUpdate() {
+  clearTimeout(updatePoll);
+  try {
+    state.update = await api.get("/update");
+  } catch (err) {
+    // Во время установки сервис перезапускается, это не ошибка.
+    if (err.status === 401) return boot();
+    if (state.update) state.update.status.state = "installing";
+  }
+  if (state.tab !== "updates") return;
+  const busy = state.update && ["checking", "installing"].includes(state.update.status.state);
+  if (busy) updatePoll = setTimeout(loadUpdate, 2000);
+  // Пока вкладка открыта, поля ввода не перерисовываются (можно вводить токен).
+  if (!document.activeElement || !document.activeElement.closest("#content input")) render();
+}
+
+const shortDate = (s) => (s ? new Date(s).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—");
+const buildText = (b) => (b && b.commit ? `${b.ref || ""} ${b.commit.slice(0, 7)} · ${shortDate(b.date)}` : "—");
+
+function renderUpdates() {
+  const u = state.update;
+  if (!u) return `<h1>Обновления</h1><div class="empty">Загрузка…</div>`;
+  const st = u.status || {};
+  const busy = ["checking", "installing"].includes(st.state);
+  const latest = st.latest;
+  const level = busy ? "busy" : st.result === "failed" ? "error" : st.available ? "new" : "";
+  return `
+    <h1>Обновления</h1>
+    <section class="panel">
+      <div class="field"><span>Установлена</span><b class="mono">${esc(buildText(u.build))}</b></div>
+      <div class="field"><span>Последняя в канале${latest && latest.title ? `<small>${esc(latest.title)}</small>` : ""}</span>
+        <b class="mono">${esc(buildText(latest))}</b></div>
+      <div class="field"><span>Проверено</span><b>${esc(shortDate(st.checked_at))}</b></div>
+      <div class="update-state ${level}">${esc(st.message || "")}</div>
+      <div class="row-buttons">
+        <button class="btn" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")} Проверить</button>
+        <button class="btn btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>Обновить сейчас</button>
+        <button class="btn" data-update-run="rollback" ${busy ? "disabled" : ""}>Вернуть прошлую версию</button>
+      </div>
+    </section>
+    <section class="panel">
+      <label class="field"><span>Канал<small>main — каждый коммит, релизы — только теги v*</small></span>
+        <select id="update-channel">
+          <option value="main" ${u.settings.channel === "main" ? "selected" : ""}>Ветка ${esc(u.settings.branch)}</option>
+          <option value="releases" ${u.settings.channel === "releases" ? "selected" : ""}>Релизы</option>
+        </select>
+      </label>
+      <label class="field"><span>Ставить автоматически<small>Проверка каждую ночь около 4:00</small></span>
+        <input type="checkbox" id="update-auto" ${u.settings.auto ? "checked" : ""}>
+      </label>
+    </section>
+    <h1>Доступ к GitHub</h1>
+    <form class="panel inline-form" id="token-form">
+      <input name="token" type="password" autocomplete="off"
+        placeholder="${u.token_set ? "Токен сохранён · вставьте новый, чтобы заменить" : "Токен для приватного репозитория"}">
+      <button class="btn btn-primary" type="submit">Сохранить</button>
+      ${u.token_set ? `<button class="btn" type="button" data-token-clear>Удалить</button>` : ""}
+    </form>`;
+}
+
+async function saveUpdateSettings(patch) {
+  await guarded(() => api.post("/update/settings", patch));
+  await loadUpdate();
+}
+
 // --- события ------------------------------------------------------------------------
 
 $("content").addEventListener("change", async (e) => {
@@ -311,6 +383,10 @@ $("content").addEventListener("change", async (e) => {
     const m = state.draftModules[Number(el.dataset.modOpt)];
     m.options = { ...m.options, [el.dataset.key]: el.checked };
     await saveModules(state.draftModules);
+  } else if (el.id === "update-channel") {
+    await saveUpdateSettings({ channel: el.value }).catch(() => {});
+  } else if (el.id === "update-auto") {
+    await saveUpdateSettings({ auto: el.checked }).catch(() => {});
   } else if (el.id === "tz") {
     await guarded(() => api.post("/admin/timezone", { timezone: el.value }));
     toast(`Часовой пояс: ${el.value}`);
@@ -322,6 +398,13 @@ $("content").addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
+  } else if (e.target.id === "token-form") {
+    if (!data.token.trim()) return;
+    await guarded(() => api.post("/update/token", { token: data.token.trim() })).then(() => {
+      e.target.reset();
+      toast("Токен сохранён");
+      return loadUpdate();
+    }).catch(() => {});
   } else if (e.target.id === "password-form") {
     await guarded(() => api.post("/admin/password", data)).then(() => {
       e.target.reset();
@@ -332,7 +415,7 @@ $("content").addEventListener("submit", async (e) => {
 
 $("content").addEventListener("click", async (e) => {
   const b = e.target.closest("button");
-  if (!b || b.disabled || b.type === "submit") return;
+  if (!b || b.disabled || b.getAttribute("type") === "submit") return;
   const d = b.dataset;
   try {
     if (d.modToggle !== undefined) {
@@ -369,6 +452,18 @@ $("content").addEventListener("click", async (e) => {
         if (password === null) return;
       }
       await wifiConnect({ ssid: net.ssid, password });
+    } else if (d.updateRun) {
+      const titles = { install: "Обновить панель сейчас?", rollback: "Вернуть прошлую версию?" };
+      if (titles[d.updateRun] && !(await confirmDialog({ title: titles[d.updateRun], ok: "Да" }))) return;
+      await guarded(() => api.post("/update/run", { mode: d.updateRun }));
+      state.update.status = { ...state.update.status, state: d.updateRun === "check" ? "checking" : "installing", message: "Запускаю…" };
+      render();
+      setTimeout(loadUpdate, 1000);
+    } else if ("tokenClear" in d) {
+      if (await confirmDialog({ title: "Удалить токен GitHub?", ok: "Удалить", danger: true })) {
+        await guarded(() => api.post("/update/token", { token: "" }));
+        await loadUpdate();
+      }
     } else if (d.power) {
       const reboot = d.power === "reboot";
       if (await confirmDialog({ title: reboot ? "Перезагрузить панель?" : "Выключить панель?", ok: reboot ? "Перезагрузить" : "Выключить", danger: !reboot })) {

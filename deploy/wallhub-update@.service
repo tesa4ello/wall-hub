@@ -1,0 +1,13 @@
+# Обновление Wall-HUB: %i = check (только проверить), install (проверить и
+# поставить), auto (поставить, если включена автоустановка), rollback
+# (вернуть прошлую версию). Запускается
+# таймером wallhub-update-auto.timer и кнопками в админке (через polkit).
+[Unit]
+Description=Wall-HUB update (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/wallhub/current/deploy/wallhub-update.py %i
+TimeoutStartSec=30min
