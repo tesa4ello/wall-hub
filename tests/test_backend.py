@@ -948,3 +948,58 @@ class SshKeysTest(unittest.TestCase):
             keys.rename(kid, "Новое")
             # Отвергнутые ключи не оставили файлов.
             self.assertEqual(set(os.listdir(root)), {"keys.json", ".initialized", f"id_{kid}", f"id_{kid}.pub"})
+
+
+class NetConfigTest(unittest.TestCase):
+    def test_parse_ipv4(self):
+        from wallhub.netconfig import NetConfigError, parse_ipv4
+        self.assertEqual(parse_ipv4("auto", dns="1.1.1.1, 8.8.8.8"),
+                         {"method": "auto", "address": "", "gateway": "", "dns": ["1.1.1.1", "8.8.8.8"]})
+        self.assertEqual(parse_ipv4("manual", " 192.168.1.50/24 ", "192.168.1.1", ""),
+                         {"method": "manual", "address": "192.168.1.50/24", "gateway": "192.168.1.1", "dns": []})
+        for bad in [("manual", "192.168.1.50"), ("manual", "999.1.1.1/24"), ("manual", "192.168.1.50/24", "10.0.0.1"),
+                    ("manual", "192.168.1.50/24", "", "1.1.1.1 2.2.2.2 3.3.3.3 4.4.4.4"), ("auto", "", "", "dns.google"),
+                    ("static",)]:
+            with self.assertRaises(NetConfigError, msg=bad):
+                parse_ipv4(*bad)
+
+    def test_dry_run(self):
+        from types import SimpleNamespace
+        from wallhub.netconfig import NetConfig, NetConfigError, parse_ipv4
+        with tempfile.TemporaryDirectory() as tmp:
+            net = NetConfig(SimpleNamespace(dry_run=True), tmp)
+            eth = {d["device"]: d for d in net.devices()}["eth0"]
+            self.assertFalse(eth["managed"])
+            with self.assertRaises(NetConfigError):
+                net.set_ipv4("eth0", parse_ipv4("auto"))
+            net.manage("eth0")
+            self.assertEqual(net.migrate_status()["state"], "done")
+            net.set_ipv4("eth0", parse_ipv4("manual", "192.168.1.60/24", "192.168.1.1"))
+            with self.assertRaises(NetConfigError):
+                net.set_ipv4("eth0", parse_ipv4("auto"))
+            deadline = time.time() + 5
+            while net.jobs["eth0"]["state"] == "applying" and time.time() < deadline:
+                time.sleep(0.1)
+            eth = {d["device"]: d for d in net.devices()}["eth0"]
+            self.assertEqual(eth["job"]["state"], "ok")
+            self.assertEqual(eth["current"]["addresses"], ["192.168.1.60/24"])
+
+    def test_netplan_settings(self):
+        import importlib.util
+        try:
+            import yaml  # noqa: F401
+        except ImportError:
+            self.skipTest("нет PyYAML")
+        path = os.path.join(os.path.dirname(__file__), "..", "deploy", "netplan-release-ethernet.py")
+        spec = importlib.util.spec_from_file_location("netplan_release", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        eth = {
+            "eth0": {"dhcp4": True},
+            "lan": {"match": {"name": "end*"}, "addresses": ["10.0.0.5/24", "fd00::5/64"],
+                    "routes": [{"to": "default", "via": "10.0.0.1"}], "nameservers": {"addresses": ["10.0.0.1", "fd00::1"]}},
+        }
+        self.assertEqual(mod.settings_for("eth0", eth)["method"], "auto")
+        self.assertEqual(mod.settings_for("end1", eth),
+                         {"method": "manual", "address": "10.0.0.5/24", "gateway": "10.0.0.1", "dns": ["10.0.0.1"]})
+        self.assertIsNone(mod.settings_for("wlan0", eth))

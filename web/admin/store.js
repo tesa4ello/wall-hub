@@ -25,9 +25,12 @@ export class StorePanel {
   // Страница настроек модуля: его admin.js, export mount(el, {api, t}).
   renderSettings() {
     const id = this.settingsFor;
-    const m = this.data?.modules.find((x) => x.id === id);
+    // Модуля из папки разработчика нет в листинге магазина: берём загруженный.
+    const m = this.data?.modules.find((x) => x.id === id) || this.loadedModule(id);
+    const sub = m?.description ? this.tr(m, m.description) : t("Настройки модуля");
     return `
-      <h1>${esc(m ? this.tr(m, m.title) : id)}</h1>
+      <h1>${esc(m?.title ? this.tr(m, m.title) : id)}</h1>
+      <p class="page-sub">${esc(sub)}</p>
       <div class="row-buttons flush"><button class="btn btn-small" data-store-back>← ${t("Модули")}</button></div>
       <div id="module-admin"></div>`;
   }
