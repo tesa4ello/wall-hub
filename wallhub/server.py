@@ -31,7 +31,7 @@ from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
-from .weather import Weather, WeatherError, fake_fetch
+from .weather import Weather, WeatherError, fake_fetch, get_json
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +181,13 @@ class App:
         self.locator = Locator(config, system)
         self.locator.start()
         # WALLHUB_FAKE_WEATHER=1: выдуманный прогноз без сети (для разработки).
-        self.weather = Weather(fetch=fake_fetch) if os.environ.get("WALLHUB_FAKE_WEATHER") else Weather()
+        self.weather = Weather(fetch=fake_fetch if os.environ.get("WALLHUB_FAKE_WEATHER") else get_json, local_tz=self.local_timezone)
+
+    def local_timezone(self):
+        try:
+            return self.system.timezone()
+        except CommandError:
+            return None
 
     def modules_changed(self):
         i18n.load(self.web_root, self.modules.loaded())
@@ -477,7 +483,7 @@ def make_handler(app, trusted, port):
         # Модуль «Погода» (web/modules/weather)
 
         def api_weather_forecast(self, query, **_):
-            lat, lon = (query.get(k, [None])[0] for k in ("lat", "lon"))
+            lat, lon, tz = (query.get(k, [None])[0] for k in ("lat", "lon", "tz"))
             name = None
             if lat is None and lon is None:
                 ui = app.config.get("ui")
@@ -489,7 +495,7 @@ def make_handler(app, trusted, port):
             if not (-90 <= lat <= 90 and -180 <= lon <= 180):
                 raise ApiError(tr("Координаты вне допустимого диапазона"))
             try:
-                data = app.weather.forecast(lat, lon)
+                data = app.weather.forecast(lat, lon, tz if tz and len(tz) <= 64 else None)
             except WeatherError as e:
                 raise ApiError(str(e), HTTPStatus.BAD_GATEWAY)
             if name is not None:

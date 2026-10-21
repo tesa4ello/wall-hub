@@ -58,8 +58,13 @@ def clean_location(value):
         except (KeyError, TypeError, ValueError):
             return {"mode": "panel"}
         if -90 <= lat <= 90 and -180 <= lon <= 180:
-            return {"mode": "custom", "name": str(value.get("name") or "")[:80],
-                    "lat": round(lat, 4), "lon": round(lon, 4)}
+            place = {"mode": "custom", "name": str(value.get("name") or "")[:80],
+                     "lat": round(lat, 4), "lon": round(lon, 4)}
+            # Часовой пояс места (из поиска): нужен источникам, которые его не сообщают.
+            tz = value.get("tz")
+            if isinstance(tz, str) and re.fullmatch(r"[A-Za-z0-9_+/-]{1,64}", tz):
+                place["tz"] = tz
+            return place
     return {"mode": "panel"}
 
 

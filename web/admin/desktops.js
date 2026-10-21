@@ -289,7 +289,7 @@ export class DesktopEditor {
       const r = this.placeSearch && this.placeSearch.results[Number(d.i)];
       if (!r) return;
       const w = this.widget(this.selected);
-      w.options = { ...w.options, [d.locPick]: { mode: "custom", name: r.name, lat: r.lat, lon: r.lon } };
+      w.options = { ...w.options, [d.locPick]: { mode: "custom", name: r.name, lat: r.lat, lon: r.lon, ...(r.timezone ? { tz: r.timezone } : {}) } };
       this.placeSearch = null;
       await this.save();
     } else if (d.provMove) {

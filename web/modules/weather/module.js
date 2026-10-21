@@ -26,7 +26,8 @@ const nowSec = () => Date.now() / 1000;
 const stores = new Map();
 
 function locationQuery(loc) {
-  return loc && loc.mode === "custom" ? `?lat=${loc.lat}&lon=${loc.lon}` : "";
+  if (!loc || loc.mode !== "custom") return "";
+  return `?lat=${loc.lat}&lon=${loc.lon}` + (loc.tz ? `&tz=${encodeURIComponent(loc.tz)}` : "");
 }
 
 function store(api, loc) {

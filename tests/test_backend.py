@@ -581,3 +581,61 @@ class LocationTest(unittest.TestCase):
             public = config.public()
             self.assertNotIn("yandex_key", public["location"])
             self.assertTrue(public["location"]["yandex_key_set"])
+
+
+class MetnoTest(unittest.TestCase):
+    def test_fallback_to_metno(self):
+        from wallhub import weather
+        calls = []
+
+        def fetch(url, params):
+            calls.append(url)
+            if url == weather.FORECAST_URL:
+                raise OSError("timed out")
+            return weather.fake_metno(params["lat"], params["lon"])
+
+        w = weather.Weather(fetch=fetch, local_tz=lambda: "Europe/Moscow")
+        data = w.forecast(59.79, 30.16)
+        self.assertEqual(data["source"], "met.no")
+        self.assertEqual(w.source, "met.no")
+        self.assertEqual(data["place"]["timezone"], "Europe/Moscow")
+        self.assertEqual(data["place"]["utc_offset"], 3 * 3600)
+        self.assertGreaterEqual(len(data["hourly"]), 47)
+        self.assertGreaterEqual(len(data["daily"]), 9)
+        self.assertEqual(data["minutely"], [])
+        self.assertEqual(data["hourly"][3]["code"], 63)
+        self.assertEqual(data["hourly"][3]["precip"], 0.6)
+        day = data["daily"][0]
+        self.assertLess(day["sunrise"], day["sunset"])
+        self.assertLessEqual(day["tmin"], day["tmax"])
+        self.assertIsNotNone(data["current"]["feels"])
+        # Дальше сразу MET Norway, без ожидания Open-Meteo.
+        calls.clear()
+        w.forecast(10, 10)
+        self.assertEqual(calls, [__import__("wallhub").metno.URL])
+
+    def test_symbols(self):
+        from wallhub import metno
+        self.assertEqual(metno.symbol_code("clearsky_night"), (0, False))
+        self.assertEqual(metno.symbol_code("heavyrainandthunder"), (95, None))
+        self.assertEqual(metno.symbol_code("lightsnowshowers_day"), (85, True))
+
+    def test_sun_times(self):
+        from datetime import datetime, timezone as tz
+        from wallhub import metno
+        noon = datetime(2026, 6, 21, 9, tzinfo=tz.utc).timestamp()  # полдень в Москве
+        rise, sett = metno.sun_times(noon, 55.75, 37.62)
+        self.assertEqual(datetime.fromtimestamp(rise, tz.utc).strftime("%H:%M")[:4], "00:4")
+        self.assertIsNone(metno.sun_times(noon, 78, 15)[0])
+
+    def test_search_falls_back_to_nominatim(self):
+        from wallhub import weather
+
+        def fetch(url, params):
+            if url == weather.GEOCODING_URL:
+                raise OSError("timed out")
+            return weather.fake_fetch(url, params)
+
+        results = weather.Weather(fetch=fetch).search("Пушкин")
+        self.assertEqual(results[0]["name"], "Пушкин")
+        self.assertIn("Санкт-Петербург", results[0]["region"])
