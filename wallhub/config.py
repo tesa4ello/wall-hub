@@ -49,6 +49,17 @@ DEFAULTS = {
         # Плитки поверх фона: baked | blur | frosted | solid (см. web/lib/wallpaper.js).
         "tiles": "baked",
         "language": "ru",
+        # Звуковые уведомления (играет киоск, см. web/lib/sound.js).
+        # sound_volume 0..100; в тихие часы (quiet_from..quiet_to, могут
+        # переходить через полночь) панель молчит.
+        "sound_enabled": True,
+        "sound_volume": 60,
+        "sound_name": "chime",
+        "sound_quiet": True,
+        "sound_quiet_from": "22:00",
+        "sound_quiet_to": "08:00",
+        # Какие события звучат: появилась новая версия, обновление закончилось.
+        "sound_update": True,
     },
     # Сетка экрана и поведение столов. home_after_min: через сколько минут
     # без касаний вернуться на первый стол (0 — не возвращаться).

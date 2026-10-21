@@ -474,5 +474,21 @@
   "Источники прогноза и место для виджетов погоды": "Forecast sources and location for weather widgets",
   "Беспроводная сеть панели": "The panel's wireless network",
   "Версия панели и автоматические обновления": "Panel version and automatic updates",
-  "Часовой пояс, пароль и питание": "Time zone, password and power"
+  "Часовой пояс, пароль и питание": "Time zone, password and power",
+  "Звук": "Sound",
+  "Звуковые уведомления": "Sound notifications",
+  "Панель подаёт звук, например когда вышло обновление": "The panel plays a sound, for example when an update is out",
+  "Громкость, %": "Volume, %",
+  "«Проверить» играет на панели, даже когда звук выключен": "\"Test\" plays on the panel even when sound is off",
+  "Об обновлениях": "About updates",
+  "Вышла новая версия, обновление закончилось": "A new version is out, an update has finished",
+  "Тихие часы": "Quiet hours",
+  "В это время панель молчит": "The panel stays silent at this time",
+  "Тихо с": "Quiet from",
+  "Тихо до": "Quiet until",
+  "Перезвон": "Chime",
+  "Колокольчик": "Bell",
+  "Мягкий": "Soft",
+  "Сигнал": "Beep",
+  "Звук отправлен на панель": "Sound sent to the panel"
 }
