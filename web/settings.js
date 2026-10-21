@@ -184,8 +184,12 @@ export class Settings {
       [{ theme_mode: "schedule" }, t("По времени"), ui.theme_mode === "schedule"],
       [{ theme_mode: "sun" }, t("По солнцу"), ui.theme_mode === "sun"],
     ];
-    // Границы ночи нужны и для темы, и для ночного приглушения.
-    const showSchedule = ui.theme_mode === "schedule" || (ui.theme_mode === "manual" && ui.night_dim > 0);
+    // Неактуальные пункты не показываем. Границы дня и ночи нужны теме «по
+    // времени», а при ручной теме — только для ночного приглушения.
+    const scheduleRows = `
+          <div class="row"><div class="row-label">${t("День с")}</div>${timeStepper("day_start")}</div>
+          <div class="row"><div class="row-label">${t("Ночь с")}</div>${timeStepper("night_start")}</div>`;
+    const nightDimHint = ui.theme_mode === "sun" ? t("От заката до восхода") : ui.theme_mode === "schedule" ? t("По времени дня и ночи") : "";
     let sunRow = "";
     if (ui.theme_mode === "sun") {
       const sun = sunTimes(new Date(), ui.latitude, ui.longitude);
@@ -200,12 +204,13 @@ export class Settings {
     }
     return `
       <h2>${t("Экран")}</h2>
+      ${languages().length > 1 ? `
       <div class="card">
         <div class="row">
           <div class="row-label">${t("Язык")}</div>
           ${seg("language", languages().map((l) => [l.code, l.name]))}
         </div>
-      </div>
+      </div>` : ""}
       <div class="card">
         <div class="row">
           <div class="row-label">${t("Тема")}</div>
@@ -214,25 +219,25 @@ export class Settings {
             .join("")}</div>
         </div>
         ${sunRow}
-        ${showSchedule ? `
-          <div class="row"><div class="row-label">${t("День с")}</div>${timeStepper("day_start")}</div>
-          <div class="row"><div class="row-label">${t("Ночь с")}</div>${timeStepper("night_start")}</div>` : ""}
+        ${ui.theme_mode === "schedule" ? scheduleRows : ""}
       </div>
       <div class="card">
         <div class="row">
-          <div class="row-label">${t("Приглушать ночью")}<div class="row-hint">${t(ui.theme_mode === "sun" ? "От заката до восхода" : "По времени дня и ночи")}</div></div>
+          <div class="row-label">${t("Приглушать ночью")}${nightDimHint ? `<div class="row-hint">${nightDimHint}</div>` : ""}</div>
           ${seg("night_dim", NIGHT_DIM.map((l) => [l, l ? `${l}%` : t("Нет")]))}
         </div>
+        ${ui.theme_mode === "manual" && ui.night_dim > 0 ? scheduleRows : ""}
       </div>
       <div class="card">
         <div class="row">
           <div class="row-label">${t("Затемнять при простое")}</div>
           ${seg("dim_after_min", DIM_AFTER.map((m) => [m, m ? t("{n} мин", { n: m }) : t("Нет")]))}
         </div>
-        <div class="row ${ui.dim_after_min ? "" : "row-disabled"}">
+        ${ui.dim_after_min ? `
+        <div class="row">
           <div class="row-label">${t("Сила затемнения")}</div>
           ${seg("dim_level", DIM_LEVEL.map((l) => [l, `${l}%`]))}
-        </div>
+        </div>` : ""}
         <div class="row">
           <div class="row-label">${t("Гасить экран")}<div class="row-hint">${t("Выключать подсветку при долгом простое")}</div></div>
           ${seg("blank_after_min", BLANK_AFTER.map((m) => [m, m ? t("{n} мин", { n: m }) : t("Нет")]))}

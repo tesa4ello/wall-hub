@@ -588,5 +588,7 @@
   "Обновить все ({n})": "Update all ({n})",
   "Если серверная часть новой версии не запустится, вернётся прошлая": "If the new version's server part fails to start, the previous one is restored",
   "Обновления модулей: {n}": "Module updates: {n}",
-  "В админке": "In the admin"
+  "В админке": "In the admin",
+  "С этого времени — светлая тема": "Light theme from this time",
+  "Для ночного приглушения": "For night dimming"
 }

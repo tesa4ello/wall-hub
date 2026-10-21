@@ -215,26 +215,30 @@ function renderScale(ui, opts) {
 function renderDisplay() {
   const ui = state.config.ui;
   const opts = (values, current) => values.map(([v, l]) => `<option value="${v}" ${v === current ? "selected" : ""}>${esc(l)}</option>`).join("");
-  const sched = ui.theme_mode === "sun" ? "disabled" : "";
+  // Неактуальные пункты скрываем, как на экране панели.
+  const showSchedule = ui.theme_mode === "schedule" || (ui.theme_mode === "manual" && ui.night_dim > 0);
   return `
     <h1>${t("Экран")}</h1>
+    ${languages().length > 1 ? `
     <section class="panel">
       <label class="field"><span>${t("Язык")}<small>${t("Общий для панели и админки")}</small></span>
         <select data-ui="language">${opts(languages().map((l) => [l.code, l.name]), ui.language)}</select>
       </label>
-    </section>
+    </section>` : ""}
     ${renderScale(ui, opts)}
     <section class="panel">
       <label class="field"><span>${t("Выбор темы")}</span>
         <select data-ui="theme_mode">${opts([["manual", t("Вручную")], ["schedule", t("По времени")], ["sun", t("По солнцу")]], ui.theme_mode)}</select>
       </label>
+      ${ui.theme_mode === "manual" ? `
       <label class="field"><span>${t("Тема")}</span>
-        <select data-ui="theme" ${ui.theme_mode === "manual" ? "" : "disabled"}>${opts([["light", t("Светлая")], ["dark", t("Тёмная")]], ui.theme)}</select>
+        <select data-ui="theme">${opts([["light", t("Светлая")], ["dark", t("Тёмная")]], ui.theme)}</select>
+      </label>` : ""}
+      ${showSchedule ? `
+      <label class="field"><span>${t("День с")}<small>${t(ui.theme_mode === "schedule" ? "С этого времени — светлая тема" : "Для ночного приглушения")}</small></span>
+        <input type="time" data-ui="day_start" value="${ui.day_start}">
       </label>
-      <label class="field"><span>${t("День с")}<small>${t("В режиме «по времени» и для ночного приглушения")}</small></span>
-        <input type="time" data-ui="day_start" value="${ui.day_start}" ${sched}>
-      </label>
-      <label class="field"><span>${t("Ночь с")}</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${sched}></label>
+      <label class="field"><span>${t("Ночь с")}</span><input type="time" data-ui="night_start" value="${ui.night_start}"></label>` : ""}
     </section>
     ${renderLocation()}
     <section class="panel">
@@ -244,9 +248,10 @@ function renderDisplay() {
       <label class="field"><span>${t("Затемнять через, мин")}<small>${t("0 — не затемнять")}</small></span>
         <input type="number" min="0" max="240" data-ui="dim_after_min" data-int value="${ui.dim_after_min}">
       </label>
+      ${ui.dim_after_min ? `
       <label class="field"><span>${t("Сила затемнения, %")}</span>
         <input type="number" min="0" max="95" step="5" data-ui="dim_level" data-int value="${ui.dim_level}">
-      </label>
+      </label>` : ""}
       <label class="field"><span>${t("Гасить экран через, мин")}<small>${t("0 — не гасить")}</small></span>
         <input type="number" min="0" max="240" data-ui="blank_after_min" data-int value="${ui.blank_after_min}">
       </label>
