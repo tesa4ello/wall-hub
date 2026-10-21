@@ -337,7 +337,9 @@ async function revisionLoop() {
 
 // Плашка внизу экрана: какой этап идёт, сколько прошло, чем закончилось.
 // Нажатия не перехватывает, кроме готового результата: его можно смахнуть касанием.
+// Успешное обновление скрывается само через 15 секунд, ошибка остаётся.
 const UPDATE_STEPS = ["download", "install", "verify"];
+const UPDATE_OK_HIDE_MS = 15000;
 
 const updateBanner = {
   el: $("upd-progress"),
@@ -345,6 +347,8 @@ const updateBanner = {
   version: "",
   dismissed: null,
   timer: null,
+  hideTimer: null,
+  hideFor: null,
 
   show(progress, version) {
     this.progress = progress || null;
@@ -392,6 +396,17 @@ const updateBanner = {
     this.tick();
     if (running && !this.timer) this.timer = setInterval(() => this.tick(), 1000);
     if (!running) { clearInterval(this.timer); this.timer = null; }
+    if (!running && !failed && this.hideFor !== p.finished_at) {
+      clearTimeout(this.hideTimer);
+      this.hideFor = p.finished_at;
+      this.hideTimer = setTimeout(() => this.dismiss(), UPDATE_OK_HIDE_MS);
+    }
+  },
+
+  dismiss() {
+    if (this.progress?.state === "installing") return;
+    this.dismissed = this.progress?.finished_at;
+    this.render();
   },
 
   // Сколько длится установка: «1:23».
@@ -404,11 +419,7 @@ const updateBanner = {
   },
 };
 
-updateBanner.el.addEventListener("click", () => {
-  if (updateBanner.progress?.state === "installing") return;
-  updateBanner.dismissed = updateBanner.progress?.finished_at;
-  updateBanner.render();
-});
+updateBanner.el.addEventListener("click", () => updateBanner.dismiss());
 
 // --- затемнение при простое -------------------------------------------------
 
