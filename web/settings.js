@@ -79,6 +79,12 @@ export class Settings {
     // Режим первого запуска: экран выбора Wi‑Fi с кнопкой «Пропустить».
     this.setup = false;
 
+    this.renderFrame();
+  }
+
+  // Каркас окна. Вызывается снова после загрузки языка (app.js).
+  renderFrame() {
+    const root = this.root;
     root.innerHTML = `
       <div class="settings-nav">
         <div class="settings-heading">${t("Настройки")}</div>
@@ -89,11 +95,11 @@ export class Settings {
         <div class="settings-content"></div>
       </div>`;
     this.content = root.querySelector(".settings-content");
+    this.content.addEventListener("click", (e) => this.onClick(e));
     root.querySelector(".settings-close").addEventListener("click", () => this.close());
     root.querySelectorAll(".nav-item").forEach((b) =>
       b.addEventListener("click", () => this.show(b.dataset.section)),
     );
-    this.content.addEventListener("click", (e) => this.onClick(e));
   }
 
   open(section) {

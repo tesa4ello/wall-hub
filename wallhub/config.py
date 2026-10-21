@@ -8,6 +8,7 @@
 
 import copy
 import json
+import re
 import os
 import threading
 
@@ -107,6 +108,11 @@ def _migrate(data):
             if not clock_cfg.get("enabled", True):
                 desk["widgets"].remove(clock)
         data["desktops"] = [desk]
+    # Раньше имя «Стол N» записывалось в настройки. Пустое имя интерфейс
+    # показывает как «Стол N» на языке панели.
+    for desk in data.get("desktops", []):
+        if re.fullmatch(r"Стол \d+", desk.get("name", "")):
+            desk["name"] = ""
 
 
 class Config:

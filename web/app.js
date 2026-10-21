@@ -280,6 +280,7 @@ async function loadConfig() {
   if (!state.catalog) {
     await setLanguage(config.ui.language);
     translateDom();
+    settings.renderFrame();
     state.catalog = await loadCatalog();
   }
   state.config = config;
