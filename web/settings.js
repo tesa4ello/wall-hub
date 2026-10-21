@@ -2,7 +2,7 @@
 
 import { api } from "/lib/api.js";
 import { icon, signalBars } from "/lib/icons.js";
-import { choose, confirmDialog, toast } from "/lib/dialog.js";
+import { choose, confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { openKeyboard } from "/lib/keyboard.js";
 import { formatTime, sunTimes } from "/lib/theme.js";
 
@@ -671,6 +671,7 @@ export class Settings {
         await this.onHiddenNetwork();
       } else if ("wifiRadio" in b.dataset) {
         const enable = !this.wifi.radio;
+        if (!enable && !(await confirmWifiOff(this.wifi))) return;
         await this.wifiAction(enable ? "Включаю Wi‑Fi…" : "Выключаю Wi‑Fi…", () => api.post("/wifi/radio", { enabled: enable }));
       } else if (b.dataset.updSet) {
         await this.saveUpdate({ [b.dataset.updSet]: JSON.parse(b.dataset.value) });

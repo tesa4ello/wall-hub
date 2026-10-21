@@ -92,6 +92,43 @@ class StatusCollector(threading.Thread):
             time.sleep(self.interval)
 
 
+class WifiWatchdog(threading.Thread):
+    """Включает Wi‑Fi обратно, если он выключен, а другой связи нет уже
+    TIMEOUT секунд. Иначе случайно выключенный Wi‑Fi отрезает админку, а
+    NetworkManager помнит это и после перезагрузки."""
+
+    TIMEOUT = 10 * 60
+    INTERVAL = 30
+
+    def __init__(self, system):
+        super().__init__(daemon=True, name="wifi-watchdog")
+        self.system = system
+        self.offline_since = None
+
+    def check(self, now):
+        try:
+            cut_off = not self.system.radio_enabled() and not self.system.other_connection()
+        except CommandError:
+            return
+        if not cut_off:
+            self.offline_since = None
+            return
+        if self.offline_since is None:
+            self.offline_since = now
+        elif now - self.offline_since >= self.TIMEOUT:
+            log.warning("Wi-Fi is off and there is no other connection: turning Wi-Fi back on")
+            self.offline_since = None
+            try:
+                self.system.wifi_radio(True)
+            except CommandError as e:
+                log.warning("cannot turn Wi-Fi on: %s", e)
+
+    def run(self):
+        while True:
+            self.check(time.monotonic())
+            time.sleep(self.INTERVAL)
+
+
 class App:
     """Общее состояние, которое нужно обработчикам запросов."""
 
@@ -112,6 +149,8 @@ class App:
         status.load_all()
         self.collector = StatusCollector(config)
         self.collector.start()
+        self.wifi_watchdog = WifiWatchdog(system)
+        self.wifi_watchdog.start()
 
     def widget_catalog(self):
         return desktops.load_catalog(self.web_root)
@@ -362,7 +401,9 @@ def make_handler(app, trusted, port):
         # Wi‑Fi
 
         def api_wifi(self, query, **_):
-            return app.system.wifi_state(rescan=query.get("rescan") == ["1"])
+            state = app.system.wifi_state(rescan=query.get("rescan") == ["1"])
+            # Нужно экрану, чтобы предупредить перед выключением Wi‑Fi.
+            return dict(state, other_connection=app.system.other_connection())
 
         def api_wifi_connect(self, body, **_):
             app.system.wifi_connect(
@@ -383,7 +424,9 @@ def make_handler(app, trusted, port):
             app.system.wifi_forget(str(body.get("ssid", "")))
 
         def api_wifi_radio(self, body, **_):
-            app.system.wifi_radio(bool(body.get("enabled")))
+            enabled = bool(body.get("enabled"))
+            app.system.wifi_radio(enabled)
+            app.wifi_watchdog.offline_since = None if enabled else time.monotonic()
 
         # Питание
 

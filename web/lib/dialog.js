@@ -31,6 +31,17 @@ export function choose({ title, text = "", options }) {
   });
 }
 
+// Выключение Wi‑Fi без другой связи отрезает админку: спрашиваем.
+export async function confirmWifiOff(wifi) {
+  if (wifi.other_connection) return true;
+  return confirmDialog({
+    title: "Выключить Wi‑Fi?",
+    text: "Другой сети нет: админка станет недоступна. Если связи так и не будет, Wi‑Fi включится сам через 10 минут.",
+    ok: "Выключить",
+    danger: true,
+  });
+}
+
 export async function confirmDialog({ title, text = "", ok = "OK", cancel = "Отмена", danger = false }) {
   const result = await choose({
     title,
