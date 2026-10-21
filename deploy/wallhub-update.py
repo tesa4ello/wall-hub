@@ -63,7 +63,14 @@ SLACK = datetime.timedelta(minutes=5)
 
 
 class UpdateError(Exception):
-    pass
+    """Текст ошибки переводит интерфейс: message — исходная строка (по-русски,
+    как ключ в web/i18n/<язык>.json), params — подстановки."""
+
+    def __init__(self, message, http_status=None, **params):
+        super().__init__(message.format(**params) if params else message)
+        self.message = message
+        self.params = params
+        self.http_status = http_status
 
 
 def now():
@@ -107,6 +114,9 @@ def read_status():
 def write_status(**fields):
     """Обновляет update.json (атомарно, файл читает сервис wallhub)."""
     status = read_status()
+    # message переводится в интерфейсе, подстановки для него — в message_args.
+    if "message" in fields:
+        fields.setdefault("message_args", {})
     status.update(fields)
     tmp = STATUS + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -141,10 +151,10 @@ def github(url, raw=False, accept="application/vnd.github+json"):
         response = urllib.request.urlopen(request, timeout=60)
     except urllib.error.HTTPError as e:
         if e.code in (401, 403, 404):
-            raise UpdateError(f"GitHub ответил {e.code}: проверьте токен и доступ к репозиторию")
-        raise UpdateError(f"GitHub ответил {e.code}")
+            raise UpdateError("GitHub ответил {code}: проверьте токен и доступ к репозиторию", http_status=e.code, code=e.code)
+        raise UpdateError("GitHub ответил {code}", http_status=e.code, code=e.code)
     except urllib.error.URLError as e:
-        raise UpdateError(f"Нет связи с GitHub: {e.reason}")
+        raise UpdateError("Нет связи с GitHub: {reason}", reason=str(e.reason))
     if raw:
         return response
     with response:
@@ -172,8 +182,8 @@ def latest(cfg):
     try:
         commit = github(f"{api}/commits/{ref}")
     except UpdateError as e:
-        if "404" in str(e) or "422" in str(e):
-            raise UpdateError(f"В репозитории нет ветки {ref} (или нет доступа к нему)")
+        if e.http_status in (404, 422):
+            raise UpdateError("В репозитории нет ветки {ref} (или нет доступа к нему)", ref=ref)
         raise
     return {
         "commit": commit["sha"],
@@ -262,7 +272,8 @@ def switch_to(target):
 
 def install(cfg, version):
     previous = os.readlink(CURRENT) if os.path.islink(CURRENT) else None
-    write_status(state="installing", message=f"Скачиваю {version['ref']} {version['commit'][:7]}…", started_at=now())
+    write_status(state="installing", message="Скачиваю {ref} {commit}…",
+                 message_args={"ref": version["ref"], "commit": version["commit"][:7]}, started_at=now())
     log(f"install {version['ref']} {version['commit']}")
     release = download(cfg, version)
 
@@ -278,12 +289,15 @@ def install(cfg, version):
                      current=read_version(CURRENT), available=False)
         return
 
-    reason = f"install.sh завершился с кодом {result.returncode}" if result.returncode else "сервис не запустился"
-    log(f"failed: {reason}, rollback to {previous}")
+    if result.returncode:
+        message, args = "Не удалось обновиться (install.sh завершился с кодом {code}), вернул прошлую версию. Подробности в update.log", {"code": result.returncode}
+    else:
+        message, args = "Не удалось обновиться (сервис не запустился), вернул прошлую версию. Подробности в update.log", {}
+    log(f"failed: {message.format(**args)}, rollback to {previous}")
     if previous:
         switch_to(previous)
     write_status(state="idle", result="failed", finished_at=now(), current=read_version(CURRENT),
-                 message=f"Не удалось обновиться ({reason}), вернул прошлую версию. Подробности в update.log")
+                 message=message, message_args=args)
 
 
 def rollback():
@@ -341,11 +355,12 @@ def main():
             install(cfg, version)
     except UpdateError as e:
         log(f"error: {e}")
-        write_status(state="idle", result="failed", message=str(e), finished_at=now())
+        write_status(state="idle", result="failed", message=e.message, message_args=e.params, finished_at=now())
         return 1
     except Exception as e:
         log(f"error: {e!r}")
-        write_status(state="idle", result="failed", message=f"Ошибка обновления: {e}", finished_at=now())
+        write_status(state="idle", result="failed", message="Ошибка обновления: {error}",
+                     message_args={"error": str(e)}, finished_at=now())
         raise
     return 0
 

@@ -5,6 +5,7 @@
 // с рамками: их можно таскать по сетке и тянуть за угол. Любое изменение
 // сразу сохраняется и само появляется на панели.
 
+import { t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 import { themeFor } from "/lib/theme.js";
 import { destroyAll, mountWidget, placeWidget, setupGrid } from "/lib/widgets.js";
@@ -13,6 +14,8 @@ const SCREEN = { w: 1024, h: 600 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const newId = (prefix) => prefix + Math.random().toString(36).slice(2, 10);
 const clone = (v) => JSON.parse(JSON.stringify(v));
+// Без своего имени стол называется «Стол N» на языке панели.
+const deskName = (d, i) => d.name || t("Стол {n}", { n: i + 1 });
 
 export class DesktopEditor {
   constructor(host, { config, catalog, save, toast, confirm }) {
@@ -91,10 +94,10 @@ export class DesktopEditor {
     destroyAll(this.instances);
     this.instances = [];
     const tabs = this.desktops.map((d, i) => `
-      <button class="desk-tab ${i === this.index ? "active" : ""}" data-desk="${i}">${esc(d.name)}</button>`).join("");
+      <button class="desk-tab ${i === this.index ? "active" : ""}" data-desk="${i}">${esc(deskName(d, i))}</button>`).join("");
     this.host.innerHTML = `
       <div class="desk-tabs">${tabs}
-        <button class="desk-tab add" data-desk-add ${this.desktops.length >= 10 ? "disabled" : ""}>${icon("plus")} Стол</button>
+        <button class="desk-tab add" data-desk-add ${this.desktops.length >= 10 ? "disabled" : ""}>${icon("plus")} ${t("Стол")}</button>
       </div>
       <div class="editor">
         <aside class="palette">${this.renderPalette()}</aside>
@@ -118,11 +121,11 @@ export class DesktopEditor {
       box.className = "box" + (w.id === this.selected ? " selected" : "");
       box.dataset.box = w.id;
       placeWidget(box, w);
-      box.innerHTML = `<span class="box-label">${esc((this.catalog[w.type] || {}).title || w.type)}</span><span class="box-resize" data-resize="${w.id}"></span>`;
+      box.innerHTML = `<span class="box-label">${esc(t((this.catalog[w.type] || {}).title || w.type))}</span><span class="box-resize" data-resize="${w.id}"></span>`;
       this.overlay.appendChild(box);
     }
     if (!this.desk.widgets.length) {
-      this.overlay.insertAdjacentHTML("beforeend", `<div class="canvas-empty">Пустой стол: добавьте виджет из списка слева</div>`);
+      this.overlay.insertAdjacentHTML("beforeend", `<div class="canvas-empty">${t("Пустой стол: добавьте виджет из списка слева")}</div>`);
     }
     this.fit();
   }
@@ -143,28 +146,28 @@ export class DesktopEditor {
       (groups[meta.module_title] ||= []).push(meta);
     }
     return Object.entries(groups).map(([title, items]) => `
-      <div class="palette-group">${esc(title)}</div>
+      <div class="palette-group">${esc(t(title))}</div>
       ${items.map((m) => `
-        <button class="palette-item" data-add="${esc(m.id)}" title="${esc(m.description || "")}">
-          ${icon(m.icon || "grid")}<span>${esc(m.title)}</span>${icon("plus", "icon tiny")}
+        <button class="palette-item" data-add="${esc(m.id)}" title="${esc(t(m.description || ""))}">
+          ${icon(m.icon || "grid")}<span>${esc(t(m.title))}</span>${icon("plus", "icon tiny")}
         </button>`).join("")}`).join("");
   }
 
   renderDeskProps() {
     const last = this.desktops.length === 1;
     return `
-      <div class="props-title">Стол</div>
-      <label class="prop"><span>Название</span><input data-desk-name value="${esc(this.desk.name)}" maxlength="40"></label>
+      <div class="props-title">${t("Стол")}</div>
+      <label class="prop"><span>${t("Название")}</span><input data-desk-name value="${esc(this.desk.name)}" placeholder="${esc(deskName({}, this.index))}" maxlength="40"></label>
       <div class="prop-row">
-        <button class="btn btn-small" data-desk-move="-1" ${this.index === 0 ? "disabled" : ""}>← Левее</button>
-        <button class="btn btn-small" data-desk-move="1" ${this.index === this.desktops.length - 1 ? "disabled" : ""}>Правее →</button>
+        <button class="btn btn-small" data-desk-move="-1" ${this.index === 0 ? "disabled" : ""}>← ${t("Левее")}</button>
+        <button class="btn btn-small" data-desk-move="1" ${this.index === this.desktops.length - 1 ? "disabled" : ""}>${t("Правее")} →</button>
       </div>
-      <button class="btn btn-small btn-danger" data-desk-delete ${last ? "disabled" : ""}>${icon("trash")} Удалить стол</button>
-      <div class="props-title">Все столы</div>
-      <label class="prop"><span>Возвращаться на первый стол через, мин<small>0 — не возвращаться</small></span>
+      <button class="btn btn-small btn-danger" data-desk-delete ${last ? "disabled" : ""}>${icon("trash")} ${t("Удалить стол")}</button>
+      <div class="props-title">${t("Все столы")}</div>
+      <label class="prop"><span>${t("Возвращаться на первый стол через, мин")}<small>${t("0 — не возвращаться")}</small></span>
         <input type="number" min="0" max="240" data-home value="${this.homeAfterMin}">
       </label>
-      <p class="muted small">Нажмите на виджет на холсте, чтобы изменить его настройки. Перетаскивайте виджеты мышью, размер меняется за правый нижний угол.</p>`;
+      <p class="muted small">${t("Нажмите на виджет на холсте, чтобы изменить его настройки. Перетаскивайте виджеты мышью, размер меняется за правый нижний угол.")}</p>`;
   }
 
   renderWidgetProps() {
@@ -173,39 +176,39 @@ export class DesktopEditor {
     const lim = this.limits(meta);
     const fields = (meta.options || []).map((o) => this.renderOption(o, w.options[o.key])).join("");
     return `
-      <div class="props-title">${esc(meta.title)}<button class="btn btn-small" data-deselect>Готово</button></div>
-      <p class="muted small">${esc(meta.description || "")}</p>
+      <div class="props-title">${esc(t(meta.title))}<button class="btn btn-small" data-deselect>${t("Готово")}</button></div>
+      <p class="muted small">${esc(t(meta.description || ""))}</p>
       <div class="prop-row">
-        <label class="prop"><span>Ширина</span><input type="number" min="${lim.minW}" max="${lim.maxW}" data-size="w" value="${w.w}"></label>
-        <label class="prop"><span>Высота</span><input type="number" min="${lim.minH}" max="${lim.maxH}" data-size="h" value="${w.h}"></label>
+        <label class="prop"><span>${t("Ширина")}</span><input type="number" min="${lim.minW}" max="${lim.maxW}" data-size="w" value="${w.w}"></label>
+        <label class="prop"><span>${t("Высота")}</span><input type="number" min="${lim.minH}" max="${lim.maxH}" data-size="h" value="${w.h}"></label>
       </div>
       ${fields}
-      <button class="btn btn-small btn-danger" data-remove>${icon("trash")} Убрать со стола</button>`;
+      <button class="btn btn-small btn-danger" data-remove>${icon("trash")} ${t("Убрать со стола")}</button>`;
   }
 
   renderOption(o, value) {
     const key = esc(o.key);
     if (o.type === "bool") {
-      return `<label class="check prop-check"><input type="checkbox" data-opt="${key}" ${value ? "checked" : ""}> ${esc(o.title)}</label>`;
+      return `<label class="check prop-check"><input type="checkbox" data-opt="${key}" ${value ? "checked" : ""}> ${esc(t(o.title))}</label>`;
     }
     if (o.type === "select") {
-      return `<label class="prop"><span>${esc(o.title)}</span><select data-opt="${key}">
-        ${o.choices.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`).join("")}
+      return `<label class="prop"><span>${esc(t(o.title))}</span><select data-opt="${key}">
+        ${o.choices.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(t(l))}</option>`).join("")}
       </select></label>`;
     }
     if (o.type === "number") {
-      return `<label class="prop"><span>${esc(o.title)}</span><input type="number" data-opt="${key}" data-num
+      return `<label class="prop"><span>${esc(t(o.title))}</span><input type="number" data-opt="${key}" data-num
         ${o.min != null ? `min="${o.min}"` : ""} ${o.max != null ? `max="${o.max}"` : ""} value="${esc(value ?? "")}"></label>`;
     }
     if (o.type === "text") {
-      return `<label class="prop"><span>${esc(o.title)}</span><input data-opt="${key}" value="${esc(value ?? "")}"></label>`;
+      return `<label class="prop"><span>${esc(t(o.title))}</span><input data-opt="${key}" value="${esc(value ?? "")}"></label>`;
     }
     if (o.type === "providers") {
       // Выбранные пункты в своём порядке, затем остальные.
       const chosen = (value || []).filter((id) => this.providers.some((p) => p.id === id));
       const order = [...chosen, ...this.providers.map((p) => p.id).filter((id) => !chosen.includes(id))];
-      const title = (id) => (this.providers.find((p) => p.id === id) || {}).title || id;
-      return `<div class="prop"><span>${esc(o.title)}</span><div class="prov-list">
+      const title = (id) => t((this.providers.find((p) => p.id === id) || {}).title || id);
+      return `<div class="prop"><span>${esc(t(o.title))}</span><div class="prov-list">
         ${order.map((id, i) => `
           <div class="prov">
             <label class="check"><input type="checkbox" data-prov="${key}" data-id="${esc(id)}" ${chosen.includes(id) ? "checked" : ""}><span>${esc(title(id))}</span></label>
@@ -230,7 +233,7 @@ export class DesktopEditor {
       this.selected = null;
       this.render();
     } else if ("deskAdd" in d) {
-      this.desktops.push({ id: newId("d"), name: `Стол ${this.desktops.length + 1}`, widgets: [] });
+      this.desktops.push({ id: newId("d"), name: "", widgets: [] });
       this.index = this.desktops.length - 1;
       this.selected = null;
       await this.save();
@@ -241,7 +244,7 @@ export class DesktopEditor {
       this.index = to;
       await this.save();
     } else if ("deskDelete" in d) {
-      if (await this.confirm({ title: `Удалить «${this.desk.name}»?`, text: "Виджеты с этого стола пропадут.", ok: "Удалить", danger: true })) {
+      if (await this.confirm({ title: t("Удалить «{name}»?", { name: deskName(this.desk, this.index) }), text: t("Виджеты с этого стола пропадут."), ok: t("Удалить"), danger: true })) {
         this.desktops.splice(this.index, 1);
         this.index = Math.max(0, this.index - 1);
         await this.save();
@@ -271,7 +274,7 @@ export class DesktopEditor {
     const el = e.target;
     const w = this.selected && this.widget(this.selected);
     if ("deskName" in el.dataset) {
-      this.desk.name = el.value.trim() || this.desk.name;
+      this.desk.name = el.value.trim();
       await this.save();
     } else if ("home" in el.dataset) {
       const v = parseInt(el.value, 10);
@@ -284,7 +287,7 @@ export class DesktopEditor {
       rect.w = Math.max(lim.minW, Math.min(lim.maxW, rect.w));
       rect.h = Math.max(lim.minH, Math.min(lim.maxH, rect.h));
       if (!this.fits(rect, w.id)) {
-        this.toast("Не хватает места: сдвиньте соседние виджеты", "error");
+        this.toast(t("Не хватает места: сдвиньте соседние виджеты"), "error");
         return this.render();
       }
       Object.assign(w, { w: rect.w, h: rect.h });
@@ -323,7 +326,7 @@ export class DesktopEditor {
         }
       }
     }
-    this.toast("На столе нет места для этого виджета", "error");
+    this.toast(t("На столе нет места для этого виджета"), "error");
   }
 
   // --- перетаскивание и изменение размера ---------------------------------------

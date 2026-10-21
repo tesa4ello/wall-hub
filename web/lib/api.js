@@ -1,5 +1,7 @@
 // Тонкая обёртка над JSON API бэкенда.
 
+import { t } from "./i18n.js";
+
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -17,10 +19,10 @@ async function request(method, path, body) {
   try {
     response = await fetch("/api" + path, init);
   } catch (e) {
-    throw new ApiError("Нет связи с панелью", 0);
+    throw new ApiError(t("Нет связи с панелью"), 0);
   }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(data.error || `Ошибка ${response.status}`, response.status);
+  if (!response.ok) throw new ApiError(data.error || t("Ошибка {status}", { status: response.status }), response.status);
   return data;
 }
 

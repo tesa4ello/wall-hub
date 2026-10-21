@@ -1,5 +1,7 @@
 // Простые модальные окна и всплывающие уведомления.
 
+import { t } from "./i18n.js";
+
 // choose({title, text, options: [{label, value, kind}]}) -> Promise<value|null>
 export function choose({ title, text = "", options }) {
   return new Promise((resolve) => {
@@ -35,14 +37,14 @@ export function choose({ title, text = "", options }) {
 export async function confirmWifiOff(wifi) {
   if (wifi.other_connection) return true;
   return confirmDialog({
-    title: "Выключить Wi‑Fi?",
-    text: "Другой сети нет: админка станет недоступна. Если связи так и не будет, Wi‑Fi включится сам через 10 минут.",
-    ok: "Выключить",
+    title: t("Выключить Wi‑Fi?"),
+    text: t("Другой сети нет: админка станет недоступна. Если связи так и не будет, Wi‑Fi включится сам через 10 минут."),
+    ok: t("Выключить"),
     danger: true,
   });
 }
 
-export async function confirmDialog({ title, text = "", ok = "OK", cancel = "Отмена", danger = false }) {
+export async function confirmDialog({ title, text = "", ok = "OK", cancel = t("Отмена"), danger = false }) {
   const result = await choose({
     title,
     text,

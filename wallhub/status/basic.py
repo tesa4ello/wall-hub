@@ -5,6 +5,7 @@ import subprocess
 import time
 
 from . import provider
+from ..i18n import tr
 
 # Интерфейсы, которые не считаются в трафике.
 SKIP_IFACES = ("lo", "docker", "veth", "br-", "virbr")
@@ -17,9 +18,10 @@ def _read(path):
 
 def human_rate(bytes_per_sec):
     value = bytes_per_sec * 8
-    for unit in ("бит/с", "Кбит/с", "Мбит/с", "Гбит/с"):
-        if value < 1000 or unit == "Гбит/с":
-            return f"{value:.0f} {unit}" if value >= 10 or unit == "бит/с" else f"{value:.1f} {unit}"
+    units = [tr(u) for u in ("бит/с", "Кбит/с", "Мбит/с", "Гбит/с")]
+    for unit in units:
+        if value < 1000 or unit == units[-1]:
+            return f"{value:.0f} {unit}" if value >= 10 or unit == units[0] else f"{value:.1f} {unit}"
         value /= 1000
 
 
@@ -90,7 +92,7 @@ def memory():
     return {
         "icon": "mem",
         "text": f"{percent}%",
-        "title": f"{used / 1048576:.1f} из {total / 1048576:.1f} ГБ",
+        "title": tr("{used} из {total} ГБ", used=f"{used / 1048576:.1f}", total=f"{total / 1048576:.1f}"),
         "level": level,
     }
 
@@ -107,7 +109,7 @@ def temp():
         return None
     t = max(values)
     level = "ok" if t < 70 else "warn" if t < 80 else "crit"
-    return {"icon": "temp", "text": f"{t:.0f}°", "title": "Температура процессора", "level": level}
+    return {"icon": "temp", "text": f"{t:.0f}°", "title": tr("Температура процессора"), "level": level}
 
 
 _net_prev = None
@@ -127,12 +129,12 @@ def traffic():
     now = time.monotonic()
     prev, _net_prev = _net_prev, (now, rx, tx)
     if not prev or now - prev[0] <= 0:
-        return {"icon": "traffic", "text": "↓0 ↑0", "title": "Трафик"}
+        return {"icon": "traffic", "text": "↓0 ↑0", "title": tr("Трафик")}
     dt = now - prev[0]
     down = max(0, rx - prev[1]) / dt
     up = max(0, tx - prev[2]) / dt
     return {
         "icon": "traffic",
         "text": f"↓{human_rate(down)} ↑{human_rate(up)}",
-        "title": f"Всего: ↓{rx / 1048576:.0f} МБ ↑{tx / 1048576:.0f} МБ",
+        "title": tr("Всего: ↓{rx} МБ ↑{tx} МБ", rx=f"{rx / 1048576:.0f}", tx=f"{tx / 1048576:.0f}"),
     }

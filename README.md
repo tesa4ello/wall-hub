@@ -1,11 +1,13 @@
 # Wall-HUB
 
-Настенная панель на базе Orange Pi 3B (экран 1024×600, сенсорный): часы,
-статусная строка и служебная информация. Позже здесь же будет xray-прокси.
+**English** · [Русский](README.ru.md)
 
-## Установка
+A wall panel built on an Orange Pi 3B (1024×600 touch screen): a clock, a
+status bar and service information. An xray proxy will live here later too.
 
-На чистом консольном Armbian 13 (Debian trixie), после первого входа:
+## Installation
+
+On a clean console Armbian 13 (Debian trixie), after the first login:
 
 ```sh
 git clone https://github.com/tesa4ello/wall-hub
@@ -13,164 +15,198 @@ cd wall-hub
 sudo ./install.sh
 ```
 
-Повторный запуск `install.sh` ставит версию из текущей папки и не трогает
-настройки. Обычно это не нужно: панель обновляется сама (см. ниже).
+Running `install.sh` again installs the version from the current folder and
+keeps the settings. Usually you don't need to: the panel updates itself (see
+below).
 
-Wi‑Fi, настроенный при первом входе в Armbian (netplan + networkd), установщик
-отключает: файлы уезжают в `/etc/netplan/wallhub-disabled/`, адаптер переходит
-к NetworkManager, а сеть выбирается на самой панели при первом запуске.
-Ethernet остаётся как был.
-В конце скрипт печатает адрес админки. Он же виден на самой панели в
-«Настройки → Система» текстом и QR-кодом. Пароля сразу нет: его придумывают
-при первом входе в админку, поэтому зайдите в неё сразу после установки.
-Сброс пароля (новый снова задаётся при следующем входе):
-`sudo ./install.sh --reset-password`.
+The installer disables the Wi‑Fi configured at Armbian's first login
+(netplan + networkd): the files move to `/etc/netplan/wallhub-disabled/`, the
+adapter is handed over to NetworkManager, and the network is chosen on the
+panel itself at first start. Ethernet stays as it was.
+At the end the script prints the admin panel address. It is also shown on the
+panel under "Settings → System" as text and a QR code. There is no password at
+first: you create one at the first admin sign-in, so open the admin panel right
+after installing. To reset the password (a new one is set again at the next
+sign-in): `sudo ./install.sh --reset-password`.
 
-Текстовая консоль на экран панели не выводится (параметр ядра `fbcon=map:9`
-в `/boot/armbianEnv.txt`), чтобы при включении и выключении не мелькал текст.
-Обслуживание по SSH. Если нужна консоль на экране, уберите этот параметр из
-`extraargs` и перезагрузитесь.
+The text console is not shown on the panel's screen (kernel parameter
+`fbcon=map:9` in `/boot/armbianEnv.txt`), so no text flashes during power on
+and off. Use SSH for maintenance. If you need the console on screen, remove
+this parameter from `extraargs` and reboot.
 
-## Как устроено
+## How it works
 
-| Часть | Где | Что делает |
+| Part | Where | What it does |
 |---|---|---|
-| Бэкенд | `wallhub/`, сервис `wallhub.service` | Python (venv внутри версии), HTTP API и статика |
-| Версии | `/opt/wallhub/releases/<коммит>` | `current` и `previous` — симлинки на рабочую и прошлую версии |
-| Киоск | `http://127.0.0.1:8080/` | экран панели, без пароля, доступен только локально |
-| Админка | `http://<адрес>/` (порт 80) | то же API, но только после входа по паролю |
-| Настройки | `/var/lib/wallhub/config.json` | хранятся только отличия от значений по умолчанию |
-| Графика | пользователь `kiosk`, tty1 | автологин → `startx` → openbox → `deploy/kiosk.sh` → chromium |
+| Backend | `wallhub/`, service `wallhub.service` | Python (venv inside the release), HTTP API and static files |
+| Releases | `/opt/wallhub/releases/<commit>` | `current` and `previous` are symlinks to the active and previous releases |
+| Kiosk | `http://127.0.0.1:8080/` | the panel's screen, no password, local access only |
+| Admin panel | `http://<address>/` (port 80) | the same API, but only after signing in |
+| Settings | `/var/lib/wallhub/config.json` | only differences from the defaults are stored |
+| Graphics | user `kiosk`, tty1 | autologin → `startx` → openbox → `deploy/kiosk.sh` → chromium |
 
-Сервис работает от системного пользователя `wallhub`. Порт 80 он открывает
-благодаря `CAP_NET_BIND_SERVICE` в unit-файле. Права на Wi‑Fi
-(NetworkManager), перезагрузку/выключение и смену часового пояса выданы через
-polkit (`deploy/50-wallhub.rules`), root ему не нужен.
+The service runs as the system user `wallhub`. It can open port 80 thanks to
+`CAP_NET_BIND_SERVICE` in the unit file. Rights for Wi‑Fi (NetworkManager),
+reboot/shutdown and time zone changes are granted through polkit
+(`deploy/50-wallhub.rules`); it doesn't need root.
 
-Chromium запускается в чистом киоске: флаги в `deploy/kiosk.sh` и политики в
-`deploy/chromium-policy.json` отключают переводчик, менеджер паролей,
-уведомления, первый запуск и предложение восстановить вкладки после
-выключения питания.
+Chromium runs as a clean kiosk: the flags in `deploy/kiosk.sh` and the policies
+in `deploy/chromium-policy.json` turn off the translator, password manager,
+notifications, first-run screens and the offer to restore tabs after a power
+cut.
 
-### Тема и затенение
+### Theme and dimming
 
-- **Тема:** вручную, по времени (день/ночь с заданных часов) или по солнцу.
-  Восход и закат считаются на самой панели по координатам из админки, без
-  интернета. Смена темы плавная.
-- **Ночное приглушение:** ночью (по тому же правилу) экран постоянно
-  приглушён на заданный процент.
-- **Затемнение при простое:** через N минут без касаний экран темнеет, не
-  слабее ночного уровня.
-- **Гашение:** через M минут X-сервер выключает подсветку (DPMS), настройку
-  подхватывает `deploy/display-sync.py`. Первое касание после затемнения или
-  гашения только будит экран и не нажимает кнопки.
+- **Theme:** manual, by time (day/night from set hours) or by the sun. Sunrise
+  and sunset are computed on the panel from the coordinates set in the admin
+  panel, without internet. Theme changes are animated.
+- **Night dimming:** at night (by the same rule) the screen is constantly
+  dimmed by a set percentage.
+- **Idle dimming:** after N minutes without touches the screen darkens, never
+  less than the night level.
+- **Screen off:** after M minutes the X server turns the backlight off (DPMS);
+  `deploy/display-sync.py` picks the setting up. The first touch after dimming
+  or screen off only wakes the screen and doesn't press buttons.
 
-### Обновления
+### Updates
 
-Панель обновляется из GitHub без переустановки системы. Есть два канала:
+The panel updates from GitHub without reinstalling the system. There are two
+channels:
 
-- **Стабильная** — ветка `main`, по умолчанию;
-- **Разработка** — ветка `dev`. Новые изменения сначала попадают сюда, а в
-  стабильную выходят слиянием `dev` в `main`.
+- **Stable**: branch `main`, the default;
+- **Development**: branch `dev`. New changes land here first and reach stable
+  when `dev` is merged into `main`.
 
-Как ставится версия:
+How a release is installed:
 
-1. Обновлятор `deploy/wallhub-update.py` (root, юнит
-   `wallhub-update@<режим>.service`) узнаёт через GitHub API последний коммит
-   ветки канала и номер версии в нём.
-2. Скачивает архив коммита в `/opt/wallhub/releases/<коммит>` и запускает его
-   `install.sh --updater`: доставляются только недостающие пакеты, создаётся
-   venv версии, переключается симлинк `current`, перезапускается сервис.
-3. Если сервис за минуту не ответил новой версией, `current` возвращается на
-   прошлую версию. Хранятся три последние версии.
-4. Экран сам перезагружает страницу, когда видит новую версию сервиса.
-   Графическая сессия перезапускается, только если изменились файлы киоска.
+1. The updater `deploy/wallhub-update.py` (root, unit
+   `wallhub-update@<mode>.service`) asks the GitHub API for the latest commit of
+   the channel's branch and the version number in it.
+2. It downloads the commit archive to `/opt/wallhub/releases/<commit>` and runs
+   its `install.sh --updater`: only missing packages are installed, the
+   release's venv is created, the `current` symlink is switched and the service
+   restarts.
+3. If the service doesn't answer with the new version within a minute,
+   `current` goes back to the previous release. The last three releases are
+   kept.
+4. The screen reloads the page by itself when it sees a new service version.
+   The graphical session restarts only if the kiosk files changed.
 
-Расписание автопроверки (не проверять, каждый час, каждые 6 часов или раз в
-день в заданное время), канал и автоустановка меняются на экране в
-«Настройки → Система» и в админке на вкладке «Обновления». Таймер
-`wallhub-update-auto.timer` будит обновлятор каждые 15 минут, а тот сам решает
-по расписанию, пора ли проверять. Если автоустановка выключена, панель только
-сообщает о новой версии: плашкой в «Системе» и красной точкой на шестерёнке.
+The automatic check schedule (never, hourly, every 6 hours or daily at a set
+time), the channel and automatic installation are set on the screen under
+"Settings → System" and in the admin panel on the "Updates" tab. The
+`wallhub-update-auto.timer` wakes the updater every 15 minutes, and the updater
+decides from the schedule whether a check is due. If automatic installation is
+off, the panel only announces a new version: with a banner in "System" and a
+red dot at the top edge of the screen.
 
-Токен для приватного репозитория установщик берёт из адреса `git remote`
-(`https://<user>:<token>@github.com/...`) и хранит в
-`/var/lib/wallhub/github-token` (права 600), сменить его можно в админке. Ход
-обновления пишется в `/var/lib/wallhub/update.log`.
+The installer takes the token for a private repository from the `git remote`
+address (`https://<user>:<token>@github.com/...`) and stores it in
+`/var/lib/wallhub/github-token` (mode 600); you can change it in the admin
+panel. Update progress is logged to `/var/lib/wallhub/update.log`.
 
-С консоли: `sudo systemctl start wallhub-update@install` (или `check`,
+From the console: `sudo systemctl start wallhub-update@install` (or `check`,
 `rollback`).
 
-### Сеть
+### Network
 
-В настройках на экране, раздел «Сеть»:
+On the screen, under "Settings → Network":
 
-- адреса интерфейсов, шлюз и DNS;
-- внешний адрес по нескольким сервисам (Яндекс, Cloudflare, ipify,
-  icanhazip, ifconfig.me, ipinfo.io). Если сервисы видят разные адреса
-  (например, часть трафика идёт через прокси), показываются все с указанием,
-  кто что вернул;
-- тест скорости через Speedtest (модуль `speedtest-cli`) и Яндекс
-  Интернетометр. Последние результаты хранятся в
+- interface addresses, gateway and DNS;
+- the external address from several services (Yandex, Cloudflare, ipify,
+  icanhazip, ifconfig.me, ipinfo.io). If the services see different addresses
+  (for example, some traffic goes through a proxy), all of them are shown with
+  which service returned what;
+- a speed test via Speedtest (the `speedtest-cli` module) and Yandex
+  Internetometer. The latest results are stored in
   `/var/lib/wallhub/speedtest.json`.
 
-Адрес админки показывается в «Система» QR-кодом и только когда панель в сети.
+The admin panel address is shown under "System" as text and a QR code when
+the panel is online.
 
-### Рабочие столы и виджеты
+Before Wi‑Fi is turned off, the panel asks for confirmation if there is no
+other connection (cable). If Wi‑Fi is off anyway and there has been no
+connection for 10 minutes, the service turns it back on: otherwise the panel
+would lose its admin panel, and NetworkManager remembers the radio being off
+even after a reboot.
 
-Экран — это один или несколько рабочих столов. Столы листаются свайпом
-влево и вправо, внизу видны точки-индикаторы. Через заданное время без касаний
-панель возвращается на первый стол. Каждый стол — сетка 16×10 клеток
-(по 64×60 px), и виджет занимает прямоугольник клеток. Статусная строка тоже
-виджет, поэтому её можно поставить куда угодно или убрать.
+### Desktops and widgets
 
-Раскладка правится только в админке, на вкладке «Столы». Там превью экрана в
-масштабе с настоящими виджетами. Виджеты перетаскиваются мышью, размер меняется
-за угол, слева палитра, справа настройки выбранного виджета. Изменения
-сохраняются сразу и сами появляются на панели.
+The screen consists of one or more desktops. Swipe left and right to switch
+between them; dots at the bottom show where you are. After a set time without
+touches the panel returns to the first desktop. Each desktop is a 16×10 grid
+(64×60 px per cell), and a widget takes a rectangle of cells. The status bar is
+a widget too, so it can go anywhere or be removed.
 
-Виджеты поставляют модули. Модуль — это папка `web/modules/<модуль>/`:
+The layout is edited only in the admin panel, on the "Desktops" tab. It has a
+scaled preview of the screen with real widgets. Drag widgets with the mouse and
+resize them by the corner; the palette is on the left, the selected widget's
+settings on the right. Changes are saved immediately and appear on the panel by
+themselves.
 
-- `module.json` — название и список типов виджетов: у каждого `id`,
-  название, иконка, размеры (`size.default/min/max` в клетках), `card` (рисовать
-  ли подложку) и схема настроек (`bool`, `text`, `number`, `select`,
-  `providers`);
-- `module.js` — экспортирует `widgets = {id: mount}`, где
-  `mount(el, {options, api})` возвращает `{destroy()}`;
-- `module.css` — стили. Размеры лучше задавать в `cqw`/`cqh`: виджет — это
-  контейнер, и так содержимое вписывается в любой размер.
+Widgets come from modules. A module is a folder `web/modules/<module>/`:
 
-Тип виджета — `модуль/виджет` (например, `clock/clock`). Один тип можно
-поставить сколько угодно раз, у каждого экземпляра свои настройки. Раскладка
-хранится в `desktops` в `config.json` и проверяется на сервере
-(`wallhub/desktops.py`): размеры, границы, перекрытия, типы настроек.
+- `module.json`: the title and the list of widget types, each with an `id`,
+  title, icon, sizes (`size.default/min/max` in cells), `card` (whether to draw
+  a backing card), a settings schema (`bool`, `text`, `number`, `select`,
+  `providers`) and translations (`i18n`);
+- `module.js`: exports `widgets = {id: mount}`, where
+  `mount(el, {options, api})` returns `{destroy()}`;
+- `module.css`: styles. Prefer `cqw`/`cqh` units: a widget is a container, so
+  its content fits any size.
 
-### Управление на экране
+A widget type is `module/widget` (for example, `clock/clock`). One type can be
+placed any number of times, each instance with its own settings. The layout is
+stored in `desktops` in `config.json` and checked on the server
+(`wallhub/desktops.py`): sizes, bounds, overlaps, settings types.
 
-Шестерёнки нет, интерфейс чисто сенсорный:
+### On-screen controls
 
-- **свайп вниз от верхнего края** открывает шторку: Wi‑Fi, тема, «Настройки»
-  и уведомление о новой версии;
-- **долгое нажатие (2 с)** в любом месте стола открывает настройки;
-- **красная точка у верхнего края** — вышла новая версия.
+There is no gear icon; the interface is touch only:
 
-### Статусная строка
+- **swipe down from the top edge** (or tap the very edge) to open the shade:
+  Wi‑Fi, theme, "Settings" and the new version notice;
+- **long press (2 s)** anywhere on a desktop opens the settings;
+- **a red dot at the top edge** means a new version is out.
 
-Пункт строки — функция-провайдер в пакете `wallhub/status/`, помеченная
-`@provider("id", "Название")`. Она возвращает `{icon, text, title, level}`.
-Новый провайдер сразу появляется в настройках виджета статусной строки.
-Сервис опрашивает только те провайдеры, которые показывает хоть один виджет.
+### Status bar
 
-## Разработка
+A status bar item is a provider function in the `wallhub/status/` package,
+marked with `@provider("id", "Title")`. It returns `{icon, text, title, level}`.
+A new provider appears in the status bar widget's settings right away. The
+service polls only the providers that at least one widget shows.
 
-Нужен только Python 3.11+. Режим `--dry-run` не выполняет системных команд
-и отдаёт тестовый список Wi‑Fi сетей:
+### Languages
+
+The panel and admin interface, service errors, installer and updater messages
+are translated. There is one language for both the panel and the admin panel:
+change it under "Settings → Display" (or on the Wi‑Fi screen at first start)
+or in the admin panel, and the other side follows. On first installation the
+language comes from the system's `$LANG`.
+
+Texts in the code are written in Russian: it is the source language and the
+translation key at the same time. In the frontend a string is wrapped in
+`t("Текст")` from `web/lib/i18n.js` (placeholders:
+`t("Подключено к {ssid}", { ssid })`, plurals: `tn()`), in Python in `tr()` from
+`wallhub/i18n.py`, in `install.sh` in `L 'Текст %s' value`. Translations live in
+`web/i18n/<language>.json` as `{"Russian text": "translation"}`; modules add
+their own in `module.json` (the `i18n` field). An untranslated string is shown
+in Russian.
+
+To add a language, list it in `web/i18n/languages.json` (code, name, locale for
+dates) and put `<code>.json` next to it. A test checks that the placeholders in
+translations match the source.
+
+## Development
+
+Only Python 3.11+ is needed. `--dry-run` mode runs no system commands and
+serves a test list of Wi‑Fi networks:
 
 ```sh
 python3 -m wallhub --dry-run --config var/config.json --admin-port 8088
-# киоск:   http://localhost:8080/  (окно 1024×600)
-# админка: http://localhost:8088/  (пароль задаётся при первом входе)
+# kiosk: http://localhost:8080/  (1024×600 window)
+# admin: http://localhost:8088/  (the password is set at first sign-in)
 python3 -m unittest discover -s tests
 ```
 
-Зависимости Python, если появятся, добавляются в `requirements.txt`.
+Python dependencies, if any, go into `requirements.txt`.

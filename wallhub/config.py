@@ -8,6 +8,7 @@
 
 import copy
 import json
+import re
 import os
 import threading
 
@@ -41,7 +42,7 @@ DEFAULTS = {
     "desktops": [
         {
             "id": "d1",
-            "name": "Стол 1",
+            "name": "",
             "widgets": [
                 {"id": "w1", "type": "system/statusbar", "x": 0, "y": 0, "w": 16, "h": 1,
                  "options": {"items": ["wifi", "load", "memory", "temp", "traffic"], "align": "left"}},
@@ -107,6 +108,11 @@ def _migrate(data):
             if not clock_cfg.get("enabled", True):
                 desk["widgets"].remove(clock)
         data["desktops"] = [desk]
+    # Раньше имя «Стол N» записывалось в настройки. Пустое имя интерфейс
+    # показывает как «Стол N» на языке панели.
+    for desk in data.get("desktops", []):
+        if re.fullmatch(r"Стол \d+", desk.get("name", "")):
+            desk["name"] = ""
 
 
 class Config:

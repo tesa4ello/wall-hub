@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wall-HUB · Админка</title>
+  <title data-i18n>Wall-HUB · Админка</title>
   <link rel="stylesheet" href="/lib/base.css">
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
@@ -13,7 +13,7 @@
       <div class="brand">Wall-HUB</div>
       <p class="muted" id="login-hint"></p>
       <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password" required>
-      <input type="password" id="login-repeat" placeholder="Повторите пароль" autocomplete="new-password" hidden>
+      <input type="password" id="login-repeat" data-i18n-placeholder placeholder="Повторите пароль" autocomplete="new-password" hidden>
       <button class="btn btn-primary" type="submit" id="login-submit">Войти</button>
       <div class="error" id="login-error"></div>
     </form>
@@ -23,7 +23,7 @@
     <nav class="sidebar">
       <div class="brand">Wall-HUB</div>
       <div class="tabs" id="tabs"></div>
-      <button class="btn logout" id="logout">Выйти</button>
+      <button class="btn logout" id="logout" data-i18n>Выйти</button>
     </nav>
     <main class="content" id="content"></main>
   </div>

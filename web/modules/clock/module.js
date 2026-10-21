@@ -4,6 +4,8 @@
 // {id виджета: mount}, где mount(el, {options, api}) -> {destroy()}.
 // Описание виджетов (размеры, настройки) — в module.json.
 
+import { locale } from "/lib/i18n.js";
+
 const pad = (n) => String(n).padStart(2, "0");
 
 function mountClock(el, { options }) {
@@ -22,8 +24,8 @@ function mountClock(el, { options }) {
   el.querySelector(".clock").classList.toggle("no-date", !showDate);
   date.hidden = !showDate;
 
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "long" });
-  const dayMonth = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
+  const weekday = new Intl.DateTimeFormat(locale(), { weekday: "long" });
+  const dayMonth = new Intl.DateTimeFormat(locale(), { day: "numeric", month: "long" });
   let timer;
 
   function tick() {

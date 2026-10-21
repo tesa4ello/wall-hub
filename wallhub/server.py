@@ -20,7 +20,8 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from . import BUILD, __version__, auth, desktops, status
+from . import BUILD, __version__, auth, desktops, i18n, status
+from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
@@ -49,7 +50,7 @@ def _number(v):
 def validate_ui(patch):
     """Проверяет экранные настройки, пришедшие из браузера."""
     if not isinstance(patch, dict):
-        raise ApiError("Ожидается объект")
+        raise ApiError(tr("Ожидается объект"))
     rules = {
         "theme": lambda v: v in ("light", "dark"),
         "theme_mode": lambda v: v in ("manual", "schedule", "sun"),
@@ -61,14 +62,14 @@ def validate_ui(patch):
         "night_start": lambda v: isinstance(v, str) and TIME_RE.match(v),
         "dim_after_min": lambda v: _int(v) and 0 <= v <= 240,
         "dim_level": lambda v: _int(v) and 0 <= v <= 95,
-        "language": lambda v: v in ("ru", "en"),
+        "language": lambda v: v in i18n.languages(),
     }
     for key, value in patch.items():
         check = rules.get(key)
         if check is None:
-            raise ApiError(f"Неизвестная настройка: {key}")
+            raise ApiError(tr("Неизвестная настройка: {key}", key=key))
         if not check(value):
-            raise ApiError(f"Недопустимое значение: {key}")
+            raise ApiError(tr("Недопустимое значение: {key}", key=key))
     return patch
 
 
@@ -146,6 +147,8 @@ class App:
         # админка выглядела так же.
         self.kiosk_theme = None
         self.started = time.time()
+        i18n.load(self.web_root)
+        i18n.set_language(config.get("ui", "language"))
         status.load_all()
         self.collector = StatusCollector(config)
         self.collector.start()
@@ -171,7 +174,7 @@ class App:
 def check_new_password(body):
     new = str(body.get("new", ""))
     if len(new) < 6:
-        raise ApiError("Пароль должен быть не короче 6 символов")
+        raise ApiError(tr("Пароль должен быть не короче 6 символов"))
     return new
 
 
@@ -223,15 +226,15 @@ def make_handler(app, trusted, port):
         def read_json(self):
             if self.headers.get_content_type() != "application/json":
                 # Заодно защищает от CSRF: обычная HTML-форма так не отправит.
-                raise ApiError("Ожидается application/json", HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+                raise ApiError(tr("Ожидается application/json"), HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_BODY:
-                raise ApiError("Слишком большой запрос", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+                raise ApiError(tr("Слишком большой запрос"), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 return json.loads(raw or b"{}")
             except ValueError:
-                raise ApiError("Некорректный JSON")
+                raise ApiError(tr("Некорректный JSON"))
 
         def session_token(self):
             cookie = SimpleCookie(self.headers.get("Cookie", ""))
@@ -275,13 +278,15 @@ def make_handler(app, trusted, port):
             self.send_file(full)
 
         def handle_api(self, method, path, query):
+            # Язык общий для экрана и админки: ошибки API приходят на нём же.
+            i18n.set_language(app.config.get("ui", "language"))
             route = ROUTES.get((method, path))
             if route is None:
                 self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
                 return
             func, public = route
             if not public and not self.authorized():
-                self.send_error_json("Нужно войти", HTTPStatus.UNAUTHORIZED)
+                self.send_error_json(tr("Нужно войти"), HTTPStatus.UNAUTHORIZED)
                 return
             try:
                 body = self.read_json() if method == "POST" else None
@@ -294,7 +299,7 @@ def make_handler(app, trusted, port):
                 return
             except Exception:
                 log.exception("API %s %s failed", method, path)
-                self.send_error_json("Внутренняя ошибка", HTTPStatus.INTERNAL_SERVER_ERROR)
+                self.send_error_json(tr("Внутренняя ошибка"), HTTPStatus.INTERNAL_SERVER_ERROR)
                 return
             if isinstance(result, tuple):
                 self.send_json(*result)
@@ -308,6 +313,7 @@ def make_handler(app, trusted, port):
                 "authorized": self.authorized(),
                 "trusted": trusted,
                 "setup": not app.config.get("admin", "password_hash"),
+                "language": app.config.get("ui", "language"),
             }
 
         def start_session(self):
@@ -320,7 +326,7 @@ def make_handler(app, trusted, port):
             new = check_new_password(body)
             with app.login_lock:
                 if app.config.get("admin", "password_hash"):
-                    raise ApiError("Пароль уже задан, войдите с ним", HTTPStatus.CONFLICT)
+                    raise ApiError(tr("Пароль уже задан, войдите с ним"), HTTPStatus.CONFLICT)
                 app.config.update({"admin": {"password_hash": auth.hash_password(new)}})
             app.sessions.clear()
             return self.start_session()
@@ -333,7 +339,7 @@ def make_handler(app, trusted, port):
             with app.login_lock:
                 if not stored or not auth.check_password(str(body.get("password", "")), stored):
                     time.sleep(auth.FAIL_DELAY)
-                    raise ApiError("Неверный пароль", HTTPStatus.UNAUTHORIZED)
+                    raise ApiError(tr("Неверный пароль"), HTTPStatus.UNAUTHORIZED)
             return self.start_session()
 
         def api_logout(self, **_):
@@ -344,7 +350,8 @@ def make_handler(app, trusted, port):
             return app.config.public()
 
         def api_theme(self, **_):
-            return {"theme": app.kiosk_theme}
+            # Публично: страница входа тоже показывается в теме и на языке панели.
+            return {"theme": app.kiosk_theme, "language": app.config.get("ui", "language")}
 
         def api_revision(self, query, **_):
             theme = (query.get("theme") or [None])[0]
@@ -390,13 +397,17 @@ def make_handler(app, trusted, port):
         def api_speedtest_run(self, body, **_):
             provider = body.get("provider")
             if provider not in SPEED_PROVIDERS:
-                raise ApiError("Неизвестный тест скорости")
+                raise ApiError(tr("Неизвестный тест скорости"))
             if not app.network.start_speedtest(provider):
-                raise ApiError("Тест скорости уже идёт", HTTPStatus.CONFLICT)
+                raise ApiError(tr("Тест скорости уже идёт"), HTTPStatus.CONFLICT)
             return app.network.speed_status()
 
         def api_catalog(self, **_):
-            return {"widgets": list(app.widget_catalog().values()), "providers": status.catalog()}
+            return {
+                "widgets": list(app.widget_catalog().values()),
+                "providers": status.catalog(),
+                "i18n": {code: i18n.module_catalog(app.web_root, code) for code in i18n.languages()},
+            }
 
         # Wi‑Fi
 
@@ -440,7 +451,7 @@ def make_handler(app, trusted, port):
             if not trusted:
                 stored = app.config.get("admin", "password_hash")
                 if not auth.check_password(str(body.get("current", "")), stored):
-                    raise ApiError("Текущий пароль указан неверно", HTTPStatus.FORBIDDEN)
+                    raise ApiError(tr("Текущий пароль указан неверно"), HTTPStatus.FORBIDDEN)
             app.config.update({"admin": {"password_hash": auth.hash_password(new)}})
             app.sessions.clear()
             return self.start_session()
@@ -462,7 +473,7 @@ def make_handler(app, trusted, port):
                 raise ApiError(str(e))
             minutes = body.get("home_after_min", layout["home_after_min"])
             if not isinstance(minutes, int) or isinstance(minutes, bool) or not 0 <= minutes <= 240:
-                raise ApiError("Возврат на первый стол: от 0 до 240 минут")
+                raise ApiError(tr("Возврат на первый стол: от 0 до 240 минут"))
             app.config.update({"desktops": clean, "layout": {"home_after_min": minutes}})
             return {"revision": app.config.revision, "desktops": clean}
 
@@ -481,17 +492,17 @@ def make_handler(app, trusted, port):
             patch = {}
             if "channel" in body:
                 if body["channel"] not in CHANNELS:
-                    raise ApiError("Неизвестный канал обновлений")
+                    raise ApiError(tr("Неизвестный канал обновлений"))
                 patch["channel"] = body["channel"]
             if "auto" in body:
                 patch["auto"] = bool(body["auto"])
             if "schedule" in body:
                 if body["schedule"] not in SCHEDULES:
-                    raise ApiError("Неизвестное расписание")
+                    raise ApiError(tr("Неизвестное расписание"))
                 patch["schedule"] = body["schedule"]
             if "time" in body:
                 if not isinstance(body["time"], str) or not TIME_RE.fullmatch(body["time"]):
-                    raise ApiError("Время в формате ЧЧ:ММ")
+                    raise ApiError(tr("Время в формате ЧЧ:ММ"))
                 patch["time"] = body["time"]
             channel_changed = "channel" in patch and patch["channel"] != normalize_settings(app.config.get("update"))["channel"]
             app.config.update({"update": patch})
@@ -505,17 +516,17 @@ def make_handler(app, trusted, port):
         def api_update_token(self, body, **_):
             token = str(body.get("token", "")).strip()
             if token and not re.fullmatch(r"[A-Za-z0-9_]{20,255}", token):
-                raise ApiError("Это не похоже на токен GitHub")
+                raise ApiError(tr("Это не похоже на токен GitHub"))
             app.updates.set_token(token)
 
         def api_update_run(self, body, **_):
             mode = body.get("mode")
             if mode not in ("check", "install", "rollback"):
-                raise ApiError("Неизвестное действие")
+                raise ApiError(tr("Неизвестное действие"))
             try:
                 app.updates.start(mode)
             except subprocess.SubprocessError as e:
-                raise ApiError(f"Не удалось запустить обновление: {e}", HTTPStatus.BAD_GATEWAY)
+                raise ApiError(tr("Не удалось запустить обновление: {error}", error=e), HTTPStatus.BAD_GATEWAY)
 
     H = Handler
     # (метод, путь) -> (функция, доступна ли без входа)

@@ -38,7 +38,13 @@ SKIP_IFACES = ("lo", "docker", "veth", "br-", "virbr")
 
 
 class SpeedtestError(Exception):
-    pass
+    """Ошибка теста. Текст переводит браузер: message — исходная строка,
+    args_map — значения для подстановки."""
+
+    def __init__(self, message, **args_map):
+        super().__init__(message.format(**args_map) if args_map else message)
+        self.message = message
+        self.args_map = args_map
 
 
 def _get(url, timeout=6):
@@ -217,7 +223,10 @@ class Network:
                 result = self._yandex()
         except Exception as e:
             log.warning("speedtest %s failed: %s", provider, e)
-            result = {"error": str(e) if isinstance(e, SpeedtestError) else f"Тест не удался: {e}"}
+            if isinstance(e, SpeedtestError):
+                result = {"error": e.message, "error_args": e.args_map}
+            else:
+                result = {"error": "Тест не удался: {error}", "error_args": {"error": str(e)}}
         result["at"] = time.time()
         self.speed["results"] = dict(self.speed["results"], **{provider: result})
         try:
@@ -231,7 +240,7 @@ class Network:
         self._speed_lock.release()
 
     def _fake_speedtest(self, provider):
-        for phase in ("Пинг…", "Загрузка…", "Отдача…"):
+        for phase in ("Пинг…", "Скачивание…", "Отдача…"):
             self._phase(phase)
             time.sleep(1)
         base = 94.3 if provider == "ookla" else 88.1
@@ -246,12 +255,12 @@ class Network:
             self._phase("Выбираю сервер…")
             st = speedtest.Speedtest(secure=True)
             st.get_best_server()
-            self._phase("Загрузка…")
+            self._phase("Скачивание…")
             st.download()
             self._phase("Отдача…")
             st.upload(pre_allocate=False)
         except speedtest.SpeedtestException as e:
-            raise SpeedtestError(f"Speedtest: {e}")
+            raise SpeedtestError("Speedtest: {error}", error=str(e))
         r = st.results
         server = r.server or {}
         return {
@@ -267,7 +276,7 @@ class Network:
         try:
             probes = json.loads(self._fetch(YANDEX_PROBES))
         except (OSError, ValueError) as e:
-            raise SpeedtestError(f"Интернетометр недоступен: {e}")
+            raise SpeedtestError("Интернетометр недоступен: {error}", error=str(e))
 
         def urls(kind):
             section = probes.get(kind) or {}
@@ -288,7 +297,7 @@ class Network:
             except OSError:
                 pass
 
-        self._phase("Загрузка…")
+        self._phase("Скачивание…")
         down = max((self._measure_download(url) for url in download[:4]), default=0)
 
         self._phase("Отдача…")

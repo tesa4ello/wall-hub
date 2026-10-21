@@ -14,5 +14,14 @@
         {"key": "date", "type": "bool", "title": "Показывать дату и день недели", "default": true}
       ]
     }
-  ]
+  ],
+  "i18n": {
+    "en": {
+      "Часы": "Clock",
+      "Время и дата": "Time and date",
+      "Крупные часы с датой и днём недели": "Large clock with date and weekday",
+      "Показывать секунды": "Show seconds",
+      "Показывать дату и день недели": "Show date and weekday"
+    }
+  }
 }

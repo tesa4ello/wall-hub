@@ -2,6 +2,7 @@
 // настройки.
 
 import { api } from "/lib/api.js";
+import { language, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 import { confirmWifiOff } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
@@ -138,6 +139,7 @@ const THEMES = [
   [{ theme_mode: "manual", theme: "dark" }, "moon", "Тёмная"],
   [{ theme_mode: "manual", theme: "light" }, "sun", "Светлая"],
   [{ theme_mode: "schedule" }, "clock", "По времени"],
+  // Подписи переводятся при отрисовке.
 ];
 
 const shade = {
@@ -152,20 +154,20 @@ const shade = {
 
   render() {
     const ui = state.config.ui;
-    const t = THEMES[this.themeIndex()];
-    const themeLabel = ui.theme_mode === "sun" ? "По солнцу" : t[2];
+    const theme = THEMES[this.themeIndex()];
+    const themeLabel = t(ui.theme_mode === "sun" ? "По солнцу" : theme[2]);
     const w = this.wifi;
-    const wifiSub = !w ? "…" : !w.radio ? "Выключен" : w.connection || "Не подключён";
+    const wifiSub = !w ? "…" : !w.radio ? t("Выключен") : w.connection || t("Не подключён");
     $("shade").innerHTML = `
       <div class="shade-tiles">
         <button class="tile ${w && w.radio ? "on" : ""}" data-shade="wifi" ${w && w.available ? "" : "disabled"}>
           ${icon("wifi")}<span class="tile-title">Wi‑Fi</span><span class="tile-sub"></span>
         </button>
-        <button class="tile" data-shade="theme">${icon(ui.theme_mode === "sun" ? "sun" : t[1])}<span class="tile-title">Тема</span><span class="tile-sub">${themeLabel}</span></button>
-        <button class="tile" data-shade="settings">${icon("gear")}<span class="tile-title">Настройки</span><span class="tile-sub">Все параметры</span></button>
+        <button class="tile" data-shade="theme">${icon(ui.theme_mode === "sun" ? "sun" : theme[1])}<span class="tile-title">${t("Тема")}</span><span class="tile-sub">${themeLabel}</span></button>
+        <button class="tile" data-shade="settings">${icon("gear")}<span class="tile-title">${t("Настройки")}</span><span class="tile-sub">${t("Все параметры")}</span></button>
       </div>
       ${state.updateAvailable ? `
-      <button class="shade-update" data-shade="update">${icon("refresh")}<span>Доступна новая версия</span><b>Подробнее</b></button>` : ""}
+      <button class="shade-update" data-shade="update">${icon("refresh")}<span>${t("Доступна новая версия")}</span><b>${t("Подробнее")}</b></button>` : ""}
       <div class="shade-handle"></div>`;
     // Имя сети вставляем через textContent: оно приходит извне.
     $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
@@ -272,8 +274,15 @@ const shade = {
 // --- настройки и их изменения из админки ------------------------------------
 
 async function loadConfig() {
-  const [config, catalog] = await Promise.all([api.get("/config"), state.catalog ? null : loadCatalog()]);
-  if (catalog) state.catalog = catalog;
+  const config = await api.get("/config");
+  // Язык сменился в админке: проще всего перерисовать всё с нуля.
+  if (state.config && config.ui.language !== language()) return location.reload();
+  if (!state.catalog) {
+    await setLanguage(config.ui.language);
+    translateDom();
+    settings.renderFrame();
+    state.catalog = await loadCatalog();
+  }
   state.config = config;
   state.revision = config.revision;
   applyTheme();
