@@ -156,7 +156,9 @@ RELEASE="$RELEASES_DIR/$RELEASE_ID"
 # Файлы, от которых зависит сеанс киоска: если они не менялись, обновлятору
 # не нужно перезапускать X и Chromium.
 kiosk_files_hash() {
-    cat "$1"/deploy/{kiosk.sh,display-sync.py,xinitrc,bash_profile,openbox-rc.xml,chromium-policy.json,autologin.conf} 2>/dev/null | sha256sum
+    # При первой установке current ещё нет: cat падает, а с pipefail это
+    # прервало бы весь скрипт, поэтому ошибку cat гасим.
+    { cat "$1"/deploy/{kiosk.sh,display-sync.py,xinitrc,bash_profile,openbox-rc.xml,chromium-policy.json,autologin.conf} 2>/dev/null || true; } | sha256sum
 }
 OLD_KIOSK_HASH="$(kiosk_files_hash "$CURRENT")"
 PREVIOUS="$(readlink "$CURRENT" 2>/dev/null || true)"
