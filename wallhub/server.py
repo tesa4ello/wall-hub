@@ -38,6 +38,9 @@ log = logging.getLogger(__name__)
 COOKIE = "wallhub_session"
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_BODY = 64 * 1024
+# Сколько секунд /api/revision?wait=… держит запрос без изменений.
+LONG_POLL = 20
+LONG_POLL_BUSY = 2
 # Загрузка фона: две картинки в base64 внутри JSON.
 MAX_UPLOAD = 16 * 1024 * 1024
 
@@ -192,6 +195,7 @@ class App:
     def modules_changed(self):
         i18n.load(self.web_root, self.modules.loaded())
         self.modules_rev += 1
+        self.config.notify()
 
     def widget_catalog(self):
         return desktops.load_catalog(self.modules.loaded())
@@ -427,6 +431,17 @@ def make_handler(app, trusted, port):
             theme = (query.get("theme") or [None])[0]
             if trusted and theme in ("dark", "light"):
                 app.kiosk_theme = theme
+            # Долгий опрос: киоск передаёт ревизии, которые у него уже есть, и
+            # ответ приходит сразу после сохранения настроек, а не по таймеру.
+            # Пока идёт обновление, отвечаем чаще: экран показывает его ход.
+            try:
+                seen = int(query["wait"][0]), int(query["modules"][0])
+            except (KeyError, IndexError, ValueError):
+                seen = None
+            if seen is not None:
+                installing = app.updates.status().get("state") == "installing"
+                app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen,
+                                LONG_POLL_BUSY if installing else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
             return {

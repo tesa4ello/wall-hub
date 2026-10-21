@@ -32,6 +32,8 @@ function applyTheme() {
     // Плавная смена темы: временно включаем переходы цветов у всех элементов.
     root.classList.add("theme-anim");
     root.dataset.theme = theme;
+    // Админка повторяет тему экрана: сообщаем о смене сразу, не дожидаясь опроса.
+    api.get(`/revision?theme=${theme}`).catch(() => {});
     clearTimeout(applyTheme.timer);
     applyTheme.timer = setTimeout(() => root.classList.remove("theme-anim"), 1600);
   }
@@ -296,9 +298,13 @@ async function loadConfig() {
   settings.onConfig(config);
 }
 
+// Долгий опрос: сервер держит запрос, пока не изменятся настройки или модули
+// (или 20 секунд), поэтому изменения из админки видны на экране сразу.
 async function pollRevision() {
+  const theme = document.documentElement.dataset.theme;
+  const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
+    const { revision, build, update, progress, version, modules } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
     updateBanner.show(progress, version);
     state.updateAvailable = Boolean(update);
@@ -312,9 +318,18 @@ async function pollRevision() {
     if (state.modules === undefined) state.modules = modules;
     else if (modules !== state.modules) return location.reload();
     if (revision !== state.revision) await loadConfig();
+    return true;
   } catch {
     // Во время установки сервис перезапускается: это не обрыв связи.
     $("status-offline").hidden = updateBanner.offline();
+    return false;
+  }
+}
+
+async function revisionLoop() {
+  for (;;) {
+    // После ошибки пауза, чтобы не долбить упавший сервис.
+    if (!(await pollRevision())) await new Promise((r) => setTimeout(r, 3000));
   }
 }
 
@@ -484,8 +499,7 @@ async function start() {
   }
   // Первый запуск: сразу предлагаем выбрать Wi‑Fi сеть.
   if (!state.config.setup.wifi_done) settings.openSetup();
-  pollRevision();
-  setInterval(pollRevision, 3000);
+  revisionLoop();
   setInterval(applyTheme, 30000);
 }
 

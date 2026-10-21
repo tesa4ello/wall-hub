@@ -145,9 +145,21 @@ class Config:
     def __init__(self, path):
         self.path = path
         self._lock = threading.Lock()
+        # Будит киоск, который ждёт изменений (см. wait).
+        self._changed = threading.Condition(self._lock)
         self._data = {}
         self.revision = 0
         self.load()
+
+    def wait(self, predicate, timeout):
+        """Ждёт до timeout секунд, пока predicate() не станет истинным.
+        Проверяется после каждого сохранения и после notify()."""
+        with self._changed:
+            return self._changed.wait_for(predicate, timeout)
+
+    def notify(self):
+        with self._changed:
+            self._changed.notify_all()
 
     def load(self):
         data = {}
@@ -195,6 +207,7 @@ class Config:
             self._data = _merge(self._data, patch)
             self.revision += 1
             self._save_locked()
+            self._changed.notify_all()
             return self.revision
 
     def set(self, path, value):
@@ -205,3 +218,4 @@ class Config:
             node[path[-1]] = copy.deepcopy(value)
             self.revision += 1
             self._save_locked()
+            self._changed.notify_all()
