@@ -68,6 +68,17 @@ body.kiosk {
 }
 .dim.on { opacity: var(--dim, 0.8); }
 
+/* Ночное приглушение: поверх всего, включая настройки, но пропускает нажатия. */
+.night {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 2s;
+}
+
 /* --- настройки ----------------------------------------------------------- */
 
 .settings {

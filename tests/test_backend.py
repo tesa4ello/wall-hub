@@ -24,6 +24,15 @@ class ConfigTest(unittest.TestCase):
             with open(path) as f:
                 self.assertIn("_revision", json.load(f))
 
+    def test_migrates_auto_theme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.json")
+            with open(path, "w") as f:
+                json.dump({"ui": {"auto_theme": True}}, f)
+            ui = Config(path).get("ui")
+            self.assertEqual(ui["theme_mode"], "schedule")
+            self.assertNotIn("auto_theme", ui)
+
     def test_public_hides_password_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = Config(os.path.join(tmp, "c.json"))
@@ -41,11 +50,13 @@ class AuthTest(unittest.TestCase):
 
 class ValidateTest(unittest.TestCase):
     def test_valid(self):
-        validate_ui({"theme": "light", "auto_theme": True, "day_start": "06:30", "dim_after_min": 0})
+        validate_ui({"theme": "light", "theme_mode": "sun", "day_start": "06:30", "dim_after_min": 0,
+                     "latitude": 59.94, "longitude": 30.3, "night_dim": 40, "blank_after_min": 60})
 
     def test_invalid(self):
         for patch in ({"theme": "pink"}, {"day_start": "25:00"}, {"dim_level": 100},
-                      {"dim_after_min": True}, {"unknown": 1}):
+                      {"dim_after_min": True}, {"unknown": 1}, {"theme_mode": "auto"},
+                      {"latitude": 91}, {"night_dim": 95}, {"auto_theme": True}):
             with self.assertRaises(ApiError):
                 validate_ui(patch)
 

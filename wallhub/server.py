@@ -34,17 +34,29 @@ class ApiError(Exception):
         self.code = code
 
 
+def _int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _number(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def validate_ui(patch):
     """Проверяет экранные настройки, пришедшие из браузера."""
     if not isinstance(patch, dict):
         raise ApiError("Ожидается объект")
     rules = {
         "theme": lambda v: v in ("light", "dark"),
-        "auto_theme": lambda v: isinstance(v, bool),
+        "theme_mode": lambda v: v in ("manual", "schedule", "sun"),
+        "latitude": lambda v: _number(v) and -90 <= v <= 90,
+        "longitude": lambda v: _number(v) and -180 <= v <= 180,
+        "night_dim": lambda v: _int(v) and 0 <= v <= 90,
+        "blank_after_min": lambda v: _int(v) and 0 <= v <= 240,
         "day_start": lambda v: isinstance(v, str) and TIME_RE.match(v),
         "night_start": lambda v: isinstance(v, str) and TIME_RE.match(v),
-        "dim_after_min": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 240,
-        "dim_level": lambda v: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 95,
+        "dim_after_min": lambda v: _int(v) and 0 <= v <= 240,
+        "dim_level": lambda v: _int(v) and 0 <= v <= 95,
         "language": lambda v: v in ("ru", "en"),
     }
     for key, value in patch.items():
