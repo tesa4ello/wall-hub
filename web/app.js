@@ -184,7 +184,23 @@ const shade = {
     $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
   },
 
-  async show() {
+  // Состояние Wi‑Fi держим свежим в фоне, чтобы шторка открывалась сразу
+  // с готовыми данными. Без списка сетей: он может запустить сканирование.
+  async refresh() {
+    try {
+      this.wifi = await api.get("/wifi?brief=1");
+    } catch {
+      // Оставляем прошлое состояние, обновим на следующем шаге.
+    }
+    if (this.open) this.render();
+  },
+
+  start() {
+    this.refresh();
+    setInterval(() => { if (!document.hidden) this.refresh(); }, 15000);
+  },
+
+  show() {
     this.open = true;
     this.openedAt = Date.now();
     this.render();
@@ -194,12 +210,7 @@ const shade = {
       $("shade").classList.add("open");
       $("shade-backdrop").classList.add("on");
     });
-    try {
-      this.wifi = await api.get("/wifi");
-    } catch {
-      this.wifi = null;
-    }
-    if (this.open) this.render();
+    this.refresh();
   },
 
   hide() {
@@ -215,15 +226,20 @@ const shade = {
       this.hide();
       settings.open(name === "update" ? "system" : undefined);
     } else if (name === "theme") {
+      // Плитку переключаем сразу, не дожидаясь ответа ядра.
       const next = THEMES[(this.themeIndex() + 1) % THEMES.length][0];
+      Object.assign(state.config.ui, next);
+      this.render();
       await api.post("/settings", { ui: next });
       await loadConfig();
       this.render();
     } else if (name === "wifi" && this.wifi) {
       if (this.wifi.radio && !(await confirmWifiOff(this.wifi))) return;
-      await api.post("/wifi/radio", { enabled: !this.wifi.radio });
-      this.wifi = await api.get("/wifi");
+      const enabled = !this.wifi.radio;
+      this.wifi = { ...this.wifi, radio: enabled, connection: null };
       this.render();
+      await api.post("/wifi/radio", { enabled });
+      await this.refresh();
     }
   },
 };
@@ -274,7 +290,7 @@ const shade = {
   });
   shadeEl.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shade]");
-    if (b && !b.disabled) shade.action(b.dataset.shade).catch((err) => console.error(err));
+    if (b && !b.disabled) shade.action(b.dataset.shade).catch((err) => { console.error(err); shade.refresh(); });
   });
   // Касание, открывшее шторку, тут же даёт click по подложке: его пропускаем.
   $("shade-backdrop").addEventListener("click", () => {
@@ -374,7 +390,7 @@ async function revisionLoop() {
 // Плашка внизу экрана: какой этап идёт, сколько прошло, чем закончилось.
 // Нажатия не перехватывает, кроме готового результата: его можно смахнуть касанием.
 // Успешное обновление скрывается само через 15 секунд, ошибка остаётся.
-const UPDATE_STEPS = ["download", "install", "verify"];
+const UPDATE_STEPS = ["download", "install", "verify", "reboot"];
 const UPDATE_OK_HIDE_MS = 15000;
 
 const updateBanner = {
@@ -413,7 +429,7 @@ const updateBanner = {
     let title;
     if (running) title = p.phase === "rollback" ? t("Откат обновления") : (p.target ? t("Обновление до {version}", { version: p.target }) : t("Обновление"));
     else title = failed ? t("Обновление не удалось") : (p.message === "Возвращена прошлая версия" ? t("Возвращена прошлая версия") : t("Обновлено до {version}", { version: this.version }));
-    const message = p.restarting ? t("Перезапускаю сервис…") : t(p.message || "", p.message_args);
+    const message = p.restarting ? t(p.phase === "reboot" ? "Перезагружаю панель…" : "Перезапускаю сервис…") : t(p.message || "", p.message_args);
     const step = UPDATE_STEPS.indexOf(p.phase);
     const steps = running && step >= 0
       ? `<div class="ub-steps">${UPDATE_STEPS.map((_, i) => `<i class="${i < step ? "done" : i === step ? "on" : ""}"></i>`).join("")}</div>`
@@ -586,6 +602,7 @@ async function start() {
   // Первый запуск: сразу предлагаем выбрать Wi‑Fi сеть.
   if (!state.config.setup.wifi_done) settings.openSetup();
   revisionLoop();
+  shade.start();
   setInterval(applyTheme, 30000);
   reportDisplay();
   window.addEventListener("resize", () => {
