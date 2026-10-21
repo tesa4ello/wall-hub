@@ -439,7 +439,7 @@ export class Settings {
       <div class="card">${ifaces}${extra}</div>
       <div class="list-head"><span>${t("Внешний адрес")}</span>
         <div class="list-actions">
-          <button class="btn btn-small" data-external-refresh ${this.externalBusy ? "disabled" : ""}>${icon("refresh")}${t("Обновить")}</button>
+          <button class="btn btn-small" data-external-refresh ${this.externalBusy ? "disabled" : ""}>${icon("refresh")}${t("Перепроверить")}</button>
         </div>
       </div>
       ${this.renderExternal()}

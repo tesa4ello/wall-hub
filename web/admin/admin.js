@@ -273,7 +273,7 @@ function renderWifi() {
         <button class="btn" type="submit">${t("Подключиться")}</button>
       </form>`;
   }
-  return `<h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Обновить")}</button></h1>${body}`;
+  return `<h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Искать сети")}</button></h1>${body}`;
 }
 
 async function wifiConnect(body) {

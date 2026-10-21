@@ -240,7 +240,7 @@ class Network:
         self._speed_lock.release()
 
     def _fake_speedtest(self, provider):
-        for phase in ("Пинг…", "Загрузка…", "Отдача…"):
+        for phase in ("Пинг…", "Скачивание…", "Отдача…"):
             self._phase(phase)
             time.sleep(1)
         base = 94.3 if provider == "ookla" else 88.1
@@ -255,7 +255,7 @@ class Network:
             self._phase("Выбираю сервер…")
             st = speedtest.Speedtest(secure=True)
             st.get_best_server()
-            self._phase("Загрузка…")
+            self._phase("Скачивание…")
             st.download()
             self._phase("Отдача…")
             st.upload(pre_allocate=False)
@@ -297,7 +297,7 @@ class Network:
             except OSError:
                 pass
 
-        self._phase("Загрузка…")
+        self._phase("Скачивание…")
         down = max((self._measure_download(url) for url in download[:4]), default=0)
 
         self._phase("Отдача…")

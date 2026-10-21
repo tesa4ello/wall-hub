@@ -193,3 +193,42 @@ class FirstLoginTest(unittest.TestCase):
 
     def test_admin_url_without_default_port(self):
         self.assertNotIn(":80/", self.app.admin_url())
+
+
+class I18nTest(unittest.TestCase):
+    def setUp(self):
+        from wallhub import i18n
+        self.i18n = i18n
+        i18n.load(os.path.join(os.path.dirname(__file__), "..", "web"))
+
+    def tearDown(self):
+        self.i18n.set_language("ru")
+
+    def test_translate_with_params(self):
+        self.i18n.set_language("en")
+        self.assertEqual(self.i18n.tr("Не больше {n} столов", n=3), "At most 3 desktops")
+        # Строки модулей берутся из их module.json.
+        self.assertEqual(self.i18n.tr("Часы"), "Clock")
+        self.i18n.set_language("ru")
+        self.assertEqual(self.i18n.tr("Не больше {n} столов", n=3), "Не больше 3 столов")
+
+    def test_unknown_language_falls_back_to_source(self):
+        self.i18n.set_language("xx")
+        self.assertEqual(self.i18n.current(), "ru")
+        self.assertIn("en", self.i18n.languages())
+
+    def test_catalogs_cover_all_languages_keys(self):
+        """У каждого непервичного языка переводы не пустые и плейсхолдеры совпадают."""
+        import re
+        web = os.path.join(os.path.dirname(__file__), "..", "web", "i18n")
+        with open(os.path.join(web, "languages.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        for lang in meta["languages"]:
+            if lang["code"] == meta["source"]:
+                continue
+            with open(os.path.join(web, f"{lang['code']}.json"), encoding="utf-8") as f:
+                catalog = json.load(f)
+            for src, dst in catalog.items():
+                self.assertTrue(dst, src)
+                ph = lambda s: sorted(re.findall(r"\{\w+\}|%s", s))
+                self.assertEqual(ph(src), ph(dst), src)
