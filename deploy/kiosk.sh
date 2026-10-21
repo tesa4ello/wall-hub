@@ -29,8 +29,14 @@ while true; do
         sed -i 's/"exited_cleanly":false/"exited_cleanly":true/; s/"exit_type":"[^"]*"/"exit_type":"Normal"/' "$PREFS"
     fi
 
+    # Масштаб интерфейса выбирает ядро по разрешению экрана (wallhub/display.py).
+    # display-sync.py перезапускает Chromium, когда масштаб меняется.
+    SCALE=$(curl -fs "${URL}api/display" | python3 -c 'import json, sys; print(json.load(sys.stdin)["scale"])' 2>/dev/null || echo 1)
+    echo "$SCALE" >"$HOME/.wallhub-scale"
+
     chromium \
         --kiosk "$URL" \
+        --force-device-scale-factor="$SCALE" \
         --user-data-dir="$PROFILE" \
         --ozone-platform=x11 \
         --start-fullscreen \

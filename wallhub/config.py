@@ -55,6 +55,8 @@ DEFAULTS = {
         "sound_enabled": True,
         "sound_volume": 60,
         "sound_name": "chime",
+        # Масштаб интерфейса: "auto" (по разрешению экрана) или число из display.SCALES.
+        "scale": "auto",
         "sound_quiet": True,
         "sound_quiet_from": "22:00",
         "sound_quiet_to": "08:00",

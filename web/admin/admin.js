@@ -140,11 +140,20 @@ $("tabs").addEventListener("click", (e) => {
 });
 
 async function reload() {
-  const [config, catalog] = await guarded(() => Promise.all([api.get("/config"), loadCatalog()]));
+  const [config, catalog, info] = await guarded(() => Promise.all([api.get("/config"), loadCatalog(), api.get("/info").catch(() => ({}))]));
   state.config = config;
   state.catalog = catalog;
+  setInfo(info);
   show(state.tab);
-  api.get("/info").then((info) => ($("brand-version").textContent = info.version || "")).catch(() => {});
+}
+
+// Экран панели (разрешение, масштаб, сенсор) нужен редактору столов,
+// трансляции и обрезке фонов: пропорции экрана — в CSS-переменной.
+function setInfo(info) {
+  state.info = info;
+  $("brand-version").textContent = info.version || "";
+  const d = info.display;
+  if (d?.width && d?.height) document.documentElement.style.setProperty("--screen-ratio", `${d.width} / ${d.height}`);
 }
 
 function show(tab) {
@@ -191,6 +200,18 @@ async function saveUi(patch) {
 
 // --- экран ----------------------------------------------------------------------
 
+function renderScale(ui, opts) {
+  const d = state.info?.display;
+  if (!d) return "";
+  const values = ["0.75", "1", "1.25", "1.5", "1.75", "2", "2.5", "3"].map((v) => [v, `×${v}`]);
+  return `
+    <section class="panel">
+      <label class="field"><span>${t("Масштаб интерфейса")}<small>${t("Экран {w}×{h}, интерфейс {vw}×{vh}. После смены экран перезапустится", { w: d.width, h: d.height, vw: d.view.width, vh: d.view.height })}</small></span>
+        <select data-ui="scale">${opts([["auto", t("Авто (×{scale})", { scale: d.scale_auto })], ...values], ui.scale)}</select>
+      </label>
+    </section>`;
+}
+
 function renderDisplay() {
   const ui = state.config.ui;
   const opts = (values, current) => values.map(([v, l]) => `<option value="${v}" ${v === current ? "selected" : ""}>${esc(l)}</option>`).join("");
@@ -202,6 +223,7 @@ function renderDisplay() {
         <select data-ui="language">${opts(languages().map((l) => [l.code, l.name]), ui.language)}</select>
       </label>
     </section>
+    ${renderScale(ui, opts)}
     <section class="panel">
       <label class="field"><span>${t("Выбор темы")}</span>
         <select data-ui="theme_mode">${opts([["manual", t("Вручную")], ["schedule", t("По времени")], ["sun", t("По солнцу")]], ui.theme_mode)}</select>
@@ -370,6 +392,7 @@ function mountEditor() {
   editor?.destroy();
   editor = new DesktopEditor($("desk-editor"), {
     config: state.config,
+    screen: state.info?.display?.view,
     catalog: state.catalog,
     save: async (desktops, homeAfterMin) => {
       const res = await guarded(() => api.post("/admin/desktops", { desktops, home_after_min: homeAfterMin }));
@@ -439,8 +462,16 @@ async function wifiConnect(body) {
 // --- система -----------------------------------------------------------------------
 
 async function loadSystem() {
-  [state.time, state.info] = await guarded(() => Promise.all([api.get("/time"), api.get("/info")]));
+  let info;
+  [state.time, info] = await guarded(() => Promise.all([api.get("/time"), api.get("/info")]));
+  setInfo(info);
   if (state.tab === "system") render();
+}
+
+function displayNote(d) {
+  const parts = [d.connector, t("масштаб ×{scale}", { scale: d.scale })];
+  if (d.source === "default") parts.push(t("не удалось определить, взято по умолчанию"));
+  return parts.filter(Boolean).join(" · ");
 }
 
 function renderSystem() {
@@ -451,6 +482,9 @@ function renderSystem() {
     <section class="panel">
       <div class="field"><span>${t("Устройство")}</span><b>${esc(info.hostname || "—")}</b></div>
       <div class="field"><span>${t("Версия")}</span><b>${esc(versionText(info))}</b></div>
+      ${info.display ? `
+      <div class="field"><span>${t("Экран")}<small>${esc(displayNote(info.display))}</small></span><b>${info.display.width}×${info.display.height}</b></div>
+      <div class="field"><span>${t("Сенсорный экран")}<small>${esc(info.display.touch_devices.join(", ") || t("Управление мышью: колесо листает столы, правая кнопка открывает настройки"))}</small></span><b>${info.display.touch ? t("Есть") : t("Не найден")}</b></div>` : ""}
       <label class="field"><span>${t("Часовой пояс")}</span>
         ${time ? `<select id="tz">${time.timezones.map((z) => `<option ${z === time.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>` : "…"}
       </label>
@@ -563,6 +597,11 @@ $("content").addEventListener("change", async (e) => {
     if ("float" in el.dataset) value = parseFloat(el.value);
     if (Number.isNaN(value)) return;
     await saveUi({ [el.dataset.ui]: value }).catch(() => render());
+    // Другой масштаб — другой размер холста редактора столов.
+    if (el.dataset.ui === "scale") {
+      setInfo(await api.get("/info"));
+      render();
+    }
     // Сменили способ на автоматический: сразу определяем место.
     if (el.dataset.ui === "location_mode" && value !== "manual") {
       await guarded(() => api.post("/location/detect", { mode: value })).catch(() => {});

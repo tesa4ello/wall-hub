@@ -1,6 +1,6 @@
 // Редактор рабочих столов в админке.
 //
-// Превью — настоящий экран панели 1024×600 в масштабе: виджеты монтируются
+// Превью — настоящий экран панели (интерфейс в точках CSS, обычно 1024×600) в масштабе: виджеты монтируются
 // тем же кодом, что и на панели (/lib/widgets.js). Поверх лежит слой
 // с рамками: их можно таскать по сетке и тянуть за угол. Любое изменение
 // сразу сохраняется и само появляется на панели.
@@ -11,7 +11,8 @@ import { icon } from "/lib/icons.js";
 import { themeFor } from "/lib/theme.js";
 import { destroyAll, mountWidget, placeWidget, setupGrid } from "/lib/widgets.js";
 
-const SCREEN = { w: 1024, h: 600 };
+// Размер интерфейса панели в точках CSS, если ядро не сообщило свой.
+const DEFAULT_SCREEN = { w: 1024, h: 600 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const newId = (prefix) => prefix + Math.random().toString(36).slice(2, 10);
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -19,8 +20,9 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const deskName = (d, i) => d.name || t("Стол {n}", { n: i + 1 });
 
 export class DesktopEditor {
-  constructor(host, { config, catalog, save, toast, confirm }) {
+  constructor(host, { config, catalog, save, toast, confirm, screen }) {
     this.host = host;
+    this.screen = screen?.width && screen?.height ? { w: screen.width, h: screen.height } : DEFAULT_SCREEN;
     this.layout = config.layout;
     this.ui = config.ui;
     this.desktops = clone(config.desktops);
@@ -105,7 +107,7 @@ export class DesktopEditor {
       </div>
       <div class="editor">
         <aside class="palette">${this.renderPalette()}</aside>
-        <div class="canvas-wrap"><div class="canvas" data-theme="${themeFor(this.ui, new Date())}">
+        <div class="canvas-wrap"><div class="canvas" style="width:${this.screen.w}px;height:${this.screen.h}px" data-theme="${themeFor(this.ui, new Date())}">
           <div class="desk preview"></div>
           <div class="desk overlay"></div>
         </div></div>
@@ -134,14 +136,14 @@ export class DesktopEditor {
     this.fit();
   }
 
-  // Холст всегда 1024×600, в админке он просто масштабируется под ширину.
+  // Холст размером с интерфейс панели, в админке он масштабируется под ширину.
   fit() {
     const wrap = this.host.querySelector(".canvas-wrap");
     if (!wrap) return;
-    const scale = Math.min(1, wrap.clientWidth / SCREEN.w);
+    const scale = Math.min(1, wrap.clientWidth / this.screen.w);
     this.scale = scale;
     this.canvas.style.transform = `scale(${scale})`;
-    wrap.style.height = `${SCREEN.h * scale}px`;
+    wrap.style.height = `${this.screen.h * scale}px`;
   }
 
   renderPalette() {

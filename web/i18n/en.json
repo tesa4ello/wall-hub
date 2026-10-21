@@ -565,5 +565,14 @@
   "нет адреса или шлюз не отвечает": "no address or the gateway does not respond",
   "шлюз {ip}": "gateway {ip}",
   "Настройки модуля": "Module settings",
-  "Картинка обрезается под экран {w}×{h}": "The image is cropped to the {w}×{h} screen"
+  "Картинка обрезается под экран {w}×{h}": "The image is cropped to the {w}×{h} screen",
+  "Масштаб интерфейса": "Interface scale",
+  "Экран {w}×{h}, интерфейс {vw}×{vh}. После смены экран перезапустится": "Screen {w}×{h}, interface {vw}×{vh}. The screen restarts after a change",
+  "Авто (×{scale})": "Auto (×{scale})",
+  "Сенсорный экран": "Touch screen",
+  "Управление мышью: колесо листает столы, правая кнопка открывает настройки": "Mouse control: the wheel switches desktops, right click opens the settings",
+  "Есть": "Yes",
+  "масштаб ×{scale}": "scale ×{scale}",
+  "не удалось определить, взято по умолчанию": "could not be detected, using the default",
+  "Не найден": "Not found"
 }

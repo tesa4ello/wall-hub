@@ -220,12 +220,30 @@ A widget whose module is missing stays on its desktop as a placeholder.
 
 ### On-screen controls
 
-There is no gear icon; the interface is touch only:
+There is no gear icon; the interface is made for touch:
 
 - **swipe down from the top edge** (or tap the very edge) to open the shade:
   Wi‑Fi, theme, "Settings" and the new version notice;
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
+
+Without a touch screen (udev has no `ID_INPUT_TOUCHSCREEN` device) the panel
+is controlled with a mouse: the cursor is shown, the wheel switches desktops,
+right click opens the settings and a click on the top edge opens the shade.
+
+### Screen size
+
+The interface is designed for 1024×600 with a 16×10 grid. On other screens
+Chromium starts with `--force-device-scale-factor`, so the layout keeps its
+proportions: the automatic scale is the largest 0.25 step that still fits
+1024×600 (1366×768 → ×1.25, 1920×1080 → ×1.75, 800×480 → ×0.75). It can be set
+by hand under "Display → Interface scale"; the kiosk restarts with the new
+scale within 15 seconds. The resolution comes from the kiosk itself (screen
+size × devicePixelRatio) and, before its first report, from DRM
+(`/sys/class/drm`). `GET /api/info` returns it as `display`: `width`, `height`,
+`scale`, `view` (the interface size in CSS pixels, used by the desktop
+editor canvas), `touch` and `touch_devices`. "System" shows the screen and
+the touch screen.
 
 ### Sound
 

@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
+from . import display
 from .backends import Backends, ModuleError
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .modules import Registry
@@ -94,6 +95,7 @@ def validate_ui(patch):
         "sound_enabled": lambda v: isinstance(v, bool),
         "sound_volume": lambda v: _int(v) and 0 <= v <= 100,
         "sound_name": lambda v: v in SOUNDS,
+        "scale": lambda v: v in display.SCALES,
         "sound_quiet": lambda v: isinstance(v, bool),
         "sound_quiet_from": lambda v: isinstance(v, str) and TIME_RE.match(v),
         "sound_quiet_to": lambda v: isinstance(v, str) and TIME_RE.match(v),
@@ -178,6 +180,7 @@ class App:
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
         self.netconfig = NetConfig(system, state_dir)
+        self.display = display.Display(system.dry_run)
         self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"), os.path.join(self.web_root, "backgrounds"))
         self.login_lock = threading.Lock()
         # Тема, которую сейчас показывает экран (сообщает сам киоск), чтобы
@@ -687,7 +690,16 @@ def make_handler(app, trusted, port):
                 "admin_url": app.admin_url(),
                 "uptime": time.time() - app.started,
                 "dry_run": app.system.dry_run,
+                "display": app.display.info(app.config.get("ui", "scale")),
             }
+
+        def api_display(self, **_):
+            return app.display.info(app.config.get("ui", "scale"))
+
+        def api_display_report(self, body, **_):
+            # Отчёт о размере экрана принимаем только от самого киоска.
+            if trusted:
+                app.display.set_report(body)
 
         # Сеть
 
@@ -962,6 +974,8 @@ def make_handler(app, trusted, port):
         ("GET", "/network/devices"): (H.api_network_devices, False),
         ("POST", "/network/ipv4"): (H.api_network_ipv4, False),
         ("POST", "/network/manage"): (H.api_network_manage, False),
+        ("GET", "/display"): (H.api_display, False),
+        ("POST", "/display/report"): (H.api_display_report, False),
         ("POST", "/setup/wifi-done"): (H.api_setup_wifi_done, False),
         ("POST", "/power"): (H.api_power, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),
