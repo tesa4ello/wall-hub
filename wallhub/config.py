@@ -22,9 +22,13 @@ DEFAULTS = {
         "theme_mode": "manual",
         "day_start": "07:00",
         "night_start": "21:00",
-        # Координаты для расчёта восхода и заката (по умолчанию Москва).
+        # Местоположение панели: для темы «по солнцу» и виджетов, у которых
+        # выбрано «как у панели». location_mode: manual | ip | yandex
+        # (см. wallhub.location). По умолчанию Москва, пока не определено.
         "latitude": 55.75,
         "longitude": 37.62,
+        "location_mode": "ip",
+        "location_name": "",
         # Постоянное приглушение ночью, 0..90 %. 0 = выключено.
         "night_dim": 40,
         # Затемнение при неактивности. 0 минут = выключено.
@@ -74,6 +78,8 @@ DEFAULTS = {
         "schedule": "daily",
         "time": "04:00",
     },
+    # Ключ Яндекс Локатора (секрет, наружу отдаётся только признак).
+    "location": {"yandex_key": ""},
     "admin": {
         # Хеш пароля админки (см. wallhub.auth). Пустой = пароль ещё не задан,
         # его придумывают при первом входе в админку.
@@ -82,7 +88,7 @@ DEFAULTS = {
 }
 
 # Поля, которые нельзя отдавать наружу через API.
-SECRET_PATHS = (("admin", "password_hash"),)
+SECRET_PATHS = (("admin", "password_hash"), ("location", "yandex_key"))
 
 
 def _merge(base, override):
@@ -101,6 +107,9 @@ def _migrate(data):
     ui = data.get("ui", {})
     # Раньше пароль генерировался и показывался на экране.
     data.get("admin", {}).pop("initial_password", None)
+    # Кто уже вписал координаты вручную, у того они и остаются.
+    if "location_mode" not in ui and ("latitude" in ui or "longitude" in ui):
+        ui["location_mode"] = "manual"
     if "auto_theme" in ui:
         ui.setdefault("theme_mode", "schedule" if ui.pop("auto_theme") else "manual")
     # До столов были список модулей и отдельная статусная строка.
@@ -168,6 +177,7 @@ class Config:
                 node = node.get(key, {})
             node.pop(path[-1], None)
         data["admin"]["password_set"] = bool(self._data["admin"]["password_hash"])
+        data["location"]["yandex_key_set"] = bool(self._data["location"]["yandex_key"])
         data["revision"] = self.revision
         return data
 

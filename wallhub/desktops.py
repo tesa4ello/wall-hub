@@ -51,6 +51,21 @@ def size_limits(meta, cols, rows):
     return min_w, min_h, min(max_w, cols), min(max_h, rows)
 
 
+def clean_location(value):
+    """Место виджета: {"mode": "panel"} (как у панели) или
+    {"mode": "custom", "name", "lat", "lon"}. Неполное своё место
+    превращается в «как у панели»."""
+    if isinstance(value, dict) and value.get("mode") == "custom":
+        try:
+            lat, lon = float(value["lat"]), float(value["lon"])
+        except (KeyError, TypeError, ValueError):
+            return {"mode": "panel"}
+        if -90 <= lat <= 90 and -180 <= lon <= 180:
+            return {"mode": "custom", "name": str(value.get("name") or "")[:80],
+                    "lat": round(lat, 4), "lon": round(lon, 4)}
+    return {"mode": "panel"}
+
+
 def clean_options(meta, options, providers=()):
     """Оставляет только описанные в схеме настройки, приводя типы."""
     if not isinstance(options, dict):
@@ -79,6 +94,8 @@ def clean_options(meta, options, providers=()):
             if not isinstance(value, list):
                 raise LayoutError(tr("«{title}»: нужен список", title=tr(spec["title"])))
             value = [v for v in dict.fromkeys(value) if v in providers]
+        elif kind == "location":
+            value = clean_location(value)
         else:
             continue
         result[key] = value

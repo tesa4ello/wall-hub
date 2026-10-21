@@ -24,10 +24,12 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
+from .location import MODES as LOCATION_MODES, LocationError, Locator
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
+from .weather import Weather, WeatherError, fake_fetch
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +63,8 @@ def validate_ui(patch):
         "theme_mode": lambda v: v in ("manual", "schedule", "sun"),
         "latitude": lambda v: _number(v) and -90 <= v <= 90,
         "longitude": lambda v: _number(v) and -180 <= v <= 180,
+        "location_mode": lambda v: v in LOCATION_MODES,
+        "location_name": lambda v: isinstance(v, str) and len(v) <= 80,
         "night_dim": lambda v: _int(v) and 0 <= v <= 90,
         "blank_after_min": lambda v: _int(v) and 0 <= v <= 240,
         "day_start": lambda v: isinstance(v, str) and TIME_RE.match(v),
@@ -164,6 +168,10 @@ class App:
         self.collector.start()
         self.wifi_watchdog = WifiWatchdog(system)
         self.wifi_watchdog.start()
+        self.locator = Locator(config, system)
+        self.locator.start()
+        # WALLHUB_FAKE_WEATHER=1: выдуманный прогноз без сети (для разработки).
+        self.weather = Weather(fetch=fake_fetch) if os.environ.get("WALLHUB_FAKE_WEATHER") else Weather()
 
     def widget_catalog(self):
         return desktops.load_catalog(self.web_root)
@@ -405,7 +413,69 @@ def make_handler(app, trusted, port):
             for key in ("background", "background_dark"):
                 if patch.get(key) not in (None, "", "same") and not app.backgrounds.exists(patch[key]):
                     raise ApiError(tr("Нет такого фона"))
-            return {"revision": app.config.update({"ui": patch})}
+            mode_changed = "location_mode" in patch and patch["location_mode"] != app.config.get("ui", "location_mode")
+            revision = app.config.update({"ui": patch})
+            if mode_changed:
+                app.locator.wake()
+            return {"revision": revision}
+
+        # Местоположение панели
+
+        def api_location(self, **_):
+            return {
+                "mode": app.config.get("ui", "location_mode"),
+                "name": app.config.get("ui", "location_name"),
+                "lat": app.config.get("ui", "latitude"),
+                "lon": app.config.get("ui", "longitude"),
+                "yandex_key_set": bool(app.config.get("location", "yandex_key")),
+                "last": app.locator.last,
+            }
+
+        def api_location_detect(self, body, **_):
+            mode = body.get("mode") or app.config.get("ui", "location_mode")
+            if mode not in ("ip", "yandex"):
+                raise ApiError(tr("Неизвестный способ определения места"))
+            try:
+                found = app.locator.locate(mode)
+            except LocationError as e:
+                raise ApiError(str(e), HTTPStatus.BAD_GATEWAY)
+            return dict(found, revision=app.config.revision)
+
+        def api_location_key(self, body, **_):
+            key = str(body.get("key", "")).strip()
+            if key and not re.fullmatch(r"[A-Za-z0-9-]{8,64}", key):
+                raise ApiError(tr("Это не похоже на ключ API Яндекса"))
+            app.config.update({"location": {"yandex_key": key}})
+            if app.config.get("ui", "location_mode") == "yandex":
+                app.locator.wake()
+
+        # Модуль «Погода» (web/modules/weather)
+
+        def api_weather_forecast(self, query, **_):
+            lat, lon = (query.get(k, [None])[0] for k in ("lat", "lon"))
+            name = None
+            if lat is None and lon is None:
+                ui = app.config.get("ui")
+                lat, lon, name = ui["latitude"], ui["longitude"], ui.get("location_name", "")
+            try:
+                lat, lon = float(lat), float(lon)
+            except (TypeError, ValueError):
+                raise ApiError(tr("Нужны координаты lat и lon"))
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                raise ApiError(tr("Координаты вне допустимого диапазона"))
+            try:
+                data = app.weather.forecast(lat, lon)
+            except WeatherError as e:
+                raise ApiError(str(e), HTTPStatus.BAD_GATEWAY)
+            if name is not None:
+                data["name"] = name
+            return data
+
+        def api_weather_search(self, query, **_):
+            try:
+                return {"results": app.weather.search((query.get("q") or [""])[0], app.config.get("ui", "language"))}
+            except WeatherError as e:
+                raise ApiError(str(e), HTTPStatus.BAD_GATEWAY)
 
         def api_status(self, **_):
             return {"items": app.collector.snapshot, "time": time.time()}
@@ -619,6 +689,11 @@ def make_handler(app, trusted, port):
         ("POST", "/setup/wifi-done"): (H.api_setup_wifi_done, False),
         ("POST", "/power"): (H.api_power, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),
+        ("GET", "/location"): (H.api_location, False),
+        ("POST", "/location/detect"): (H.api_location_detect, False),
+        ("POST", "/location/key"): (H.api_location_key, False),
+        ("GET", "/m/weather/forecast"): (H.api_weather_forecast, False),
+        ("GET", "/m/weather/search"): (H.api_weather_search, False),
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),

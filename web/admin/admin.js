@@ -139,6 +139,7 @@ function show(tab) {
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
   if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
+  if (tab === "display") loadLocation();
   render();
 }
 
@@ -182,13 +183,8 @@ function renderDisplay() {
         <input type="time" data-ui="day_start" value="${ui.day_start}" ${sched}>
       </label>
       <label class="field"><span>${t("Ночь с")}</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${sched}></label>
-      <label class="field"><span>${t("Широта")}<small>${t("Для режима «по солнцу»")}</small></span>
-        <input type="number" step="0.01" min="-90" max="90" data-ui="latitude" data-float value="${ui.latitude}">
-      </label>
-      <label class="field"><span>${t("Долгота")}</span>
-        <input type="number" step="0.01" min="-180" max="180" data-ui="longitude" data-float value="${ui.longitude}">
-      </label>
     </section>
+    ${renderLocation()}
     <section class="panel">
       <label class="field"><span>${t("Ночное приглушение, %")}<small>${t("0 — не приглушать")}</small></span>
         <input type="number" min="0" max="90" step="5" data-ui="night_dim" data-int value="${ui.night_dim}">
@@ -213,6 +209,69 @@ const backgrounds = new BackgroundPanel({
   confirm: confirmDialog,
   render: () => state.tab === "display" && render(),
 });
+
+// Местоположение панели: тема «по солнцу» и виджеты с местом «как у панели».
+function locationStatus(loc) {
+  const last = loc && loc.last;
+  if (!last || !last.at) return "";
+  const time = new Date(last.at * 1000).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
+  if (!last.source) return t("Не удалось определить ({time}): {error}", { time, error: last.error });
+  const text = last.source === "yandex"
+    ? (last.accuracy ? t("Яндекс Локатор, {time}, точность {m} м", { time, m: Math.round(last.accuracy) }) : t("Яндекс Локатор, {time}", { time }))
+    : t("По IP, {time}", { time });
+  return last.error ? `${text}. ${t("Локатор не ответил, взято место по IP")}` : text;
+}
+
+function renderLocation() {
+  const ui = state.config.ui;
+  const loc = state.location;
+  const ps = state.placeSearch;
+  const opts = [["ip", t("Автоматически по IP")], ["yandex", t("Яндекс Локатор (по Wi‑Fi)")], ["manual", t("Вручную")]]
+    .map(([v, l]) => `<option value="${v}" ${v === ui.location_mode ? "selected" : ""}>${esc(l)}</option>`).join("");
+  const where = ui.location_name || t("Без названия");
+  return `
+    <section class="panel">
+      <label class="field"><span>${t("Местоположение")}<small>${t("Для темы «по солнцу» и виджетов погоды с местом «как у панели»")}</small></span>
+        <select data-ui="location_mode">${opts}</select>
+      </label>
+      <div class="field"><span>${esc(where)}<small>${esc(`${ui.latitude.toFixed(4)}, ${ui.longitude.toFixed(4)}`)}${loc && locationStatus(loc) ? ` · ${esc(locationStatus(loc))}` : ""}</small></span>
+        ${ui.location_mode === "manual" ? "" : `<button class="btn" data-locate>${icon("refresh")} ${t("Определить сейчас")}</button>`}
+      </div>
+      ${ui.location_mode === "yandex" ? `
+        <form class="inline-form panel-inset" id="locator-key-form">
+          <input name="key" type="password" autocomplete="off"
+            placeholder="${t(state.config.location && state.config.location.yandex_key_set ? "Ключ сохранён · вставьте новый, чтобы заменить" : "Ключ API Яндекс Локатора")}">
+          <button class="btn btn-primary" type="submit">${t("Сохранить")}</button>
+        </form>
+        <p class="muted small panel-inset">${t("Ключ выдаётся в кабинете разработчика Яндекса (developer.tech.yandex.ru), сервис «Локатор». Без ключа или при ошибке место берётся по IP.")}</p>` : ""}
+      ${ui.location_mode === "manual" ? `
+        <form class="inline-form panel-inset" id="place-form">
+          <input name="q" placeholder="${t("Найти город")}" value="${esc(ps ? ps.query : "")}" autocomplete="off">
+          <button class="btn" type="submit">${t("Найти")}</button>
+        </form>
+        ${ps && ps.results ? (ps.results.length ? `<div class="place-results panel-inset">${ps.results.map((r, i) => `
+          <button class="place-result" data-place-pick="${i}">${esc(r.name)}<small>${esc(r.region)}</small></button>`).join("")}</div>`
+          : `<p class="muted small panel-inset">${t("Ничего не нашлось")}</p>`) : ""}
+        <label class="field"><span>${t("Название")}</span>
+          <input data-ui="location_name" maxlength="80" value="${esc(ui.location_name)}">
+        </label>
+        <label class="field"><span>${t("Широта")}</span>
+          <input type="number" step="0.0001" min="-90" max="90" data-ui="latitude" data-float value="${ui.latitude}">
+        </label>
+        <label class="field"><span>${t("Долгота")}</span>
+          <input type="number" step="0.0001" min="-180" max="180" data-ui="longitude" data-float value="${ui.longitude}">
+        </label>` : ""}
+    </section>`;
+}
+
+async function loadLocation() {
+  try {
+    state.location = await guarded(() => api.get("/location"));
+  } catch {
+    return;
+  }
+  if (state.tab === "display") render();
+}
 
 // --- рабочие столы ------------------------------------------------------------------
 
@@ -416,6 +475,12 @@ $("content").addEventListener("change", async (e) => {
     if ("float" in el.dataset) value = parseFloat(el.value);
     if (Number.isNaN(value)) return;
     await saveUi({ [el.dataset.ui]: value }).catch(() => render());
+    // Сменили способ на автоматический: сразу определяем место.
+    if (el.dataset.ui === "location_mode" && value !== "manual") {
+      await guarded(() => api.post("/location/detect", { mode: value })).catch(() => {});
+      state.config = await api.get("/config");
+      await loadLocation();
+    }
   } else if (el.id === "update-channel") {
     await saveUpdateSettings({ channel: el.value }).catch(() => {});
   } else if (el.id === "update-schedule") {
@@ -435,6 +500,21 @@ $("content").addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
+  } else if (e.target.id === "place-form") {
+    const query = (data.q || "").trim();
+    if (query.length < 2) return;
+    state.placeSearch = { query, results: null };
+    await guarded(() => api.get(`/m/weather/search?q=${encodeURIComponent(query)}`)).then((res) => {
+      state.placeSearch.results = res.results;
+      render();
+    }).catch(() => {});
+  } else if (e.target.id === "locator-key-form") {
+    if (!data.key.trim()) return;
+    await guarded(() => api.post("/location/key", { key: data.key.trim() })).then(async () => {
+      toast(t("Ключ сохранён"));
+      state.config = await api.get("/config");
+      render();
+    }).catch(() => {});
   } else if (e.target.id === "token-form") {
     if (!data.token.trim()) return;
     await guarded(() => api.post("/update/token", { token: data.token.trim() })).then(() => {
@@ -456,7 +536,17 @@ $("content").addEventListener("click", async (e) => {
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   const d = b.dataset;
   try {
-    if ("wifiRescan" in d) {
+    if ("locate" in d) {
+      b.disabled = true;
+      const found = await guarded(() => api.post("/location/detect", { mode: state.config.ui.location_mode }));
+      toast(found.name ? t("Местоположение: {name}", { name: found.name }) : t("Местоположение обновлено"));
+      state.config = await api.get("/config");
+      await loadLocation();
+    } else if (d.placePick !== undefined) {
+      const r = state.placeSearch.results[Number(d.placePick)];
+      state.placeSearch = null;
+      await saveUi({ location_name: r.name, latitude: r.lat, longitude: r.lon });
+    } else if ("wifiRescan" in d) {
       await loadWifi(true);
     } else if ("wifiRadio" in d) {
       if (state.wifi.radio && !(await confirmWifiOff(state.wifi))) return;

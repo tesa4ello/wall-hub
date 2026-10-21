@@ -5,6 +5,7 @@
 // с рамками: их можно таскать по сетке и тянуть за угол. Любое изменение
 // сразу сохраняется и само появляется на панели.
 
+import { api } from "/lib/api.js";
 import { t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 import { themeFor } from "/lib/theme.js";
@@ -33,6 +34,8 @@ export class DesktopEditor {
     this.selected = null;
     this.instances = [];
     this.drag = null;
+    // Поиск города для настройки «Место»: {key, query, results, busy, error}.
+    this.placeSearch = null;
 
     this.onResize = () => this.fit();
     this.onMove = (e) => this.pointerMove(e);
@@ -43,6 +46,7 @@ export class DesktopEditor {
     host.addEventListener("click", (e) => this.click(e));
     host.addEventListener("change", (e) => this.change(e));
     host.addEventListener("pointerdown", (e) => this.pointerDown(e));
+    host.addEventListener("submit", (e) => this.searchPlace(e));
     this.render();
   }
 
@@ -204,6 +208,28 @@ export class DesktopEditor {
     if (o.type === "text") {
       return `<label class="prop"><span>${esc(t(o.title))}</span><input data-opt="${key}" value="${esc(value ?? "")}"></label>`;
     }
+    if (o.type === "location") {
+      const loc = value || { mode: "panel" };
+      const custom = loc.mode === "custom";
+      const ps = this.placeSearch && this.placeSearch.key === o.key ? this.placeSearch : null;
+      const panelName = this.ui.location_name || `${this.ui.latitude.toFixed(2)}, ${this.ui.longitude.toFixed(2)}`;
+      return `<div class="prop"><span>${esc(t(o.title))}</span>
+        <select data-loc-mode="${key}">
+          <option value="panel" ${custom ? "" : "selected"}>${esc(t("Как у панели: {name}", { name: panelName }))}</option>
+          <option value="custom" ${custom ? "selected" : ""}>${esc(t("Своё место"))}</option>
+        </select>
+        ${custom ? `
+          <div class="place-current">${loc.name ? esc(loc.name) : t("Место не выбрано")}<small>${esc(`${Number(loc.lat).toFixed(2)}, ${Number(loc.lon).toFixed(2)}`)}</small></div>
+          <form class="place-search" data-loc-search="${key}">
+            <input name="q" placeholder="${esc(t("Город"))}" value="${esc(ps ? ps.query : "")}" autocomplete="off">
+            <button class="btn btn-small" ${ps && ps.busy ? "disabled" : ""}>${t("Найти")}</button>
+          </form>
+          ${ps && ps.error ? `<p class="error small">${esc(ps.error)}</p>` : ""}
+          ${ps && ps.results ? (ps.results.length ? `<div class="place-results">${ps.results.map((r, i) => `
+            <button class="place-result" data-loc-pick="${key}" data-i="${i}">${esc(r.name)}<small>${esc(r.region)}</small></button>`).join("")}</div>`
+            : `<p class="muted small">${t("Ничего не нашлось")}</p>`) : ""}` : ""}
+      </div>`;
+    }
     if (o.type === "providers") {
       // Выбранные пункты в своём порядке, затем остальные.
       const chosen = (value || []).filter((id) => this.providers.some((p) => p.id === id));
@@ -259,6 +285,13 @@ export class DesktopEditor {
       this.desk.widgets = this.desk.widgets.filter((w) => w.id !== this.selected);
       this.selected = null;
       await this.save();
+    } else if (d.locPick) {
+      const r = this.placeSearch && this.placeSearch.results[Number(d.i)];
+      if (!r) return;
+      const w = this.widget(this.selected);
+      w.options = { ...w.options, [d.locPick]: { mode: "custom", name: r.name, lat: r.lat, lon: r.lon } };
+      this.placeSearch = null;
+      await this.save();
     } else if (d.provMove) {
       const w = this.widget(this.selected);
       const list = [...(w.options[d.provMove] || [])];
@@ -303,6 +336,15 @@ export class DesktopEditor {
       if ("num" in el.dataset) value = parseFloat(value);
       w.options = { ...w.options, [el.dataset.opt]: value };
       await this.save();
+    } else if (w && el.dataset.locMode) {
+      const key = el.dataset.locMode;
+      const prev = w.options[key] || {};
+      // Своё место без выбранного города пока совпадает с панелью.
+      w.options = { ...w.options, [key]: el.value === "custom"
+        ? { mode: "custom", name: prev.name || this.ui.location_name || "", lat: prev.lat ?? this.ui.latitude, lon: prev.lon ?? this.ui.longitude }
+        : { mode: "panel" } };
+      this.placeSearch = null;
+      await this.save();
     } else if (w && el.dataset.prov) {
       const key = el.dataset.prov;
       const list = (w.options[key] || []).filter((id) => id !== el.dataset.id);
@@ -310,6 +352,28 @@ export class DesktopEditor {
       w.options = { ...w.options, [key]: list };
       await this.save();
     }
+  }
+
+  async searchPlace(e) {
+    const form = e.target.closest("[data-loc-search]");
+    if (!form) return;
+    e.preventDefault();
+    const query = form.elements.q.value.trim();
+    if (query.length < 2) return;
+    this.placeSearch = { key: form.dataset.locSearch, query, results: null, busy: true, error: null };
+    this.renderProps();
+    try {
+      const res = await api.get(`/m/weather/search?q=${encodeURIComponent(query)}`);
+      Object.assign(this.placeSearch, { results: res.results, busy: false });
+    } catch (err) {
+      Object.assign(this.placeSearch, { error: err.message, busy: false });
+    }
+    this.renderProps();
+  }
+
+  renderProps() {
+    const props = this.host.querySelector(".props");
+    if (props && this.selected && this.widget(this.selected)) props.innerHTML = this.renderWidgetProps();
   }
 
   // Новый виджет встаёт в первое свободное место: сначала нужного размера,
@@ -356,6 +420,7 @@ export class DesktopEditor {
     this.drag = { id: w.id, box, resize, start: cell, orig: { ...w }, rect: { ...w }, moved: false };
     if (this.selected !== w.id) {
       this.selected = w.id;
+      this.placeSearch = null;
       this.host.querySelectorAll(".box").forEach((b) => b.classList.toggle("selected", b === box));
       this.host.querySelector(".props").innerHTML = this.renderWidgetProps();
     }
