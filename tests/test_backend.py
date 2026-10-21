@@ -975,3 +975,48 @@ class NetConfigTest(unittest.TestCase):
                          {"method": "manual", "address": "10.0.0.5/24", "gateway": "10.0.0.1", "dns": ["10.0.0.1"]})
         self.assertIsNone(mod.settings_for("wlan0", eth))
 
+
+
+class DisplayTest(unittest.TestCase):
+    def test_auto_scale(self):
+        from wallhub.display import auto_scale
+        self.assertEqual(auto_scale(1024, 600), 1)
+        self.assertEqual(auto_scale(1366, 768), 1.25)
+        self.assertEqual(auto_scale(1920, 1080), 1.75)
+        self.assertEqual(auto_scale(800, 480), 0.75)
+        self.assertEqual(auto_scale(3840, 2160), 3)
+
+    def test_sysfs(self):
+        from wallhub.display import drm_outputs, touchscreens
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, status, modes in [("card0-HDMI-A-1", "connected", "1366x768\n1024x768\n"),
+                                        ("card0-DSI-1", "disconnected", "")]:
+                os.makedirs(os.path.join(tmp, "drm", name))
+                with open(os.path.join(tmp, "drm", name, "status"), "w") as f:
+                    f.write(status + "\n")
+                with open(os.path.join(tmp, "drm", name, "modes"), "w") as f:
+                    f.write(modes)
+            self.assertEqual(drm_outputs(os.path.join(tmp, "drm")), [{"connector": "HDMI-A-1", "width": 1366, "height": 768}])
+            with open(os.path.join(tmp, "devices"), "w") as f:
+                f.write('I: Bus=0018\nN: Name="Goodix Capacitive TouchScreen"\nH: Handlers=mouse0 event2\n\n'
+                        'I: Bus=0003\nN: Name="USB Keyboard"\nH: Handlers=kbd event3\n')
+            os.makedirs(os.path.join(tmp, "udev"))
+            with open(os.path.join(tmp, "udev", "c13:66"), "w") as f:
+                f.write("E:ID_INPUT=1\nE:ID_INPUT_TOUCHSCREEN=1\n")
+            with open(os.path.join(tmp, "udev", "c13:67"), "w") as f:
+                f.write("E:ID_INPUT=1\nE:ID_INPUT_KEYBOARD=1\n")
+            self.assertEqual(touchscreens(os.path.join(tmp, "devices"), os.path.join(tmp, "udev")), ["Goodix Capacitive TouchScreen"])
+
+    def test_info(self):
+        from wallhub.display import Display
+        d = Display(dry_run=True)
+        self.assertEqual(d.info()["source"], "drm")
+        # Chromium с масштабом 1.25 на экране 1366×768.
+        d.set_report({"screen_w": 1093, "screen_h": 614, "dpr": 1.25, "view_w": 1093, "view_h": 614})
+        info = d.info("auto")
+        self.assertEqual((info["width"], info["height"], info["scale"], info["source"]), (1366, 768, 1.25, "kiosk"))
+        self.assertEqual(info["view"], {"width": 1093, "height": 614})
+        self.assertEqual(d.info("1")["view"], {"width": 1366, "height": 768})
+        d.set_report({"screen_w": "x"})  # мусор не портит прошлый отчёт
+        self.assertEqual(d.info()["width"], 1366)
+        self.assertTrue(info["touch"])

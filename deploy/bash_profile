@@ -1,5 +1,10 @@
 # Автологин на tty1 запускает графическую сессию киоска.
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
     # -background none: X не очищает экран, пока Chromium не нарисует страницу.
-    exec startx -- -nocursor -background none >"$HOME/.xsession.log" 2>&1
+    # Курсор прячем, только если есть сенсорный экран: иначе панелью управляют мышью.
+    CURSOR=""
+    if grep -qsx 'E:ID_INPUT_TOUCHSCREEN=1' /run/udev/data/c13:*; then
+        CURSOR="-nocursor"
+    fi
+    exec startx -- $CURSOR -background none >"$HOME/.xsession.log" 2>&1
 fi

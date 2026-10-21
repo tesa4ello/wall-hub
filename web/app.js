@@ -517,8 +517,47 @@ window.addEventListener("keydown", () => (dimmer.dimmed ? dimmer.wake() : dimmer
 $("dim").addEventListener("click", (e) => e.stopPropagation());
 
 // Киоск: никаких контекстных меню, выделения текста и жестов масштабирования.
-window.addEventListener("contextmenu", (e) => e.preventDefault());
+// Без сенсора правая кнопка мыши открывает настройки, как долгое нажатие.
+window.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (mouseMode && $("settings").hidden) settings.open();
+});
 window.addEventListener("wheel", (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+
+// --- экран без сенсора ------------------------------------------------------------
+
+// Управление мышью: колесо листает столы, правая кнопка открывает настройки,
+// верхний край со шторкой подсвечивается.
+let mouseMode = false;
+{
+  let lastWheel = 0;
+  $("desktops").addEventListener("wheel", (e) => {
+    if (!mouseMode || e.ctrlKey) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(delta) < 10 || e.timeStamp - lastWheel < 400) return;
+    lastWheel = e.timeStamp;
+    desks.go(desks.index + (delta > 0 ? 1 : -1));
+  }, { passive: true });
+}
+
+// Киоск сообщает ядру размер экрана: по нему ядро выбирает масштаб интерфейса,
+// а админка рисует холст редактора столов.
+function reportDisplay() {
+  api.post("/display/report", {
+    screen_w: screen.width, screen_h: screen.height, dpr: devicePixelRatio,
+    view_w: innerWidth, view_h: innerHeight,
+  }).catch(() => {});
+}
+
+async function detectInput() {
+  try {
+    const info = await api.get("/display");
+    mouseMode = !info.touch;
+  } catch {
+    mouseMode = false;
+  }
+  document.documentElement.classList.toggle("mouse", mouseMode);
+}
 
 // --- запуск -------------------------------------------------------------------
 
@@ -542,6 +581,12 @@ async function start() {
   if (!state.config.setup.wifi_done) settings.openSetup();
   revisionLoop();
   setInterval(applyTheme, 30000);
+  reportDisplay();
+  window.addEventListener("resize", () => {
+    clearTimeout(reportDisplay.timer);
+    reportDisplay.timer = setTimeout(reportDisplay, 1000);
+  });
+  detectInput();
 }
 
 start();

@@ -499,7 +499,7 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
 /* --- трансляция экрана ------------------------------------------------------------ */
 
 .screen-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 12px; }
-.screen-view { aspect-ratio: 1024 / 600; border-radius: var(--radius-lg); overflow: hidden; background: #000; box-shadow: 0 0 0 1px var(--border), var(--shadow); }
+.screen-view { aspect-ratio: var(--screen-ratio, 1024 / 600); border-radius: var(--radius-lg); overflow: hidden; background: #000; box-shadow: 0 0 0 1px var(--border), var(--shadow); }
 
 /* --- телефон и узкие окна ---------------------------------------------------------- */
 
