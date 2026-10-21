@@ -46,6 +46,10 @@ TOKEN = os.path.join(STATE_DIR, "github-token")
 SERVICE_USER = "wallhub"
 HEALTH_URL = "http://127.0.0.1:8080/api/info"
 HEALTH_TIMEOUT = 60
+# После успешного обновления панель перезагружается целиком: так новая версия
+# стартует с чистого листа (киоск, драйверы, юниты). Пауза — чтобы экран успел
+# показать «Перезагружаю панель…».
+REBOOT_DELAY = 5
 
 # Должно совпадать с DEFAULTS["update"] в wallhub/config.py.
 DEFAULT_SETTINGS = {
@@ -291,7 +295,7 @@ def install(cfg, version):
     # phase: этап для экрана панели (download → install → verify, при сбое rollback).
     write_status(state="installing", job="install", phase="download", message="Скачиваю {ref} {commit}…",
                  message_args={"ref": version["ref"], "commit": version["commit"][:7]},
-                 target=version.get("version") or "", result=None, started_at=now())
+                 target=version.get("version") or "", result=None, started_at=now(), reboot=False)
     log(f"install {version['ref']} {version['commit']}")
     release = download(cfg, version)
 
@@ -304,9 +308,12 @@ def install(cfg, version):
     if result.returncode == 0:
         write_status(phase="verify", message="Проверяю, что сервис запустился…")
     if result.returncode == 0 and healthy(version["commit"]):
-        log("ok")
+        log("ok, reboot")
+        write_status(phase="reboot", message="Перезагружаю панель…")
+        time.sleep(REBOOT_DELAY)
         write_status(state="idle", phase=None, result="ok", message="Обновлено", finished_at=now(),
-                     current=read_version(CURRENT), available=False)
+                     current=read_version(CURRENT), available=False, reboot=True)
+        subprocess.run(["systemctl", "reboot"], check=False)
         return
 
     if result.returncode:

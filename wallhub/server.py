@@ -741,7 +741,7 @@ def make_handler(app, trusted, port):
         # Wi‑Fi
 
         def api_wifi(self, query, **_):
-            state = app.system.wifi_state(rescan=query.get("rescan") == ["1"])
+            state = app.system.wifi_state(rescan=query.get("rescan") == ["1"], brief=query.get("brief") == ["1"])
             # Нужно экрану, чтобы предупредить перед выключением Wi‑Fi.
             return dict(state, other_connection=app.system.other_connection())
 

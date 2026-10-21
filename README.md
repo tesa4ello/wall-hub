@@ -104,8 +104,9 @@ How a release is installed:
 3. If the service doesn't answer with the new version within a minute,
    `current` goes back to the previous release. The last three releases are
    kept.
-4. The screen reloads the page by itself when it sees a new service version.
-   The graphical session restarts only if the kiosk files changed.
+4. Once the new version answers, the panel reboots (the screen shows
+   "Rebooting the panel…" for a few seconds before that), so the new release
+   starts clean. A rollback does not reboot: the screen just reloads the page.
 
 The automatic check schedule (never, hourly, every 6 hours or daily at a set
 time), the channel and automatic installation are set on the screen under

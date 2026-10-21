@@ -179,6 +179,10 @@ class UpdateProgressTest(unittest.TestCase):
         self.assertIsNone(self.progress(state="idle", job="install", result="ok", finished_at=self.ago(120)))
         self.assertIsNotNone(self.progress(state="idle", job="install", result="failed", finished_at=self.ago(120)))
 
+    def test_result_after_reboot_outlives_boot(self):
+        self.assertIsNotNone(self.progress(state="idle", job="install", result="ok", reboot=True, finished_at=self.ago(120)))
+        self.assertIsNone(self.progress(state="idle", job="install", result="ok", reboot=True, finished_at=self.ago(200)))
+
     def test_check_result_is_not_shown(self):
         self.assertIsNone(self.progress(state="idle", job="check", result="failed", finished_at=self.ago(5)))
         self.assertIsNone(self.progress(state="idle"))
