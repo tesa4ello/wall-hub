@@ -15,6 +15,11 @@
   --warn: #e0a23a;
   --crit: #ea5a50;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  /* Стекло плиток поверх фона: тонировка, тонировка без размытия, рамка, блик. */
+  --glass: rgba(16, 19, 24, 0.42);
+  --glass-frosted: rgba(16, 19, 24, 0.74);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
   color-scheme: dark;
 }
 
@@ -32,6 +37,10 @@
   --warn: #b97a10;
   --crit: #cf3a31;
   --shadow: 0 12px 40px rgba(20, 30, 50, 0.18);
+  --glass: rgba(255, 255, 255, 0.45);
+  --glass-frosted: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-highlight: rgba(255, 255, 255, 0.35);
   color-scheme: light;
 }
 
