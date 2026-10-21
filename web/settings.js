@@ -523,14 +523,11 @@ export class Settings {
   }
 
   async runUpdate(mode) {
-    if (mode === "install") {
-      const ok = await confirmDialog({
-        title: "Обновить панель?",
-        text: "Экран перезагрузится сам, когда новая версия запустится.",
-        ok: "Обновить",
-      });
-      if (!ok) return;
-    }
+    const confirms = {
+      install: { title: "Обновить панель?", text: "Проверю новую версию и, если она есть, поставлю. Экран перезагрузится сам.", ok: "Обновить" },
+      rollback: { title: "Вернуть прошлую версию?", text: "Экран перезагрузится сам.", ok: "Вернуть" },
+    };
+    if (confirms[mode] && !(await confirmDialog(confirms[mode]))) return;
     await api.post("/update/run", { mode });
     this.update.status = { ...this.update.status, state: mode === "check" ? "checking" : "installing", message: "Запускаю…" };
     this.render();
@@ -570,6 +567,13 @@ export class Settings {
           <div class="speed-cell">
             <div class="row-value mono">${esc(versionText(this.info || {}))}</div>
             <button class="btn btn-small" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")}${st.state === "checking" ? "Проверяю…" : "Проверить"}</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-label">Обновление вручную<div class="row-hint">Скачать и поставить последнюю версию канала прямо сейчас</div></div>
+          <div class="list-actions">
+            <button class="btn btn-small" data-update-run="rollback" ${busy ? "disabled" : ""}>Вернуть прошлую</button>
+            <button class="btn btn-small btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>${st.state === "installing" ? "Обновляю…" : "Обновить"}</button>
           </div>
         </div>
         <div class="row">
