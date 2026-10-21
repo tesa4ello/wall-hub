@@ -78,6 +78,47 @@ body.kiosk {
   font-size: 13px;
 }
 
+/* --- ход обновления ------------------------------------------------------- */
+
+.upd-progress {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 440px;
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-frosted);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  animation: ub-in 0.3s ease-out;
+}
+.upd-progress[hidden] { display: none; }
+.upd-progress.running { pointer-events: none; }
+@keyframes ub-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+.ub-icon { flex: none; display: flex; color: var(--accent); }
+.ub-icon .icon { width: 26px; height: 26px; }
+.running .ub-icon .icon { animation: ub-spin 1.4s linear infinite; }
+.ok .ub-icon { color: var(--ok); }
+.failed .ub-icon { color: var(--crit); }
+@keyframes ub-spin { to { transform: rotate(360deg); } }
+.ub-body { flex: 1; min-width: 0; }
+.ub-title { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; }
+.ub-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ub-text { margin-top: 2px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.ub-steps { display: flex; gap: 6px; margin-top: 8px; }
+.ub-steps i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-3); }
+.ub-steps i.done { background: var(--accent); }
+.ub-steps i.on { background: linear-gradient(90deg, var(--accent) 0 40%, var(--surface-3) 40%); background-size: 250% 100%; animation: ub-flow 1.2s linear infinite; }
+@keyframes ub-flow { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
 /* --- верхний край и шторка ----------------------------------------------- */
 
 .edge { position: fixed; top: 0; left: 0; right: 0; z-index: 12; height: 32px; touch-action: none; }

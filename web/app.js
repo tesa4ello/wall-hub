@@ -298,8 +298,9 @@ async function loadConfig() {
 
 async function pollRevision() {
   try {
-    const { revision, build, update } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
+    const { revision, build, update, progress, version } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
     $("status-offline").hidden = true;
+    updateBanner.show(progress, version);
     state.updateAvailable = Boolean(update);
     $("edge-dot").hidden = !update;
     settings.setUpdateBadge(update);
@@ -309,9 +310,87 @@ async function pollRevision() {
     else if (build !== state.build) return location.reload();
     if (revision !== state.revision) await loadConfig();
   } catch {
-    $("status-offline").hidden = false;
+    // Во время установки сервис перезапускается: это не обрыв связи.
+    $("status-offline").hidden = updateBanner.offline();
   }
 }
+
+// --- ход обновления -----------------------------------------------------------
+
+// Плашка внизу экрана: какой этап идёт, сколько прошло, чем закончилось.
+// Нажатия не перехватывает, кроме готового результата: его можно смахнуть касанием.
+const UPDATE_STEPS = ["download", "install", "verify"];
+
+const updateBanner = {
+  el: $("upd-progress"),
+  progress: null,
+  version: "",
+  dismissed: null,
+  timer: null,
+
+  show(progress, version) {
+    this.progress = progress || null;
+    this.version = version || "";
+    this.render();
+  },
+
+  // Связи нет: если шла установка, значит сервис перезапускается.
+  offline() {
+    if (this.progress?.state !== "installing") return false;
+    this.progress = { ...this.progress, restarting: true };
+    this.render();
+    return true;
+  },
+
+  render() {
+    const p = this.progress;
+    if (!p || (p.state !== "installing" && p.finished_at === this.dismissed)) {
+      this.el.hidden = true;
+      clearInterval(this.timer);
+      this.timer = null;
+      return;
+    }
+    const running = p.state === "installing";
+    const failed = !running && p.result === "failed";
+    let title;
+    if (running) title = p.phase === "rollback" ? t("Откат обновления") : (p.target ? t("Обновление до {version}", { version: p.target }) : t("Обновление"));
+    else title = failed ? t("Обновление не удалось") : (p.message === "Возвращена прошлая версия" ? t("Возвращена прошлая версия") : t("Обновлено до {version}", { version: this.version }));
+    const message = p.restarting ? t("Перезапускаю сервис…") : t(p.message || "", p.message_args);
+    const step = UPDATE_STEPS.indexOf(p.phase);
+    const steps = running && step >= 0
+      ? `<div class="ub-steps">${UPDATE_STEPS.map((_, i) => `<i class="${i < step ? "done" : i === step ? "on" : ""}"></i>`).join("")}</div>`
+      : "";
+    this.el.className = `upd-progress ${running ? "running" : failed ? "failed" : "ok"}`;
+    this.el.innerHTML = `
+      <span class="ub-icon">${icon(running ? "refresh" : failed ? "info" : "check")}</span>
+      <div class="ub-body">
+        <div class="ub-title"><b></b><span class="ub-time"></span></div>
+        <div class="ub-text"></div>
+        ${steps}
+      </div>`;
+    this.el.querySelector("b").textContent = title;
+    this.el.querySelector(".ub-text").textContent = running || failed ? message : t("Нажмите, чтобы скрыть");
+    this.el.hidden = false;
+    this.tick();
+    if (running && !this.timer) this.timer = setInterval(() => this.tick(), 1000);
+    if (!running) { clearInterval(this.timer); this.timer = null; }
+  },
+
+  // Сколько длится установка: «1:23».
+  tick() {
+    const p = this.progress;
+    const el = this.el.querySelector(".ub-time");
+    if (!el || p?.state !== "installing" || !p.started_at) return;
+    const s = Math.max(0, Math.round((Date.now() - Date.parse(p.started_at)) / 1000));
+    el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  },
+};
+
+updateBanner.el.addEventListener("click", () => {
+  if (updateBanner.progress?.state === "installing") return;
+  updateBanner.dismissed = updateBanner.progress?.finished_at;
+  updateBanner.render();
+});
 
 // --- затемнение при простое -------------------------------------------------
 

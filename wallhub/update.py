@@ -4,6 +4,7 @@
 запускает его через polkit, хранит токен GitHub и читает update.json.
 """
 
+import datetime
 import json
 import logging
 import os
@@ -45,6 +46,25 @@ class Updates:
         latest = (status.get("latest") or {}).get("commit")
         return bool(status.get("available") and latest and latest != build_commit)
 
+    def progress(self):
+        """Ход обновления для экрана панели: идущее или только что закончившееся.
+
+        Готовое обновление показывается минуту, ошибка — десять минут. Итог
+        простой проверки (job="check") на экран не выводится.
+        """
+        status = self.status()
+        keys = ("state", "phase", "message", "message_args", "target", "started_at", "result", "finished_at")
+        if status.get("state") == "installing":
+            return {k: status.get(k) for k in keys}
+        try:
+            finished = datetime.datetime.fromisoformat(status["finished_at"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        age = (datetime.datetime.now(finished.tzinfo) - finished).total_seconds()
+        if status.get("job") in ("install", "rollback") and status.get("result") in ("ok", "failed") and 0 <= age < (60 if status["result"] == "ok" else 600):
+            return {k: status.get(k) for k in keys}
+        return None
+
     def token_set(self):
         try:
             return os.path.getsize(self.token_path) > 0
@@ -84,14 +104,21 @@ class Updates:
 
     def _fake_run(self, mode):
         """Имитация обновлятора для --dry-run."""
-        self._write(state="checking", message="Проверяю обновления…")
+        self._write(state="checking", job="check", message="Проверяю обновления…")
         time.sleep(1.5)
+        now = lambda: datetime.datetime.now().astimezone().isoformat(timespec="seconds")
         latest = {"commit": "0123456789abcdef", "ref": "main", "date": "2026-10-21T10:00:00Z",
                   "title": "Тестовое обновление", "version": "0.1.2"}
         if mode == "install":
-            self._write(state="installing", message="Устанавливаю…")
-            time.sleep(2)
-            self._write(state="idle", result="ok", message="Обновлено", available=False, latest=latest)
+            self._write(state="installing", job="install", phase="download", message="Скачиваю {ref} {commit}…",
+                        message_args={"ref": "main", "commit": "0123456"}, target=latest["version"],
+                        result=None, started_at=now())
+            for phase, message in (("install", "Устанавливаю…"), ("verify", "Проверяю, что сервис запустился…")):
+                time.sleep(3)
+                self._write(phase=phase, message=message)
+            time.sleep(3)
+            self._write(state="idle", phase=None, result="ok", message="Обновлено", available=False,
+                        latest=latest, finished_at=now())
         else:
             self._write(state="idle", message="Есть новая версия", available=True, latest=latest,
                         checked_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
