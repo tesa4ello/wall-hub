@@ -143,7 +143,11 @@ install -d /etc/chromium/policies/managed
 install -m 0644 "$SRC_DIR/deploy/chromium-policy.json" /etc/chromium/policies/managed/wallhub.json
 
 KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
-install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$KIOSK_HOME/.config/openbox"
+# install -d отдаёт пользователю только последний каталог, поэтому ~/.config
+# создаём отдельно: иначе он остаётся root-овским и Chromium не может
+# создать профиль (падает с "chrome_crashpad_handler: --database is required").
+install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$KIOSK_HOME/.config" "$KIOSK_HOME/.config/openbox"
+chown -R "$KIOSK_USER:$KIOSK_USER" "$KIOSK_HOME/.config"
 # Старый автозапуск openbox (до перехода на запуск из .xinitrc).
 rm -f "$KIOSK_HOME/.config/openbox/autostart"
 install -m 0644 -o "$KIOSK_USER" -g "$KIOSK_USER" "$SRC_DIR/deploy/openbox-rc.xml" "$KIOSK_HOME/.config/openbox/rc.xml"
