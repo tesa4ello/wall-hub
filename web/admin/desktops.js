@@ -150,7 +150,8 @@ export class DesktopEditor {
   renderPalette() {
     const groups = {};
     for (const meta of Object.values(this.catalog)) {
-      (groups[meta.module_title] ||= []).push(meta);
+      // Виджеты выключенного модуля новыми не добавляются.
+      if (!meta.disabled) (groups[meta.module_title] ||= []).push(meta);
     }
     return Object.entries(groups).map(([title, items]) => `
       <div class="palette-group">${esc(t(title))}</div>

@@ -190,6 +190,12 @@ export class StorePanel {
       if (loaded?.backend_error) state += ` · ${t("серверная часть не запустилась: {error}", { error: loaded.backend_error })}`;
       if (m.installed) actions += `<button class="btn btn-small" data-store-remove="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${t("Удалить")}</button>`;
     }
+    // Выключатель: у загруженных модулей (установленных и из папки), не у модулей ядра.
+    const mod = this.ctx.modules().find((x) => x.id === m.id);
+    if (mod && !mod.error && mod.source !== "builtin") {
+      if (mod.disabled) state = [t("Выключен"), state].filter(Boolean).join(" · ");
+      actions = `<button class="switch" data-store-enable="${esc(m.id)}" aria-checked="${!mod.disabled}" title="${mod.disabled ? t("Включить модуль") : t("Выключить модуль")}" ${this.busy ? "disabled" : ""}></button>` + actions;
+    }
     const widgets = m.widgets.map((w) => `<span class="chip">${icon(w.icon || "grid", "icon tiny")} ${esc(this.tr(m, w.title))}</span>`).join("");
     return `
       <div class="item">
@@ -264,6 +270,22 @@ export class StorePanel {
       await this.run(m.id, async () => {
         await this.load("/store/install", { id: m.id });
         this.ctx.toast(t(m.update ? "Модуль «{title}» обновлён" : "Модуль «{title}» установлен", { title: this.tr(m, m.title) }));
+        await this.ctx.changed();
+      });
+    } else if (d.storeEnable) {
+      const m = this.data.modules.find((x) => x.id === d.storeEnable) || this.ctx.modules().find((x) => x.id === d.storeEnable);
+      const enabled = b.getAttribute("aria-checked") !== "true";
+      if (!enabled) {
+        const ok = await this.ctx.confirm({
+          title: t("Выключить модуль «{title}»?", { title: this.tr(m, m.title) }),
+          text: t("Его серверная часть остановится, виджеты останутся на столах неактивными. Настройки сохранятся."),
+          ok: t("Выключить модуль"),
+        });
+        if (!ok) return true;
+      }
+      await this.run(m.id, async () => {
+        await this.ctx.guarded(() => api.post("/modules/enable", { id: m.id, enabled }));
+        this.ctx.toast(t(enabled ? "Модуль «{title}» включён" : "Модуль «{title}» выключен", { title: this.tr(m, m.title) }));
         await this.ctx.changed();
       });
     } else if (d.storeRemove) {

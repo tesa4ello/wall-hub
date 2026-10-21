@@ -25,10 +25,12 @@ class LayoutError(ValueError):
     pass
 
 
-def load_catalog(modules):
+def load_catalog(modules, disabled=()):
     """Типы виджетов загруженных модулей: {"модуль/виджет": описание}.
 
-    modules — {id: Module} из modules.Registry.loaded().
+    modules — {id: Module} из modules.Registry.loaded(). Виджеты выключенных
+    модулей (disabled) остаются в каталоге с пометкой disabled: их настройки
+    проверяются как обычно, а экран рисует вместо них заглушку.
     """
     catalog = {}
     for name, module in sorted(modules.items()):
@@ -38,6 +40,8 @@ def load_catalog(modules):
                 continue
             type_id = f"{name}/{widget['id']}"
             catalog[type_id] = dict(widget, id=type_id, module=name, module_title=info.get("title", name))
+            if name in disabled:
+                catalog[type_id]["disabled"] = True
     return catalog
 
 

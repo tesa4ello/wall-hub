@@ -216,7 +216,7 @@ class App:
         # Серверные части модулей: запускаются здесь и при каждой смене модулей.
         self.backends = Backends(config, os.path.join(state_dir, "module-data"),
                                  notifications=self.notifications, tiles=self.tiles)
-        self.backends.sync(self.modules.loaded())
+        self.backends.sync(self.active_modules())
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
                            on_change=self.modules_changed)
@@ -242,13 +242,36 @@ class App:
             return None
 
     def modules_changed(self):
+        # Переводы и каталог виджетов — у всех модулей, включая выключенные:
+        # их виджеты остаются на столах с надписью «Модуль отключён».
         i18n.load(self.web_root, self.modules.loaded())
-        self.backends.sync(self.modules.loaded())
+        self.backends.sync(self.active_modules())
         self.modules_rev += 1
         self.config.notify()
 
+    def disabled_modules(self):
+        return set(self.config.get("modules_disabled"))
+
+    def active_modules(self):
+        """Загруженные и не выключенные модули: у них работает серверная часть."""
+        disabled = self.disabled_modules()
+        return {k: m for k, m in self.modules.loaded().items() if k not in disabled}
+
+    def set_module_enabled(self, module_id, enabled):
+        module = self.modules.scan().get(module_id)
+        if module is None:
+            raise ApiError(tr("Нет такого модуля"))
+        if module.builtin:
+            raise ApiError(tr("Модуль ядра нельзя выключить"))
+        disabled = self.disabled_modules()
+        if enabled == (module_id not in disabled):
+            return
+        disabled.discard(module_id) if enabled else disabled.add(module_id)
+        self.config.update({"modules_disabled": sorted(disabled)})
+        self.modules_changed()
+
     def widget_catalog(self):
-        return desktops.load_catalog(self.modules.loaded())
+        return desktops.load_catalog(self.modules.loaded(), self.disabled_modules())
 
     def notes_rev(self):
         # Оба счётчика только растут, поэтому сумма меняется при любом изменении.
@@ -812,11 +835,13 @@ def make_handler(app, trusted, port):
         def api_catalog(self, **_):
             found = app.modules.scan()
             loaded = {k: m for k, m in found.items() if not m.error}
+            disabled = app.disabled_modules()
             return {
-                "widgets": list(desktops.load_catalog(loaded).values()),
+                "widgets": list(desktops.load_catalog(loaded, disabled).values()),
                 "providers": status.catalog(),
                 "i18n": {code: i18n.module_catalog(loaded, code) for code in i18n.languages()},
-                "modules": [dict(m.info(), backend_error=app.backends.errors.get(k)) for k, m in sorted(found.items())],
+                "modules": [dict(m.info(), backend_error=app.backends.errors.get(k), disabled=k in disabled)
+                            for k, m in sorted(found.items())],
             }
 
         # Wi‑Fi
@@ -1033,8 +1058,18 @@ def make_handler(app, trusted, port):
             return self.store_listing()
 
         def api_store_remove(self, body, **_):
-            self.store_call(app.store.remove, str(body.get("id", "")))
+            module_id = str(body.get("id", ""))
+            self.store_call(app.store.remove, module_id)
+            # Поставят заново — модуль будет включён.
+            if module_id in app.disabled_modules():
+                app.config.update({"modules_disabled": sorted(app.disabled_modules() - {module_id})})
             return self.store_listing()
+
+        def api_module_enable(self, body, **_):
+            if not isinstance(body.get("enabled"), bool):
+                raise ApiError(tr("Ожидается enabled: true или false"))
+            app.set_module_enabled(str(body.get("id", "")), body["enabled"])
+            return {"ok": True}
 
         def api_store_catalogs(self, body, **_):
             action, cat_id = body.get("action"), str(body.get("id", ""))
@@ -1072,7 +1107,7 @@ def make_handler(app, trusted, port):
         def api_notify(self, body, **_):
             # От виджета модуля (notify() в mount): текст уже переведён модулем.
             module = str(body.get("module", ""))
-            if not SOURCE_RE.match(module) or module not in app.modules.loaded():
+            if not SOURCE_RE.match(module) or module not in app.active_modules():
                 raise ApiError(tr("Нет такого модуля"))
             try:
                 item = app.notifications.add(module, body.get("title"), body.get("text", ""),
@@ -1185,6 +1220,7 @@ def make_handler(app, trusted, port):
         ("POST", "/store/updates"): (H.api_store_updates_action, False),
         ("POST", "/store/install"): (H.api_store_install, False),
         ("POST", "/store/remove"): (H.api_store_remove, False),
+        ("POST", "/modules/enable"): (H.api_module_enable, False),
         ("POST", "/store/catalogs"): (H.api_store_catalogs, False),
     }
     return Handler
