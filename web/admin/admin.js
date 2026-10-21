@@ -18,15 +18,16 @@ const $ = (id) => document.getElementById(id);
 const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+// group — заголовок группы в боковом меню, sub — подзаголовок страницы.
 const TABS = [
-  { id: "display", title: "Экран", icon: "display" },
-  { id: "desktops", title: "Столы", icon: "grid" },
-  { id: "modules", title: "Модули", icon: "plus" },
-  { id: "weather", title: "Погода", icon: "sun" },
-  { id: "screen", title: "Трансляция", icon: "eye" },
-  { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
-  { id: "updates", title: "Обновления", icon: "refresh" },
-  { id: "system", title: "Система", icon: "info" },
+  { id: "display", title: "Экран", icon: "display", group: "Панель", sub: "Тема, затемнение, местоположение и фон" },
+  { id: "desktops", title: "Столы", icon: "grid", group: "Панель", sub: "Виджеты на рабочих столах панели" },
+  { id: "screen", title: "Трансляция", icon: "eye", group: "Панель", sub: "Что сейчас на экране панели" },
+  { id: "modules", title: "Модули", icon: "plus", group: "Расширения", sub: "Дополнительные виджеты из каталогов" },
+  { id: "weather", title: "Погода", icon: "sun", group: "Расширения", sub: "Источники прогноза и место для виджетов погоды" },
+  { id: "wifi", title: "Wi‑Fi", icon: "wifi", group: "Устройство", sub: "Беспроводная сеть панели" },
+  { id: "updates", title: "Обновления", icon: "refresh", group: "Устройство", sub: "Версия панели и автоматические обновления" },
+  { id: "system", title: "Система", icon: "info", group: "Устройство", sub: "Часовой пояс, пароль и питание" },
 ];
 
 const state = { tab: "display", config: null, catalog: null, wifi: null, time: null, info: null, update: null };
@@ -124,7 +125,13 @@ async function guarded(fn) {
 // --- навигация -------------------------------------------------------------
 
 function renderTabs() {
-  $("tabs").innerHTML = TABS.map((tab) => `<button class="tab" data-tab="${tab.id}">${icon(tab.icon)}<span>${t(tab.title)}</span></button>`).join("");
+  // Разделы без группы (например, добавленные модулями) идут в конце.
+  $("tabs").innerHTML = TABS.map((tab, i) => {
+    const head = tab.group && tab.group !== (TABS[i - 1] || {}).group ? `<div class="tab-group">${esc(t(tab.group))}</div>` : "";
+    return `${head}<button class="tab" data-tab="${tab.id}">${icon(tab.icon)}<span>${t(tab.title)}</span></button>`;
+  }).join("");
+  const logoutIcon = $("logout-icon");
+  if (logoutIcon) logoutIcon.outerHTML = icon("back");
 }
 $("tabs").addEventListener("click", (e) => {
   const b = e.target.closest(".tab");
@@ -136,11 +143,14 @@ async function reload() {
   state.config = config;
   state.catalog = catalog;
   show(state.tab);
+  api.get("/info").then((info) => ($("brand-version").textContent = info.version || "")).catch(() => {});
 }
 
 function show(tab) {
   state.tab = tab;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  // На телефоне вкладки листаются по горизонтали: выбранная должна быть видна.
+  document.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   if (tab === "wifi") loadWifi(false);
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
@@ -158,6 +168,10 @@ function render() {
   screenView.destroy();
   $("content").classList.toggle("wide", state.tab === "desktops");
   $("content").innerHTML = views[state.tab]();
+  // Подзаголовок страницы под первым заголовком.
+  const tab = TABS.find((x) => x.id === state.tab);
+  const head = $("content").firstElementChild;
+  if (tab && tab.sub && head && head.tagName === "H1") head.insertAdjacentHTML("afterend", `<p class="page-sub">${esc(t(tab.sub))}</p>`);
   if (state.tab === "desktops") mountEditor();
   if (state.tab === "screen") screenView.mount();
 }
