@@ -4,12 +4,13 @@
 import { api } from "/lib/api.js";
 import { language, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
-import { confirmWifiOff, toast } from "/lib/dialog.js";
+import { confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
 import { Wallpaper } from "/lib/wallpaper.js";
 import * as sound from "/lib/sound.js";
 import { destroyAll, enableNotify, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
+import * as shadeView from "/shade.js";
 
 const state = {
   config: null,
@@ -21,7 +22,6 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // --- тема -----------------------------------------------------------------
 
@@ -185,8 +185,9 @@ const LONG_PRESS_MS = 2000;
 
 // --- шторка ---------------------------------------------------------------------
 
-// Свайп вниз от верхнего края открывает шторку: Wi‑Fi, тема, настройки и
-// уведомление о новой версии.
+// Свайп вниз от верхнего края открывает шторку — пульт быстрого доступа:
+// переключатели, яркость и громкость, уведомления, столы, питание. Вид
+// шторки — в shade.js, здесь данные и действия.
 const THEMES = [
   [{ theme_mode: "manual", theme: "dark" }, "moon", "Тёмная"],
   [{ theme_mode: "manual", theme: "light" }, "sun", "Светлая"],
@@ -202,6 +203,9 @@ const shade = {
   // Номер последнего уведомления, о котором уже сообщили (всплывашка, звук).
   noteSeq: null,
   notesRev: null,
+  // Жесты внутри шторки (shade.js): пока палец на ползунке или уведомлении,
+  // не перерисовываем.
+  gestures: null,
 
   themeIndex() {
     const ui = state.config.ui;
@@ -210,37 +214,16 @@ const shade = {
   },
 
   render() {
+    if (!state.config || !this.data || this.gestures?.busy) return;
     const ui = state.config.ui;
     const theme = THEMES[this.themeIndex()];
-    const themeLabel = t(ui.theme_mode === "sun" ? "По солнцу" : theme[2]);
-    const w = this.wifi;
-    const wifiSub = !w ? "…" : !w.radio ? t("Выключен") : w.connection || t("Не подключён");
-    $("shade").innerHTML = `
-      <div class="shade-tiles">
-        <button class="tile ${w && w.radio ? "on" : ""}" data-shade="wifi" ${w && w.available ? "" : "disabled"}>
-          ${icon("wifi")}<span class="tile-title">Wi‑Fi</span><span class="tile-sub"></span>
-        </button>
-        <button class="tile" data-shade="theme">${icon(ui.theme_mode === "sun" ? "sun" : theme[1])}<span class="tile-title">${t("Тема")}</span><span class="tile-sub">${themeLabel}</span></button>
-        <button class="tile" data-shade="settings">${icon("gear")}<span class="tile-title">${t("Настройки")}</span><span class="tile-sub">${t("Все параметры")}</span></button>
-      </div>
-      ${this.renderNotes()}
-      <div class="shade-handle"></div>`;
-    // Имя сети вставляем через textContent: оно приходит извне.
-    $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
-  },
-
-  // Список уведомлений: от ядра (новая версия) и от модулей.
-  renderNotes() {
-    const notes = this.data?.notifications || [];
-    if (!notes.length) return "";
-    return `<div class="shade-notes">
-      <div class="shade-notes-head"><span>${t("Уведомления")} · ${notes.length}</span><button data-shade="clear">${t("Очистить")}</button></div>
-      ${notes.map((n) => `<div class="shade-note level-${n.level}">
-        <div class="shade-note-body"><b>${esc(n.title)}</b>${n.text ? `<span>${esc(n.text)}</span>` : ""}
-          ${n.action ? `<button class="shade-note-action" data-shade="action" data-id="${n.id}">${esc(n.action.label)}</button>` : ""}</div>
-        <button class="shade-note-close" data-shade="dismiss" data-id="${n.id}" aria-label="${t("Убрать")}">${icon("close")}</button>
-      </div>`).join("")}
-    </div>`;
+    shadeView.render($("shade"), {
+      data: this.data,
+      theme: { icon: ui.theme_mode === "sun" ? "sun" : theme[1], label: t(ui.theme_mode === "sun" ? "По солнцу" : theme[2]) },
+      desks: state.config.desktops,
+      layout: state.config.layout,
+      current: desks.index,
+    });
   },
 
   // Состояние шторки держим свежим в фоне, чтобы она открывалась сразу
@@ -278,13 +261,23 @@ const shade = {
     }
   },
 
+  // id приходит из разметки строкой; у уведомлений модулей он числовой.
+  noteId(id) {
+    return /^\d+$/.test(id) ? Number(id) : id;
+  },
+
   async dismiss(id) {
-    await api.post("/notifications/dismiss", id === "all" ? { all: true } : { id: /^\d+$/.test(id) ? Number(id) : id });
+    // Убираем сразу, не дожидаясь ядра: уведомление уже уехало пальцем.
+    if (this.data) {
+      this.data.notifications = id === "all" ? [] : this.data.notifications.filter((n) => String(n.id) !== String(id));
+      this.render();
+    }
+    await api.post("/notifications/dismiss", id === "all" ? { all: true } : { id: this.noteId(id) });
     await this.refresh();
   },
 
   async runAction(id) {
-    const res = await api.post("/notifications/action", { id: /^\d+$/.test(id) ? Number(id) : id });
+    const res = await api.post("/notifications/action", { id: this.noteId(id) });
     if (res.kind === "update") this.hide();
     await this.refresh();
     return res;
@@ -298,6 +291,11 @@ const shade = {
   },
 
   start() {
+    this.gestures = shadeView.bindGestures($("shade"), {
+      // Ползунок шлёт значения и под пальцем, и при отпускании.
+      slide: (name, value) => this.set({ [name]: value }).catch(() => this.refresh()),
+      dismiss: (id) => this.dismiss(id).catch(() => this.refresh()),
+    });
     this.refresh();
     setInterval(() => { if (!document.hidden) this.refresh(); }, 15000);
   },
@@ -323,6 +321,19 @@ const shade = {
     setTimeout(() => { if (!this.open) $("shade-backdrop").hidden = true; }, 300);
   },
 
+  async power(action) {
+    const reboot = action === "reboot";
+    const ok = await confirmDialog({
+      title: t(reboot ? "Перезагрузить панель?" : "Выключить панель?"),
+      text: t(reboot ? "Панель будет недоступна около минуты." : "Включить её снова можно будет только кнопкой или по питанию."),
+      ok: t(reboot ? "Перезагрузить" : "Выключить"),
+      danger: !reboot,
+    });
+    if (!ok) return;
+    this.hide();
+    await api.post("/power", { action });
+  },
+
   async action(name, el) {
     if (name === "settings" || name === "update") {
       this.hide();
@@ -343,10 +354,16 @@ const shade = {
     } else if (name === "blank") {
       this.hide();
       dimmer.blank();
+    } else if (name === "desk") {
+      this.hide();
+      desks.go(Number(el.dataset.index));
+    } else if (name === "reboot" || name === "poweroff") {
+      await this.power(name);
     } else if (name === "wifi" && this.wifi) {
       if (this.wifi.radio && !(await confirmWifiOff(this.wifi))) return;
       const enabled = !this.wifi.radio;
       this.wifi = { ...this.wifi, radio: enabled, connection: null };
+      Object.assign(this.data.toggles.wifi, { on: enabled, ssid: null });
       this.render();
       await api.post("/wifi/radio", { enabled });
       await this.refresh();
@@ -359,7 +376,7 @@ const shade = {
   let drag = null;
   const shadeEl = $("shade");
   const begin = (e, fromOpen) => {
-    drag = { y: e.clientY, fromOpen, height: shadeEl.offsetHeight || 220 };
+    drag = { y: e.clientY, fromOpen, height: shadeEl.offsetHeight || 520 };
     shadeEl.style.transition = "none";
   };
   $("edge").addEventListener("pointerdown", (e) => {
@@ -368,7 +385,10 @@ const shade = {
       begin(e, false);
     }
   });
-  shadeEl.addEventListener("pointerdown", (e) => begin(e, true));
+  // Ползунки и уведомления ведут свои жесты (shade.js), шторку за них не тянем.
+  shadeEl.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".shade-slider, .shade-note")) begin(e, true);
+  });
   window.addEventListener("pointermove", (e) => {
     if (!drag) return;
     const dy = e.clientY - drag.y;
