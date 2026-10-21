@@ -207,7 +207,10 @@ provides widgets: Weather now, Now and hourly, Hourly forecast (curve), Daily
 forecast (temperature range bars), Precipitation (next 2 hours in 15-minute
 steps or 12 hours), Details and Weather: large. The forecast comes from
 [Open-Meteo](https://open-meteo.com) without a key, the service caches it for
-10 minutes and shows the last one it got while offline. Each widget has its own
+10 minutes and shows the last one it got while offline. If Open-Meteo is
+unreachable (some ISPs block it), the forecast falls back to
+[MET Norway](https://api.met.no) automatically and city search uses
+OpenStreetMap. Each widget has its own
 place ("same as panel" or a city found by name) and units (°C/°F,
 m/s·km/h·mph, mmHg/hPa).
 

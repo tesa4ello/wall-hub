@@ -1,6 +1,6 @@
 {
   "id": "weather",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": "1",
   "title": "Погода",
   "description": "Прогноз Open-Meteo: сейчас, по часам, по дням, осадки",
