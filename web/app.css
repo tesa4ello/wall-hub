@@ -46,7 +46,7 @@ body.kiosk {
 
 /* --- верхний край и шторка ----------------------------------------------- */
 
-.edge { position: fixed; top: 0; left: 0; right: 0; z-index: 12; height: 22px; touch-action: none; }
+.edge { position: fixed; top: 0; left: 0; right: 0; z-index: 12; height: 32px; touch-action: none; }
 .edge-dot {
   position: absolute;
   top: 5px;

@@ -193,3 +193,37 @@ class FirstLoginTest(unittest.TestCase):
 
     def test_admin_url_without_default_port(self):
         self.assertNotIn(":80/", self.app.admin_url())
+
+
+class WifiWatchdogTest(unittest.TestCase):
+    class FakeSystem:
+        def __init__(self, radio, other):
+            self.radio, self.other, self.turned_on = radio, other, False
+
+        def radio_enabled(self):
+            return self.radio
+
+        def other_connection(self):
+            return self.other
+
+        def wifi_radio(self, enabled):
+            self.radio = enabled
+            self.turned_on = enabled
+
+    def test_turns_wifi_back_on_after_timeout(self):
+        from wallhub.server import WifiWatchdog
+        system = self.FakeSystem(radio=False, other=False)
+        dog = WifiWatchdog(system)
+        dog.check(0)
+        dog.check(WifiWatchdog.TIMEOUT - 1)
+        self.assertFalse(system.turned_on)
+        dog.check(WifiWatchdog.TIMEOUT)
+        self.assertTrue(system.turned_on)
+
+    def test_leaves_wifi_off_with_cable(self):
+        from wallhub.server import WifiWatchdog
+        system = self.FakeSystem(radio=False, other=True)
+        dog = WifiWatchdog(system)
+        dog.check(0)
+        dog.check(WifiWatchdog.TIMEOUT * 2)
+        self.assertFalse(system.turned_on)

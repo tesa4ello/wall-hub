@@ -161,6 +161,22 @@ class System:
             return
         self._run(["nmcli", "radio", "wifi", "on" if enabled else "off"])
 
+    def radio_enabled(self):
+        if self.dry_run:
+            return self._fake_radio
+        return self._run(["nmcli", "radio", "wifi"]).strip() == "enabled"
+
+    def other_connection(self):
+        """Есть ли связь не через Wi‑Fi (например, кабель)."""
+        if self.dry_run:
+            return False
+        out = self._run(["nmcli", "-t", "-f", "TYPE,STATE", "device"])
+        for line in out.splitlines():
+            kind, state = (split_terse(line) + [""])[:2]
+            if kind not in ("wifi", "loopback", "wifi-p2p") and state == "connected":
+                return True
+        return False
+
     def _fake_wifi_state(self):
         names = [("Home", 82, "WPA2"), ("Office-5G", 64, "WPA2 WPA3"), ("Guest", 41, ""), ("Сосед", 23, "WPA2")]
         networks = []
