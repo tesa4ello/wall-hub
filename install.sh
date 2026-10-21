@@ -33,6 +33,8 @@ PACKAGES=(
     openbox chromium
     # шрифты с кириллицей
     fonts-inter fonts-dejavu-core
+    # заставка при загрузке
+    plymouth
 )
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -162,6 +164,44 @@ for f in /etc/systemd/system/getty@.service.d/override.conf /etc/systemd/system/
 done
 systemctl daemon-reload
 systemctl set-default multi-user.target >/dev/null
+
+# --- тихая загрузка ----------------------------------------------------------------
+
+log "Настраиваю заставку загрузки"
+install -d /usr/share/plymouth/themes/wallhub
+install -m 0644 "$SRC_DIR"/deploy/plymouth/wallhub/* /usr/share/plymouth/themes/wallhub/
+install -d /etc/systemd/system/plymouth-quit.service.d
+install -m 0644 "$SRC_DIR/deploy/plymouth-quit.conf" /etc/systemd/system/plymouth-quit.service.d/wallhub.conf
+
+# Параметры ядра: заставка вместо текста, без логов и мигающего курсора.
+QUIET_ARGS="quiet splash loglevel=0 vt.global_cursor_default=0 systemd.show_status=false rd.udev.log_level=3 plymouth.ignore-serial-consoles consoleblank=0"
+ARMBIAN_ENV=/boot/armbianEnv.txt
+set_env() {
+    if grep -q "^$1=" "$ARMBIAN_ENV"; then
+        sed -i "s|^$1=.*|$1=$2|" "$ARMBIAN_ENV"
+    else
+        echo "$1=$2" >> "$ARMBIAN_ENV"
+    fi
+}
+if [ -f "$ARMBIAN_ENV" ]; then
+    cp -n "$ARMBIAN_ENV" "$ARMBIAN_ENV.before-wallhub"
+    set_env bootlogo true
+    set_env verbosity 0
+    # Сообщения ядра только в последовательный порт, на экране их не видно.
+    set_env console serial
+    extra="$(sed -n 's/^extraargs=//p' "$ARMBIAN_ENV")"
+    for arg in $QUIET_ARGS; do
+        case " $extra " in
+            *" $arg "*) ;;
+            *) extra="${extra:+$extra }$arg" ;;
+        esac
+    done
+    set_env extraargs "$extra"
+else
+    warn "Не найден $ARMBIAN_ENV: добавьте в параметры ядра вручную: $QUIET_ARGS"
+fi
+# -R пересобирает initramfs, чтобы заставка появлялась как можно раньше.
+plymouth-set-default-theme -R wallhub
 
 log "Перезапускаю сеанс киоска на tty1"
 systemctl restart getty@tty1.service

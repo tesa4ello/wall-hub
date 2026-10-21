@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Wall-HUB
+Description=Тёмная заставка Wall-HUB
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/wallhub
+ScriptFile=/usr/share/plymouth/themes/wallhub/wallhub.script

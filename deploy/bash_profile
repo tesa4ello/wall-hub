@@ -1,4 +1,5 @@
 # Автологин на tty1 запускает графическую сессию киоска.
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    exec startx -- -nocursor >"$HOME/.xsession.log" 2>&1
+    # -background none: X не очищает экран, пока Chromium не нарисует страницу.
+    exec startx -- -nocursor -background none >"$HOME/.xsession.log" 2>&1
 fi

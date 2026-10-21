@@ -1,0 +1,40 @@
+# Заставка Wall-HUB: чёрный фон, логотип по центру и три пульсирующие точки.
+
+Window.SetBackgroundTopColor(0.047, 0.055, 0.067);
+Window.SetBackgroundBottomColor(0.047, 0.055, 0.067);
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.x = Window.GetX() + (Window.GetWidth() - logo.image.GetWidth()) / 2;
+logo.y = Window.GetY() + (Window.GetHeight() - logo.image.GetHeight()) / 2 - 20;
+logo.sprite.SetPosition(logo.x, logo.y, 1);
+logo.sprite.SetOpacity(0);
+
+dot_image = Image("dot.png");
+for (i = 0; i < 3; i++) {
+    dots[i] = Sprite(dot_image);
+    dots[i].SetPosition(Window.GetX() + Window.GetWidth() / 2 - 25 + i * 20,
+                        logo.y + logo.image.GetHeight() + 40, 1);
+    dots[i].SetOpacity(0.2);
+}
+
+frame = 0;
+
+fun refresh_callback() {
+    frame++;
+    # Логотип плавно проявляется за первую секунду (50 кадров в секунду).
+    if (frame < 50)
+        logo.sprite.SetOpacity(frame / 50);
+    else
+        logo.sprite.SetOpacity(1);
+    for (i = 0; i < 3; i++) {
+        phase = Math.Sin((frame - i * 8) / 10);
+        dots[i].SetOpacity(0.25 + 0.75 * Math.Max(phase, 0));
+    }
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Сообщения и запросы паролей при загрузке не показываем.
+fun message_callback(text) {}
+Plymouth.SetMessageFunction(message_callback);
