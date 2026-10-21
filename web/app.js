@@ -17,6 +17,7 @@ const state = {
   revision: -1,
   build: null,
   updateAvailable: null, // null — ещё не знаем (до первого ответа сервера)
+  moduleUpdates: null, // сколько модулей можно обновить (ставятся из админки)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -176,6 +177,8 @@ const shade = {
       </div>
       ${state.updateAvailable ? `
       <button class="shade-update" data-shade="update">${icon("refresh")}<span>${t("Доступна новая версия")}</span><b>${t("Подробнее")}</b></button>` : ""}
+      ${state.moduleUpdates ? `
+      <div class="shade-update">${icon("refresh")}<span>${t("Обновления модулей: {n}", { n: state.moduleUpdates })}</span><b>${t("В админке")}</b></div>` : ""}
       <div class="shade-handle"></div>`;
     // Имя сети вставляем через textContent: оно приходит извне.
     $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
@@ -306,12 +309,13 @@ async function pollRevision() {
   const theme = document.documentElement.dataset.theme;
   const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules, sound: soundReq } = await api.get(`/revision?theme=${theme}${wait}`);
+    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
     updateBanner.show(progress, version);
-    notifySounds(update, progress, soundReq);
+    notifySounds(update, progress, soundReq, moduleUpdates);
     state.updateAvailable = Boolean(update);
-    $("edge-dot").hidden = !update;
+    state.moduleUpdates = moduleUpdates || 0;
+    $("edge-dot").hidden = !update && !moduleUpdates;
     settings.setUpdateBadge(update);
     // После обновления сервис отдаёт новую версию: перезагружаем страницу,
     // чтобы подхватить новый фронтенд.
@@ -334,7 +338,7 @@ async function pollRevision() {
 setSound({ play: (name) => sound.play(name) });
 
 let soundSeq = null;
-function notifySounds(update, progress, req) {
+function notifySounds(update, progress, req, moduleUpdates) {
   // Проверка звука из админки: играем, даже если звук выключен.
   if (req) {
     if (soundSeq !== null && req.seq !== soundSeq) sound.play(req.name, { force: true });
@@ -344,6 +348,8 @@ function notifySounds(update, progress, req) {
   if (!ui?.sound_update) return;
   // Вышла новая версия: только при смене «нет» → «есть», не при загрузке.
   if (update && state.updateAvailable === false) sound.play();
+  // Появились обновления модулей (автоустановка выключена).
+  if (moduleUpdates && state.moduleUpdates === 0) sound.play();
   // Обновление закончилось. После установки страница перезагружается,
   // поэтому сыгранное помним в localStorage, чтобы не повторять.
   if (progress && progress.state !== "installing" && progress.finished_at) {

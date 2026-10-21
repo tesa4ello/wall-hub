@@ -102,6 +102,8 @@ DEFAULTS = {
         "schedule": "daily",
         "time": "04:00",
     },
+    # Автообновление модулей из магазинов (wallhub/modupdate.py).
+    "module_update": {"auto": True, "schedule": "daily", "time": "04:30"},
     # Раздел «Погода» в админке: провайдеры, ключи (секрет), интервал,
     # единицы по умолчанию. Пусто = значения из wallhub.weather.DEFAULT_SETTINGS.
     "weather": {},

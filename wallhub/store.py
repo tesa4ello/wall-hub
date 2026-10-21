@@ -325,6 +325,20 @@ class Store:
             if entry not in keep and not entry.startswith("."):
                 shutil.rmtree(os.path.join(base, entry), ignore_errors=True)
 
+    def rollback(self, module_id, entry):
+        """Возвращает прошлую версию модуля (ссылка previous) и её запись в installed.json."""
+        with self.lock:
+            base = os.path.join(self.dir, module_id)
+            previous = os.path.join(base, "previous")
+            if not os.path.islink(previous):
+                raise StoreError("У модуля {id} нет прошлой версии", id=module_id)
+            self._switch(module_id, os.readlink(previous))
+            installed = self.installed()
+            installed[module_id] = dict(entry)
+            self._save_installed(installed)
+        log.info("модуль %s возвращён к %s", module_id, entry.get("version"))
+        self.on_change()
+
     def remove(self, module_id):
         installed = self.installed()
         if module_id not in installed:

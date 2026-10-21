@@ -1,0 +1,21 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Пакеты
+        run: sudo apt-get install -y --no-install-recommends openssh-client && pip install pyyaml
+      - name: Модульные тесты и смоук-тест ядра
+        run: python -m unittest -v tests.test_backend tests.test_smoke
+      - name: Синтаксис фронтенда
+        run: for f in $(git ls-files 'web/*.js' | grep -v '/vendor/'); do node --check "$f" || exit 1; done

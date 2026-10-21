@@ -30,6 +30,7 @@ from .backends import Backends, ModuleError
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .modules import Registry
 from .store import Store, StoreError
+from .modupdate import SCHEDULES as MODULE_SCHEDULES, ModuleUpdater
 from .location import MODES as LOCATION_MODES, LocationError, Locator
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
@@ -205,6 +206,9 @@ class App:
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
                            on_change=self.modules_changed)
+        self.module_updates = ModuleUpdater(self.store, config, state_dir, backend_error=self.backends.errors.get,
+                                            notify=config.notify)
+        self.module_updates.start()
         i18n.set_language(config.get("ui", "language"))
         status.load_all()
         self.collector = StatusCollector(config)
@@ -552,6 +556,8 @@ def make_handler(app, trusted, port):
                 "revision": app.config.revision,
                 "build": BUILD.get("commit", ""),
                 "update": app.updates.available(BUILD.get("commit", "")),
+                # module_updates: сколько установленных модулей можно обновить.
+                "module_updates": app.module_updates.available_count(),
                 # progress: ход обновления, панель показывает его поверх столов.
                 "progress": app.updates.progress(),
                 "modules": app.modules_rev,
@@ -910,6 +916,32 @@ def make_handler(app, trusted, port):
         def api_store(self, **_):
             return self.store_listing()
 
+        def api_store_updates(self, **_):
+            return {"settings": app.module_updates.settings(), "status": app.module_updates.status()}
+
+        def api_store_updates_action(self, body, **_):
+            action = body.get("action")
+            if action in ("check", "install"):
+                if not app.module_updates.run_async(install=action == "install"):
+                    raise ApiError(tr("Обновление модулей уже идёт"), HTTPStatus.CONFLICT)
+            elif action == "settings":
+                current = app.module_updates.settings()
+                patch = body.get("settings") or {}
+                if "schedule" in patch:
+                    if patch["schedule"] not in MODULE_SCHEDULES:
+                        raise ApiError(tr("Неизвестное расписание"))
+                    current["schedule"] = patch["schedule"]
+                if "time" in patch:
+                    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(patch["time"])):
+                        raise ApiError(tr("Время в формате ЧЧ:ММ"))
+                    current["time"] = patch["time"]
+                if "auto" in patch:
+                    current["auto"] = bool(patch["auto"])
+                app.config.update({"module_update": current})
+            else:
+                raise ApiError(tr("Неизвестное действие"))
+            return {"settings": app.module_updates.settings(), "status": app.module_updates.status()}
+
         def api_store_refresh(self, **_):
             app.store.refresh()
             return self.store_listing()
@@ -1002,6 +1034,8 @@ def make_handler(app, trusted, port):
         ("POST", "/sound/test"): (H.api_sound_test, False),
         ("GET", "/store"): (H.api_store, False),
         ("POST", "/store/refresh"): (H.api_store_refresh, False),
+        ("GET", "/store/updates"): (H.api_store_updates, False),
+        ("POST", "/store/updates"): (H.api_store_updates_action, False),
         ("POST", "/store/install"): (H.api_store_install, False),
         ("POST", "/store/remove"): (H.api_store_remove, False),
         ("POST", "/store/catalogs"): (H.api_store_catalogs, False),
