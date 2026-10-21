@@ -6,6 +6,8 @@ import { choose, confirmDialog, toast } from "/lib/dialog.js";
 import { openKeyboard } from "/lib/keyboard.js";
 import { formatTime, sunTimes } from "/lib/theme.js";
 
+// «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
+const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 const SECTIONS = [
@@ -477,7 +479,7 @@ export class Settings {
       <h2>Система</h2>
       <div class="card">
         <div class="row"><div class="row-label">Имя устройства</div><div class="row-value">${esc(info.hostname || "—")}</div></div>
-        <div class="row"><div class="row-label">Версия</div><div class="row-value">${esc(info.version || "—")}</div></div>
+        <div class="row"><div class="row-label">Версия</div><div class="row-value">${esc(versionText(info))}</div></div>
       </div>
       <div class="card">
         <div class="row">
