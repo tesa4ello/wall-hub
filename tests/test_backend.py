@@ -68,13 +68,14 @@ class ValidateTest(unittest.TestCase):
     def test_valid(self):
         validate_ui({"theme": "light", "theme_mode": "sun", "day_start": "06:30", "dim_after_min": 0,
                      "latitude": 59.94, "longitude": 30.3, "night_dim": 40, "blank_after_min": 60,
-                     "background": "0123456789ab", "background_dark": "same", "bg_dim": 30, "tiles": "blur"})
+                     "background": "0123456789ab", "background_dark": "same", "bg_dim": 30, "tiles": "blur",
+                     "tile_transparency": 70})
 
     def test_invalid(self):
         for patch in ({"theme": "pink"}, {"day_start": "25:00"}, {"dim_level": 100},
                       {"dim_after_min": True}, {"unknown": 1}, {"theme_mode": "auto"},
                       {"latitude": 91}, {"night_dim": 95}, {"auto_theme": True},
-                      {"background": "../config"}, {"background_dark": 1}, {"bg_dim": 90}, {"tiles": "glass"}):
+                      {"background": "../config"}, {"background_dark": 1}, {"bg_dim": 90}, {"tiles": "glass"}, {"tile_transparency": 95}):
             with self.assertRaises(ApiError):
                 validate_ui(patch)
 

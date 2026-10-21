@@ -123,6 +123,9 @@ export class BackgroundPanel {
       <label class="field"><span>${t("Затемнение фона, %")}<small>${t("Чтобы текст читался на яркой картинке")}</small></span>
         <input type="number" min="0" max="80" step="5" data-ui="bg_dim" data-int value="${ui.bg_dim}" ${hasBg ? "" : "disabled"}>
       </label>
+      <label class="field"><span>${t("Прозрачность плиток, %")}<small>${t("Для стекла и матовых плиток. 0 — почти сплошные")}</small></span>
+        <input type="number" min="0" max="90" step="5" data-ui="tile_transparency" data-int value="${ui.tile_transparency}" ${hasBg && ui.tiles !== "solid" ? "" : "disabled"}>
+      </label>
       <label class="field"><span>${t("Плитки")}<small>${t("«Экономно» выглядит как стекло, но не нагружает панель. Без фона плитки сплошные")}</small></span>
         <select data-ui="tiles" ${hasBg ? "" : "disabled"}>${opts}</select>
       </label>
