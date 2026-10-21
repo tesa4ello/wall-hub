@@ -27,7 +27,7 @@ PACKAGES=(
     # бэкенд
     python3 python3-venv curl ca-certificates
     # сеть и время
-    network-manager policykit-1 systemd-timesyncd
+    network-manager polkitd systemd-timesyncd
     # графика: минимальный X11 + openbox + chromium
     xserver-xorg-core xserver-xorg-input-libinput xinit x11-xserver-utils
     openbox chromium
@@ -68,10 +68,6 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 TO_INSTALL=()
 for pkg in "${PACKAGES[@]}"; do
-    # В trixie policykit-1 убран, вместо него polkitd.
-    if [ "$pkg" = policykit-1 ] && ! apt-cache show policykit-1 >/dev/null 2>&1; then
-        pkg=polkitd
-    fi
     # Если время уже синхронизирует chrony, второй демон не нужен.
     if [ "$pkg" = systemd-timesyncd ] && dpkg -s chrony >/dev/null 2>&1; then
         continue
