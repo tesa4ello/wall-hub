@@ -1,6 +1,6 @@
 {
   "id": "weather",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "core": "1",
   "title": "Погода",
   "description": "Прогноз Open-Meteo: сейчас, по часам, по дням, осадки",
@@ -37,8 +37,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -90,8 +94,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -143,8 +151,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -212,8 +224,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -332,8 +348,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -348,8 +368,12 @@
           "key": "wind_unit",
           "type": "select",
           "title": "Ветер",
-          "default": "ms",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "ms",
               "м/с"
@@ -368,8 +392,12 @@
           "key": "pressure_unit",
           "type": "select",
           "title": "Давление",
-          "default": "mmhg",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "mmhg",
               "мм рт. ст."
@@ -415,8 +443,12 @@
           "key": "temp_unit",
           "type": "select",
           "title": "Температура",
-          "default": "c",
+          "default": "auto",
           "choices": [
+            [
+              "auto",
+              "Как в настройках погоды"
+            ],
             [
               "c",
               "°C"
@@ -543,7 +575,8 @@
       "Нет данных о погоде": "No weather data",
       "Загружаю погоду…": "Loading weather…",
       "Осадки в течение часа": "Precipitation within the hour",
-      "Панель не дождалась ответа о погоде": "The panel timed out waiting for the weather"
+      "Панель не дождалась ответа о погоде": "The panel timed out waiting for the weather",
+      "Как в настройках погоды": "As in weather settings"
     }
   }
 }

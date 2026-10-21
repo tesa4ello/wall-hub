@@ -221,7 +221,9 @@ steps or 12 hours), Details and Weather: large. The forecast comes from
 10 minutes and shows the last one it got while offline. If Open-Meteo is
 unreachable (some ISPs block it), the forecast falls back to
 [MET Norway](https://api.met.no) automatically and city search uses
-OpenStreetMap. Each widget has its own
+OpenStreetMap. The Weather tab of the admin panel enables and orders the
+sources (also OpenWeatherMap, WeatherAPI.com and Yandex Weather with a key),
+tests each one and sets the refresh interval and default units. Each widget has its own
 place ("same as panel" or a city found by name) and units (°C/°F,
 m/s·km/h·mph, mmHg/hPa).
 

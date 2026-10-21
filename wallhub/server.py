@@ -32,7 +32,8 @@ from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
-from .weather import Weather, WeatherError, fake_fetch, get_json
+from .weather import Weather, WeatherError, fake_fetch, get_json, normalize_settings as weather_settings
+from .weather_providers import PROVIDERS as WEATHER_PROVIDERS
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +193,8 @@ class App:
         self.locator = Locator(config, system)
         self.locator.start()
         # WALLHUB_FAKE_WEATHER=1: выдуманный прогноз без сети (для разработки).
-        self.weather = Weather(fetch=fake_fetch if os.environ.get("WALLHUB_FAKE_WEATHER") else get_json, local_tz=self.local_timezone)
+        self.weather = Weather(fetch=fake_fetch if os.environ.get("WALLHUB_FAKE_WEATHER") else get_json,
+                               local_tz=self.local_timezone, settings=lambda: config.get("weather"))
 
     def local_timezone(self):
         try:
@@ -564,6 +566,57 @@ def make_handler(app, trusted, port):
                 data["name"] = name
             return data
 
+        def api_weather_settings(self, **_):
+            settings = app.weather.settings()
+            keys = settings.pop("keys")
+            return {
+                "settings": settings,
+                "providers": [dict(meta, id=pid, key_set=bool(keys.get(pid)), status=app.weather.status.get(pid))
+                              for pid, meta in WEATHER_PROVIDERS.items()],
+            }
+
+        def api_weather_settings_save(self, body, **_):
+            current = app.weather.settings()
+            patch = {}
+            if "providers" in body:
+                if not isinstance(body["providers"], list):
+                    raise ApiError(tr("Ожидается список источников"))
+                patch["providers"] = weather_settings({"providers": body["providers"]})["providers"]
+            if "refresh_min" in body:
+                if not _int(body["refresh_min"]) or not 5 <= body["refresh_min"] <= 60:
+                    raise ApiError(tr("Интервал обновления: от 5 до 60 минут"))
+                patch["refresh_min"] = body["refresh_min"]
+            if "units" in body:
+                allowed = {"temp": ("c", "f"), "wind": ("ms", "kmh", "mph"), "pressure": ("mmhg", "hpa")}
+                units = dict(current["units"])
+                for k, v in (body["units"] or {}).items():
+                    if k not in allowed or v not in allowed[k]:
+                        raise ApiError(tr("Недопустимое значение: {key}", key=k))
+                    units[k] = v
+                patch["units"] = units
+            app.config.update({"weather": patch})
+            app.weather.clear()
+            return self.api_weather_settings()
+
+        def api_weather_key(self, body, **_):
+            pid = body.get("id")
+            meta = WEATHER_PROVIDERS.get(pid)
+            if not meta or not meta["key"]:
+                raise ApiError(tr("Неизвестный источник погоды"))
+            key = str(body.get("key", "")).strip()
+            if key and not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", key):
+                raise ApiError(tr("Это не похоже на ключ API"))
+            app.config.update({"weather": {"keys": {pid: key}}})
+            app.weather.clear()
+            return self.api_weather_settings()
+
+        def api_weather_test(self, body, **_):
+            ui = app.config.get("ui")
+            try:
+                return app.weather.test(body.get("id"), ui["latitude"], ui["longitude"])
+            except WeatherError as e:
+                raise ApiError(str(e), HTTPStatus.BAD_GATEWAY)
+
         def api_weather_search(self, query, **_):
             try:
                 return {"results": app.weather.search((query.get("q") or [""])[0], app.config.get("ui", "language"))}
@@ -835,6 +888,10 @@ def make_handler(app, trusted, port):
         ("POST", "/location/key"): (H.api_location_key, False),
         ("GET", "/m/weather/forecast"): (H.api_weather_forecast, False),
         ("GET", "/m/weather/search"): (H.api_weather_search, False),
+        ("GET", "/m/weather/settings"): (H.api_weather_settings, False),
+        ("POST", "/m/weather/settings"): (H.api_weather_settings_save, False),
+        ("POST", "/m/weather/key"): (H.api_weather_key, False),
+        ("POST", "/m/weather/test"): (H.api_weather_test, False),
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),

@@ -47,7 +47,8 @@ function store(api, loc) {
           }),
         ]);
         s.error = null;
-        s.timer = setTimeout(s.load, REFRESH_MS);
+        // Интервал задаётся в админке («Погода»), сервер сообщает его в ответе.
+        s.timer = setTimeout(s.load, (s.data.refresh || REFRESH_MS / 1000) * 1000);
       } catch (e) {
         s.error = e.message;
         s.timer = setTimeout(s.load, RETRY_MS);
@@ -96,6 +97,17 @@ function pressure(hpa, o) {
   if (hpa == null) return "–";
   if (o.pressure_unit === "hpa") return t("{v} гПа", { v: Math.round(hpa) });
   return t("{v} мм рт. ст.", { v: Math.round(hpa * 0.750062) });
+}
+
+// «Как в настройках погоды» (auto или не задано) -> единицы из админки.
+function withUnits(o, units = {}) {
+  const pick = (value, fallback) => (!value || value === "auto" ? fallback : value);
+  return {
+    ...o,
+    temp_unit: pick(o.temp_unit, units.temp || "c"),
+    wind_unit: pick(o.wind_unit, units.wind || "ms"),
+    pressure_unit: pick(o.pressure_unit, units.pressure || "mmhg"),
+  };
 }
 
 const CONDITIONS = {
@@ -460,7 +472,7 @@ function mountWeather(view) {
       if (!state || !size.w) return;
       if (state.data) {
         try {
-          root.innerHTML = VIEWS[view](state.data, o, size);
+          root.innerHTML = VIEWS[view](state.data, withUnits(o, state.data.units), size);
         } catch (e) {
           console.error("weather render failed", view, e);
           root.innerHTML = `<div class="wx-empty">${t("Нет данных о погоде")}</div>`;
