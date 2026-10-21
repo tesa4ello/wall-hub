@@ -23,7 +23,7 @@ body.kiosk {
   gap: 6px;
   padding: 6px;
 }
-.widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 16px; container-type: size; }
+.widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: var(--tile-radius); container-type: size; }
 .widget-card { background: var(--surface); }
 
 /* --- фон и стекло (см. lib/wallpaper.js) -------------------------------------- */

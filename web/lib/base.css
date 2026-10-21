@@ -44,6 +44,12 @@
   color-scheme: light;
 }
 
+:root {
+  /* Плитки виджетов: скругление и внутренний отступ для содержимого. */
+  --tile-radius: 16px;
+  --tile-pad: 14px;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
