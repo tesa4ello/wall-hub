@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
+from . import screen
 from .modules import Registry
 from .store import Store, StoreError
 from .location import MODES as LOCATION_MODES, LocationError, Locator
@@ -179,6 +180,7 @@ class App:
         # сразу выходит из долгого опроса и начинает показывать ход установки.
         self.update_started = None
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
+        self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
                            on_change=self.modules_changed)
         i18n.set_language(config.get("ui", "language"))
@@ -317,7 +319,9 @@ def make_handler(app, trusted, port):
             if trusted and self.headers.get("Host") not in allowed_hosts:
                 self.send_error_json("Forbidden", HTTPStatus.FORBIDDEN)
                 return
-            if url.path.startswith("/api/"):
+            if method == "GET" and url.path == "/api/screen/ws":
+                self.handle_screen_ws()
+            elif url.path.startswith("/api/"):
                 self.handle_api(method, url.path[len("/api"):], parse_qs(url.query))
             elif method in ("GET", "HEAD") and url.path.startswith("/bg/"):
                 self.handle_background(url.path[len("/bg/"):])
@@ -346,6 +350,40 @@ def make_handler(app, trusted, port):
                 self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
                 return
             self.send_file(full)
+
+        def handle_screen_ws(self):
+            """WebSocket трансляции экрана: байты VNC в обе стороны (см. screen.py).
+            Только для админки: киоску смотреть на себя незачем."""
+            if trusted or not self.authorized():
+                self.send_error_json("Unauthorized", HTTPStatus.UNAUTHORIZED)
+                return
+            origin = self.headers.get("Origin", "")
+            key = self.headers.get("Sec-WebSocket-Key")
+            if (self.headers.get("Upgrade", "").lower() != "websocket" or not key
+                    or urlsplit(origin).netloc != self.headers.get("Host")):
+                self.send_error_json("Bad request", HTTPStatus.BAD_REQUEST)
+                return
+            app.screen.acquire()
+            try:
+                try:
+                    vnc = app.screen.connect_vnc()
+                except OSError:
+                    self.send_error_json(tr("Трансляция экрана не запустилась"), HTTPStatus.BAD_GATEWAY)
+                    return
+                self.send_response(HTTPStatus.SWITCHING_PROTOCOLS)
+                self.send_header("Upgrade", "websocket")
+                self.send_header("Connection", "Upgrade")
+                self.send_header("Sec-WebSocket-Accept", screen.accept_key(key))
+                protocols = [p.strip() for p in self.headers.get("Sec-WebSocket-Protocol", "").split(",") if p.strip()]
+                if protocols:
+                    self.send_header("Sec-WebSocket-Protocol", protocols[0])
+                self.end_headers()
+                self.wfile.flush()
+                self.close_connection = True
+                self.connection.settimeout(None)
+                screen.pump(self.rfile, self.wfile, vnc)
+            finally:
+                app.screen.release()
 
         def handle_background(self, name):
             # В админке фоны (возможно, личные фото) видны только после входа.

@@ -10,6 +10,7 @@ import { loadCatalog } from "/lib/widgets.js";
 import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
+import { ScreenView } from "/admin/screen.js";
 
 const $ = (id) => document.getElementById(id);
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
@@ -20,6 +21,7 @@ const TABS = [
   { id: "display", title: "Экран", icon: "display" },
   { id: "desktops", title: "Столы", icon: "grid" },
   { id: "modules", title: "Модули", icon: "plus" },
+  { id: "screen", title: "Трансляция", icon: "eye" },
   { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
   { id: "updates", title: "Обновления", icon: "refresh" },
   { id: "system", title: "Система", icon: "info" },
@@ -147,12 +149,14 @@ function show(tab) {
 }
 
 function render() {
-  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   editor?.destroy();
   editor = null;
+  screenView.destroy();
   $("content").classList.toggle("wide", state.tab === "desktops");
   $("content").innerHTML = views[state.tab]();
   if (state.tab === "desktops") mountEditor();
+  if (state.tab === "screen") screenView.mount();
 }
 
 async function saveUi(patch) {
@@ -204,6 +208,8 @@ function renderDisplay() {
     </section>
     ${backgrounds.render(ui)}`;
 }
+
+const screenView = new ScreenView();
 
 const store = new StorePanel({
   guarded,
@@ -485,6 +491,7 @@ $("content").addEventListener("change", async (e) => {
   const el = e.target;
   if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onChange(e).catch(() => true))) return;
+  if (e.target.id === "screen-control") return screenView.setControl(e.target.checked);
   if (el.dataset.ui) {
     let value = el.value;
     if ("int" in el.dataset) value = parseInt(el.value, 10);
@@ -552,6 +559,7 @@ $("content").addEventListener("click", async (e) => {
   if (!b || b.disabled || b.getAttribute("type") === "submit") return;
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
+  if ("screenReconnect" in b.dataset) return screenView.mount();
   const d = b.dataset;
   try {
     if ("locate" in d) {

@@ -201,6 +201,16 @@ There is no gear icon; the interface is touch only:
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
 
+### Screen mirror
+
+The "Screen" tab in the admin shows the panel screen live (noVNC, vendored in
+`web/lib/vendor/`). It is view-only by default; the "Control" checkbox sends
+clicks, gestures and keys to the panel. Under the hood x11vnc
+(`wallhub-vnc.service`, running as the kiosk user) listens only on
+`127.0.0.1:5900`, and the service exposes it over the `/api/screen/ws`
+WebSocket to signed-in admin sessions only. The unit starts when the tab is
+opened and stops a minute after it is closed.
+
 ### Weather and location
 
 The Weather module (`web/modules/weather`, backend `wallhub/weather.py`)
