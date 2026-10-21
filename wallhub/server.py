@@ -41,6 +41,9 @@ MAX_BODY = 64 * 1024
 # Сколько секунд /api/revision?wait=… держит запрос без изменений.
 LONG_POLL = 20
 LONG_POLL_BUSY = 2
+# Сколько секунд после запуска обновления опрашивать часто, пока обновлятор
+# не записал, что установка идёт.
+UPDATE_START_GRACE = 30
 # Загрузка фона: две картинки в base64 внутри JSON.
 MAX_UPLOAD = 16 * 1024 * 1024
 
@@ -172,6 +175,9 @@ class App:
         i18n.load(self.web_root, self.modules.loaded())
         # Счётчик смен набора модулей: киоск перезагружается, когда он меняется.
         self.modules_rev = 0
+        # Когда из админки запустили обновление (time.monotonic()): киоск
+        # сразу выходит из долгого опроса и начинает показывать ход установки.
+        self.update_started = None
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
                            on_change=self.modules_changed)
@@ -439,9 +445,12 @@ def make_handler(app, trusted, port):
             except (KeyError, IndexError, ValueError):
                 seen = None
             if seen is not None:
-                installing = app.updates.status().get("state") == "installing"
-                app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen,
-                                LONG_POLL_BUSY if installing else LONG_POLL)
+                started = app.update_started
+                busy = (app.updates.status().get("state") == "installing"
+                        or (started is not None and time.monotonic() - started < UPDATE_START_GRACE))
+                app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen
+                                or app.update_started != started,
+                                LONG_POLL_BUSY if busy else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
             return {
@@ -749,6 +758,9 @@ def make_handler(app, trusted, port):
                 app.updates.start(mode)
             except subprocess.SubprocessError as e:
                 raise ApiError(tr("Не удалось запустить обновление: {error}", error=e), HTTPStatus.BAD_GATEWAY)
+            if mode != "check":
+                app.update_started = time.monotonic()
+                app.config.notify()
 
     H = Handler
     # (метод, путь) -> (функция, доступна ли без входа)
