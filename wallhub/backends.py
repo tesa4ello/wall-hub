@@ -59,19 +59,6 @@ class Context:
     def settings(self):
         return dict(self._host.config.get("module_settings").get(self.id) or {})  # копия
 
-    # SSH-ключи панели (wallhub.sshkeys): модуль только пользуется ими.
-    def ssh_keys(self):
-        """[{id, title, type, public_key}] без приватных частей."""
-        return [{k: key[k] for k in ("id", "title", "type", "public_key")} for key in self._host.ssh.list()] if self._host.ssh else []
-
-    def ssh_key_path(self, key_id):
-        """Путь к приватному ключу (0600) для ssh -i или None."""
-        return self._host.ssh.path(key_id) if self._host.ssh else None
-
-    def ssh_known_hosts(self):
-        """Общий known_hosts панели (ssh -o UserKnownHostsFile=...)."""
-        return self._host.ssh.known_hosts if self._host.ssh else None
-
     def save_settings(self, settings):
         if not isinstance(settings, dict):
             raise ValueError("settings must be a dict")
@@ -88,9 +75,8 @@ def backend_path(module):
 
 
 class Backends:
-    def __init__(self, config, data_root, ssh=None):
+    def __init__(self, config, data_root):
         self.config = config
-        self.ssh = ssh
         self.data_root = data_root
         self.routes = {}  # (id, метод, путь) -> (handler, admin)
         self.running = {}  # id -> {"path", "stop"}
