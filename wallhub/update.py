@@ -49,7 +49,8 @@ class Updates:
     def progress(self):
         """Ход обновления для экрана панели: идущее или только что закончившееся.
 
-        Готовое обновление показывается минуту, ошибка — десять минут. Итог
+        Готовое обновление показывается минуту (после перезагрузки панели —
+        три, чтобы надпись застала загрузку), ошибка — десять минут. Итог
         простой проверки (job="check") на экран не выводится.
         """
         status = self.status()
@@ -61,7 +62,8 @@ class Updates:
         except (KeyError, TypeError, ValueError):
             return None
         age = (datetime.datetime.now(finished.tzinfo) - finished).total_seconds()
-        if status.get("job") in ("install", "rollback") and status.get("result") in ("ok", "failed") and 0 <= age < (60 if status["result"] == "ok" else 600):
+        ok_for = 180 if status.get("reboot") else 60
+        if status.get("job") in ("install", "rollback") and status.get("result") in ("ok", "failed") and 0 <= age < (ok_for if status["result"] == "ok" else 600):
             return {k: status.get(k) for k in keys}
         return None
 

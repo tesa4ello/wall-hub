@@ -64,6 +64,31 @@ class Context:
             raise ValueError("settings must be a dict")
         self._host.config.set(("module_settings", self.id), settings)
 
+    def notify(self, title, text="", level="info", key=None, action=None, icon=None, sound=True, **params):
+        """Уведомление на экране и в шторке. title, text — русские строки
+        (ключи i18n модуля) с {подстановками} из params. level: info, ok, warn,
+        crit. key: новое уведомление с тем же ключом заменяет прежнее.
+        action: {"kind": "module", "label": "Открыть"} и т. п."""
+        if self._host.notifications is None:
+            return None
+        return self._host.notifications.add(self.id, title, text, level=level, icon=icon, action=action,
+                                            key=key, params=params, sound=sound)
+
+    def clear_notification(self, key):
+        """Снять своё уведомление с ключом key (например, проблема ушла)."""
+        if self._host.notifications is not None:
+            self._host.notifications.remove_key(self.id, key)
+
+    def tile(self, tile_id, title, text="", level="info", icon=None, **params):
+        """Плитка модуля в шторке: короткое состояние. Повторный вызов с тем
+        же tile_id обновляет её."""
+        if self._host.tiles is not None:
+            self._host.tiles.set(self.id, tile_id, title, text, level=level, icon=icon, params=params)
+
+    def remove_tile(self, tile_id=None):
+        if self._host.tiles is not None:
+            self._host.tiles.remove(self.id, tile_id)
+
 
 def backend_path(module):
     """Файл серверной части модуля или None (поля нет или оно неверное)."""
@@ -75,9 +100,11 @@ def backend_path(module):
 
 
 class Backends:
-    def __init__(self, config, data_root):
+    def __init__(self, config, data_root, notifications=None, tiles=None):
         self.config = config
         self.data_root = data_root
+        self.notifications = notifications
+        self.tiles = tiles
         self.routes = {}  # (id, метод, путь) -> (handler, admin)
         self.running = {}  # id -> {"path", "stop"}
         self.errors = {}  # id -> текст ошибки запуска
@@ -139,6 +166,9 @@ class Backends:
                 log.exception("модуль %s не остановился чисто", mid)
         self._drop_routes(mid)
         self._unload(entry["package"])
+        # Плитки показывают живое состояние: без серверной части их нет.
+        if self.tiles is not None:
+            self.tiles.remove(mid)
         log.info("серверная часть модуля %s остановлена", mid)
 
     def _drop_routes(self, mid):

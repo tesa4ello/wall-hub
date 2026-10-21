@@ -70,16 +70,23 @@ class System:
                 return {"device": device, "state": state, "connection": connection}
         return None
 
-    def wifi_state(self, rescan=False):
-        """Состояние Wi‑Fi: радио, подключение, видимые и сохранённые сети."""
+    def wifi_state(self, rescan=False, brief=False):
+        """Состояние Wi‑Fi: радио, подключение, видимые и сохранённые сети.
+
+        brief — только радио и подключение, без списка сетей: список может
+        запустить сканирование на несколько секунд, а шторке он не нужен.
+        """
         if self.dry_run:
-            return self._fake_wifi_state()
+            state = self._fake_wifi_state()
+            signal = next((n["signal"] for n in state["networks"] if n["active"]), None)
+            state["signal"] = signal
+            return dict(state, networks=[], saved=[]) if brief else state
         with self._lock:
             radio = self._run(["nmcli", "radio", "wifi"]).strip() == "enabled"
             device = self.wifi_device()
-            saved = self._saved_wifi()
+            saved = [] if brief else self._saved_wifi()
             networks = []
-            if radio and device:
+            if radio and device and not brief:
                 out = self._run([
                     "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
                     "device", "wifi", "list", "--rescan", "yes" if rescan else "auto",
@@ -102,9 +109,19 @@ class System:
                     if prev is None or item["active"] or (not prev["active"] and item["signal"] > prev["signal"]):
                         seen[ssid] = item
                 networks = sorted(seen.values(), key=lambda n: (not n["active"], -n["signal"]))
+            signal = None
+            if brief and radio and device and device["state"] == "connected":
+                # Уровень текущей сети из кэша NetworkManager, без сканирования.
+                out = self._run(["nmcli", "-t", "-f", "IN-USE,SIGNAL", "device", "wifi", "list", "--rescan", "no"])
+                for line in out.splitlines():
+                    use, sig = (split_terse(line) + ["", ""])[:2]
+                    if use.strip() == "*" and sig.isdigit():
+                        signal = int(sig)
+                        break
             return {
                 "available": device is not None,
                 "radio": radio,
+                "signal": signal if brief else next((n["signal"] for n in networks if n["active"]), None),
                 "device": device["device"] if device else None,
                 "connection": device["connection"] if device and device["state"] == "connected" else None,
                 "networks": networks,

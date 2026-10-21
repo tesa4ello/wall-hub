@@ -7,10 +7,26 @@ import { addTranslations, t } from "/lib/i18n.js";
 const modules = new Map();
 
 // Звук для виджетов: ctx.sound.play(name?). На панели его подключает app.js,
-// в превью админки он молчит.
+// в превью админки он молчит. play(name, {source}) — source: id модуля, чтобы
+// без имени звучал звук, выбранный для этого модуля.
 let sound = { play: () => false };
 export function setSound(player) {
   sound = player;
+}
+
+// Уведомление от виджета: notify({title, text, level, key, action, sound}).
+// Текст модуль переводит сам через t(). На панели — всплывашка и шторка,
+// в превью админки ничего не делает.
+let notifyEnabled = false;
+export function enableNotify() {
+  notifyEnabled = true;
+}
+
+function notifier(module) {
+  return (note) => {
+    if (!notifyEnabled) return Promise.resolve(null);
+    return api.post("/notifications", { ...note, module });
+  };
 }
 
 function ensureStyle(href) {
@@ -52,7 +68,13 @@ export async function mountWidget(el, w, catalog) {
     const mod = await loadModule(module);
     const mount = mod.widgets && mod.widgets[id];
     if (!mount) throw new Error("модуль не экспортирует виджет");
-    return mount(el, { options: w.options || {}, api, sound }) || {};
+    const ctx = {
+      options: w.options || {},
+      api,
+      sound: { play: (name) => sound.play(name, { source: module }) },
+      notify: notifier(module),
+    };
+    return mount(el, ctx) || {};
   } catch (e) {
     console.error("widget failed", w.type, e);
     el.innerHTML = `<div class="widget-error">${t("Виджет «{title}» не загрузился", { title: meta ? t(meta.title) : w.type })}</div>`;

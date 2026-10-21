@@ -10,6 +10,7 @@ from wallhub.config import Config
 from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
 from wallhub.system import split_terse
+from wallhub.store import StoreError
 from wallhub.update import Updates, normalize_settings
 
 
@@ -179,6 +180,10 @@ class UpdateProgressTest(unittest.TestCase):
         self.assertIsNone(self.progress(state="idle", job="install", result="ok", finished_at=self.ago(120)))
         self.assertIsNotNone(self.progress(state="idle", job="install", result="failed", finished_at=self.ago(120)))
 
+    def test_result_after_reboot_outlives_boot(self):
+        self.assertIsNotNone(self.progress(state="idle", job="install", result="ok", reboot=True, finished_at=self.ago(120)))
+        self.assertIsNone(self.progress(state="idle", job="install", result="ok", reboot=True, finished_at=self.ago(200)))
+
     def test_check_result_is_not_shown(self):
         self.assertIsNone(self.progress(state="idle", job="check", result="failed", finished_at=self.ago(5)))
         self.assertIsNone(self.progress(state="idle"))
@@ -242,7 +247,10 @@ class StoreTest(unittest.TestCase):
         catalog = {"modules": [{"id": "hello", "version": "1.2.0", "core": "1", "title": "Привет"},
                                {"id": "clock", "version": "9.0.0", "core": "1", "title": "Часы"}]}
 
-        def fetch(url, accept=None, limit=None):
+        self.tokens_seen = []
+
+        def fetch(url, accept=None, limit=None, token=""):
+            self.tokens_seen.append(token)
             if "/commits/" in url:
                 return json.dumps({"sha": "abcdef1234567"}).encode()
             if "catalog.json" in url:
@@ -283,6 +291,39 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(StoreError):
             self.store.install("clock")
 
+    def test_catalog_token(self):
+        self.store.refresh()
+        self.assertEqual(self.tokens_seen[-1], "")
+        self.assertEqual(self.store.listing()["catalogs"][0]["token"], "")
+        self.store.set_token("main", "ghp_own")
+        path = os.path.join(self.store.tokens_dir, "main")
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.store.refresh()
+        self.assertEqual(self.tokens_seen[-1], "ghp_own")
+        self.assertEqual(self.store.listing()["catalogs"][0]["token"], "own")
+        self.assertNotIn("ghp_own", json.dumps(self.store.listing()))
+        self.store.set_token("main", "")
+        self.assertFalse(os.path.exists(path))
+        with self.assertRaises(StoreError):
+            self.store.set_token("main", "a b")
+
+    def test_catalog_token_path_escape(self):
+        # Пустой токен с чужим id не должен удалять файлы вне tokens_dir.
+        os.makedirs(self.store.tokens_dir, exist_ok=True)
+        victim = os.path.join(os.path.dirname(self.store.tokens_dir), "victim.json")
+        with open(victim, "w") as f:
+            f.write("{}")
+        for bad in ("../victim.json", "/etc/passwd", "c1/../../victim.json", ""):
+            with self.assertRaises(StoreError):
+                self.store.set_token(bad, "")
+        self.assertTrue(os.path.exists(victim))
+
+    def test_catalog_branch(self):
+        self.store.set_catalog("main", branch="dev")
+        self.assertEqual(self.store.catalogs()[0]["branch"], "dev")
+        with self.assertRaises(StoreError):
+            self.store.set_catalog("main", branch="bad branch")
+
     def test_parse_repo(self):
         from wallhub.store import StoreError, parse_repo
         self.assertEqual(parse_repo("https://github.com/tesa4ello/wallhub-modules.git"), "tesa4ello/wallhub-modules")
@@ -320,6 +361,22 @@ class DesktopsTest(unittest.TestCase):
             self.check([dict(clock, id="a", x=0, y=0, w=1)])
         with self.assertRaises(desktops.LayoutError):
             self.check([dict(clock, id="a", x=0, y=0, type="nope")])
+
+    def test_carousel_settings(self):
+        desks = [{"id": "d1", "widgets": [], "carousel": False}, {"id": "d2", "widgets": [], "interval": 60},
+                 {"id": "d3", "widgets": [], "carousel": True, "interval": 0}]
+        result = desktops.validate(desks, self.catalog, 16, 10)
+        self.assertIs(result[0]["carousel"], False)
+        self.assertEqual(result[1]["interval"], 60)
+        self.assertNotIn("carousel", result[2])
+        self.assertNotIn("interval", result[2])
+        with self.assertRaises(desktops.LayoutError):
+            desktops.validate([{"id": "d1", "widgets": [], "interval": 2}], self.catalog, 16, 10)
+        self.assertEqual(desktops.validate_carousel({"enabled": 1, "interval": 20, "resume": 0}),
+                         {"enabled": True, "interval": 20, "resume": 0})
+        for bad in ({"interval": 1}, {"resume": -1}, {"interval": True}, None):
+            with self.assertRaises(desktops.LayoutError):
+                desktops.validate_carousel(bad)
 
     def test_unknown_module_widget_is_kept(self):
         w = {"id": "a", "type": "gone/widget", "x": 0, "y": 0, "w": 3, "h": 2, "options": {"k": 1}}
@@ -592,6 +649,25 @@ class WeatherTest(unittest.TestCase):
         with self.assertRaises(self.weather.WeatherError):
             self.w.forecast(10, 10)
 
+    def test_error_is_readable(self):
+        import urllib.error
+        from wallhub import i18n
+        self.fail = True
+        with self.assertRaises(self.weather.WeatherError) as cm:
+            self.w.forecast(10, 10)
+        self.assertEqual(str(cm.exception), "Нет связи с сервисом погоды")
+        # Ошибка в кэше переводится заново после смены языка.
+        i18n.load(WEB)
+        i18n.set_language("en")
+        try:
+            with self.assertRaises(self.weather.WeatherError) as cm:
+                self.w.forecast(10, 10)
+            self.assertNotIn("Нет", str(cm.exception))
+        finally:
+            i18n.set_language("ru")
+        err = urllib.error.HTTPError("u", 401, "no", {}, None)
+        self.assertEqual(self.weather.reason(self.weather.WeatherError("x", [OSError(), err])), self.weather.REASON_KEY)
+
     def test_search(self):
         results = self.w.search("Мос")
         self.assertEqual(results[0]["name"], "Москва")
@@ -627,6 +703,21 @@ class LocationTest(unittest.TestCase):
             ui = config.get("ui")
             self.assertEqual((ui["latitude"], ui["location_name"]), (59.9386, "Санкт-Петербург"))
             self.assertFalse(loc.locate("ip")["changed"])
+
+    def test_location_error_follows_language(self):
+        from wallhub import i18n, location
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            loc = location.Locator(config, None, request=lambda url, body=None: {})
+            with self.assertRaises(location.LocationError):
+                loc.locate("ip")
+            self.assertTrue(loc.status()["error"].startswith("Не удалось определить место"))
+            i18n.load(WEB)
+            i18n.set_language("en")
+            try:
+                self.assertTrue(loc.status()["error"].startswith("Could not"))
+            finally:
+                i18n.set_language("ru")
 
     def test_manual_coordinates_kept_on_upgrade(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1090,7 +1181,10 @@ class ModuleUpdateTest(unittest.TestCase):
                 tar.addfile(info, io.BytesIO(data))
             return buf.getvalue()
 
-        def fetch(url, accept=None, limit=None):
+        self.tokens_seen = []
+
+        def fetch(url, accept=None, limit=None, token=""):
+            self.tokens_seen.append(token)
             if "/commits/" in url:
                 return json.dumps({"sha": "c" + self.version.replace(".", "") + "0000000"}).encode()
             if "catalog.json" in url:
@@ -1141,3 +1235,57 @@ class ModuleUpdateTest(unittest.TestCase):
         self.assertFalse(due({"schedule": "off"}, None, now))
         self.assertTrue(due({"schedule": "hourly"}, now - datetime.timedelta(minutes=59, seconds=30), now))
         self.assertEqual(normalize({"schedule": "x", "time": "25:00"}), {"schedule": "daily", "time": "04:30", "auto": True})
+
+
+class NotificationsTest(unittest.TestCase):
+    def setUp(self):
+        from wallhub.notifications import Notifications, Tiles
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "n.json")
+        self.n = Notifications(self.path)
+        self.tiles = Tiles()
+        self.tr = lambda text, params: text.format(**params)
+
+    def test_add_key_dismiss_and_persist(self):
+        from wallhub.notifications import Notifications
+        a = self.n.add("servers", "{host} недоступен", level="crit", key="down:a", params={"host": "a"})
+        self.n.add("servers", "{host} недоступен", level="crit", key="down:a", params={"host": "a"})
+        b = self.n.add("weather", "Нет прогноза", level="bogus")
+        items = self.n.listing(self.tr)
+        self.assertEqual([i["title"] for i in items], ["Нет прогноза", "a недоступен"])
+        self.assertEqual(items[0]["level"], "info")
+        self.assertEqual(self.n.seq, b["id"])
+        self.assertGreater(b["id"], a["id"])
+        self.n.dismiss(b["id"])
+        reloaded = Notifications(self.path)
+        self.assertEqual(len(reloaded.listing(self.tr)), 1)
+        self.assertEqual(reloaded.seq, self.n.listing(self.tr)[0]["id"])
+        self.n.remove_key("servers", "down:a")
+        self.assertEqual(self.n.listing(self.tr), [])
+
+    def test_validation_and_limit(self):
+        from wallhub.notifications import LIMIT
+        with self.assertRaises(ValueError):
+            self.n.add("m", "")
+        with self.assertRaises(ValueError):
+            self.n.add("m", "x", action={"kind": "rm -rf"})
+        for i in range(LIMIT + 5):
+            self.n.add("m", f"n{i}")
+        self.assertEqual(len(self.n.listing(self.tr)), LIMIT)
+        self.n.dismiss(None)
+        self.assertEqual(self.n.listing(self.tr), [])
+
+    def test_module_context(self):
+        from wallhub.backends import Backends, Context
+        backends = Backends(None, self.tmp.name, notifications=self.n, tiles=self.tiles)
+        ctx = Context(backends, "servers", self.tmp.name)
+        ctx.notify("{n} недоступен", level="warn", key="k", n=2)
+        ctx.tile("state", "Серверы", "{n} недоступен", level="crit", n=1)
+        self.assertEqual(self.n.listing(self.tr)[0]["title"], "2 недоступен")
+        self.assertEqual(self.n.listing(self.tr)[0]["source"], "servers")
+        self.assertEqual(self.tiles.listing(self.tr)[0]["text"], "1 недоступен")
+        rev = self.tiles.rev
+        ctx.remove_tile()
+        self.assertEqual(self.tiles.listing(self.tr), [])
+        self.assertGreater(self.tiles.rev, rev)
