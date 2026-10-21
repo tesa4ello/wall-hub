@@ -399,6 +399,20 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class KnownWifiTest(unittest.TestCase):
+    def test_forget_out_of_range_network(self):
+        from wallhub.system import CommandError, System
+        system = System(dry_run=True)
+        state = system.wifi_state()
+        self.assertIn("Дача", state["saved"])
+        self.assertNotIn("Дача", [n["ssid"] for n in state["networks"]])
+        system.wifi_forget("Дача")
+        self.assertNotIn("Дача", system.wifi_state()["saved"])
+        # Только сохранённые сети Wi‑Fi: чужое имя не удаляется.
+        with self.assertRaises(CommandError):
+            system.wifi_forget("Wired connection 1")
+
+
 class ModuleDisableTest(unittest.TestCase):
     """Выключенный модуль: серверная часть остановлена, виджеты в каталоге
     с пометкой disabled, настройки и расстановка на столах сохраняются."""

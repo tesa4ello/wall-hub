@@ -336,7 +336,24 @@ export class Settings {
           <button class="btn btn-small" data-wifi-rescan>${icon("refresh")}</button>
         </span>
       </div>
-      ${list}`;
+      ${list}
+      ${this.renderKnown()}`;
+  }
+
+  // Известные (сохранённые) сети, в том числе те, что сейчас не видны.
+  renderKnown() {
+    const w = this.wifi;
+    if (!w || w.error || !w.available || !(w.saved || []).length) return "";
+    const visible = new Set((w.networks || []).map((n) => n.ssid));
+    const rows = w.saved.map((name, i) => {
+      const meta = name === w.connection ? t("Подключено") : !w.radio ? "" : visible.has(name) ? t("Рядом") : t("Не в зоне");
+      return `
+        <div class="row">
+          <div class="row-label">${esc(name)}${meta ? `<div class="row-hint">${meta}</div>` : ""}</div>
+          <button class="btn btn-small" data-known-forget="${i}">${t("Забыть")}</button>
+        </div>`;
+    }).join("");
+    return `<div class="list-head"><span>${t("Известные сети")}</span></div><div class="card">${rows}</div>`;
   }
 
   async wifiAction(label, fn) {
@@ -859,6 +876,14 @@ export class Settings {
         await this.save({ [b.dataset.toggle]: !ui[b.dataset.toggle] });
       } else if (b.dataset.time) {
         await this.save({ [b.dataset.time]: shiftTime(ui[b.dataset.time], Number(b.dataset.delta)) });
+      } else if (b.dataset.knownForget !== undefined) {
+        const ssid = this.wifi.saved[Number(b.dataset.knownForget)];
+        const action = await choose({
+          title: t("Забыть сеть {ssid}?", { ssid }),
+          text: t("Панель перестанет к ней подключаться. Чтобы вернуться, понадобится пароль."),
+          options: [{ label: t("Отмена"), value: null }, { label: t("Забыть"), value: "forget", kind: "danger" }],
+        });
+        if (action === "forget") await this.wifiAction(t("Удаляю сеть…"), () => api.post("/wifi/forget", { ssid }));
       } else if (b.dataset.net !== undefined) {
         await this.onNetwork(this.wifi.networks[Number(b.dataset.net)]);
       } else if ("wifiRescan" in b.dataset) {
