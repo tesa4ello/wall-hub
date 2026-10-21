@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, status
+from .network import SPEED_PROVIDERS, Network
 from .update import Updates
 from .system import CommandError
 
@@ -98,7 +99,9 @@ class App:
         self.web_root = os.path.realpath(web_root)
         self.admin_port = admin_port
         self.sessions = auth.Sessions()
-        self.updates = Updates(os.path.dirname(os.path.abspath(config.path)), system.dry_run)
+        state_dir = os.path.dirname(os.path.abspath(config.path))
+        self.updates = Updates(state_dir, system.dry_run)
+        self.network = Network(state_dir, admin_port, system.dry_run)
         self.login_lock = threading.Lock()
         self.started = time.time()
         status.load_all()
@@ -303,6 +306,26 @@ def make_handler(app, trusted, port):
                 "dry_run": app.system.dry_run,
             }
 
+        # Сеть
+
+        def api_network(self, **_):
+            local = app.network.local()
+            return dict(local, admin=app.network.admin(local, app.admin_url()))
+
+        def api_network_external(self, query, **_):
+            return app.network.external(refresh=query.get("refresh") == ["1"])
+
+        def api_speedtest(self, **_):
+            return app.network.speed_status()
+
+        def api_speedtest_run(self, body, **_):
+            provider = body.get("provider")
+            if provider not in SPEED_PROVIDERS:
+                raise ApiError("Неизвестный тест скорости")
+            if not app.network.start_speedtest(provider):
+                raise ApiError("Тест скорости уже идёт", HTTPStatus.CONFLICT)
+            return app.network.speed_status()
+
         def api_modules(self, **_):
             return {"modules": app.module_catalog(), "providers": status.catalog()}
 
@@ -427,6 +450,10 @@ def make_handler(app, trusted, port):
         ("GET", "/status"): (H.api_status, False),
         ("GET", "/info"): (H.api_info, False),
         ("GET", "/modules"): (H.api_modules, False),
+        ("GET", "/network"): (H.api_network, False),
+        ("GET", "/network/external"): (H.api_network_external, False),
+        ("GET", "/speedtest"): (H.api_speedtest, False),
+        ("POST", "/speedtest"): (H.api_speedtest_run, False),
         ("GET", "/wifi"): (H.api_wifi, False),
         ("POST", "/wifi/connect"): (H.api_wifi_connect, False),
         ("POST", "/wifi/disconnect"): (H.api_wifi_disconnect, False),

@@ -18,6 +18,8 @@ const paths = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/>',
+  down: '<path d="M12 4v15M6 13l6 6 6-6"/>',
+  up: '<path d="M12 20V5M6 11l6-6 6 6"/>',
   check: '<path d="M5 12.5 10 17l9-10"/>',
   shift: '<path d="M12 4 4 12h4.5v7h7v-7H20Z"/>',
   backspace: '<path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"/><path d="m12 9 6 6M18 9l-6 6"/>',

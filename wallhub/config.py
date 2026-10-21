@@ -39,7 +39,7 @@ DEFAULTS = {
         {"id": "clock", "enabled": True, "options": {"seconds": True, "date": True}},
     ],
     # Пункты статусной строки (идентификаторы провайдеров из wallhub.status).
-    "statusbar": ["address", "wifi", "load", "memory", "temp", "traffic"],
+    "statusbar": ["wifi", "load", "memory", "temp", "traffic"],
     # Первый запуск: пока Wi‑Fi не выбран (или шаг не пропущен), киоск
     # открывает выбор сети.
     "setup": {"wifi_done": False},

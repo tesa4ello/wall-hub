@@ -5,6 +5,7 @@ import unittest
 
 from wallhub import auth
 from wallhub.config import Config
+from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
 from wallhub.system import split_terse
 
@@ -65,6 +66,23 @@ class NmcliTest(unittest.TestCase):
     def test_split_terse_escapes(self):
         self.assertEqual(split_terse(r"*:My\:Net:80:WPA2"), ["*", "My:Net", "80", "WPA2"])
         self.assertEqual(split_terse(r"a\\b:"), ["a\\b", ""])
+
+
+class ExternalIpTest(unittest.TestCase):
+    def test_parse(self):
+        self.assertEqual(parse_ip("json", '"203.0.113.5"'), "203.0.113.5")
+        self.assertEqual(parse_ip("text", "203.0.113.5\n"), "203.0.113.5")
+        self.assertEqual(parse_ip("trace", "fl=1\nip=203.0.113.5\nts=1\n"), "203.0.113.5")
+        with self.assertRaises(ValueError):
+            parse_ip("text", "<html>blocked</html>")
+
+    def test_group(self):
+        result = group_external([("A", "1.1.1.1"), ("B", "2.2.2.2"), ("C", "1.1.1.1"), ("D", None)])
+        self.assertEqual(result["addresses"], [
+            {"ip": "1.1.1.1", "services": ["A", "C"]},
+            {"ip": "2.2.2.2", "services": ["B"]},
+        ])
+        self.assertEqual(result["failed"], ["D"])
 
 
 if __name__ == "__main__":
