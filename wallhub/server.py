@@ -312,6 +312,11 @@ def make_handler(app, trusted, port):
                 str(body.get("password", "")),
                 bool(body.get("hidden", False)),
             )
+            if not app.config.get("setup", "wifi_done"):
+                app.config.update({"setup": {"wifi_done": True}})
+
+        def api_setup_wifi_done(self, **_):
+            app.config.update({"setup": {"wifi_done": True}})
 
         def api_wifi_disconnect(self, **_):
             app.system.wifi_disconnect()
@@ -387,6 +392,7 @@ def make_handler(app, trusted, port):
         ("POST", "/wifi/disconnect"): (H.api_wifi_disconnect, False),
         ("POST", "/wifi/forget"): (H.api_wifi_forget, False),
         ("POST", "/wifi/radio"): (H.api_wifi_radio, False),
+        ("POST", "/setup/wifi-done"): (H.api_setup_wifi_done, False),
         ("POST", "/power"): (H.api_power, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),
         ("GET", "/time"): (H.api_time, False),

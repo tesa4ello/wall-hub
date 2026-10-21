@@ -25,7 +25,7 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PACKAGES=(
     # бэкенд
-    python3 python3-venv curl ca-certificates
+    python3 python3-venv python3-yaml curl ca-certificates
     # сеть и время
     network-manager polkitd systemd-timesyncd
     # графика: минимальный X11 + openbox + chromium
@@ -81,6 +81,17 @@ apt-get install -y --no-install-recommends "${TO_INSTALL[@]}"
 systemctl enable --now NetworkManager
 if ! dpkg -s chrony >/dev/null 2>&1; then
     timedatectl set-ntp true || true
+fi
+# Armbian поднимает Wi‑Fi через netplan + networkd, и NetworkManager его не
+# трогает. Отдаём Wi‑Fi адаптер (только его) NetworkManager-у; сеть потом
+# выбирается на самой панели при первом запуске.
+if [ -d /etc/netplan ] && command -v netplan >/dev/null; then
+    log "Передаю Wi‑Fi под управление NetworkManager"
+    python3 "$SRC_DIR/deploy/netplan-release-wifi.py"
+    sleep 3
+fi
+if nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^wifi:unmanaged'; then
+    warn "Wi‑Fi адаптер всё ещё не под NetworkManager (unmanaged): проверьте /etc/netplan."
 fi
 if ! nmcli -t -f TYPE device 2>/dev/null | grep -qx wifi; then
     warn "NetworkManager не видит Wi‑Fi адаптер: управление сетями на экране будет недоступно."

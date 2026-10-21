@@ -183,3 +183,20 @@ body.kiosk {
 
 .power { display: flex; gap: 12px; margin-top: 8px; }
 .power-btn { flex: 1; min-height: 60px; font-size: 17px; }
+
+/* --- первый запуск -------------------------------------------------------- */
+
+.setup {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 0 64px 22px 0;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.setup > div { flex: 1; }
+.setup-title { font-size: 20px; font-weight: 650; }
+.setup-text { margin-top: 4px; opacity: 0.9; line-height: 1.4; }
+.setup .btn { background: rgba(255, 255, 255, 0.18); border-color: transparent; color: inherit; }

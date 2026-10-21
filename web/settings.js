@@ -34,6 +34,8 @@ export class Settings {
     this.wifi = null;
     this.wifiBusy = false;
     this.wifiTimer = null;
+    // Режим первого запуска: экран выбора Wi‑Fi с кнопкой «Пропустить».
+    this.setup = false;
 
     root.innerHTML = `
       <div class="settings-nav">
@@ -60,6 +62,24 @@ export class Settings {
   close() {
     this.root.hidden = true;
     clearInterval(this.wifiTimer);
+    // Закрытие окна первого запуска равносильно «Пропустить».
+    if (this.setup) this.finishSetup();
+  }
+
+  openSetup() {
+    this.setup = true;
+    this.section = "wifi";
+    this.open();
+  }
+
+  async finishSetup() {
+    this.setup = false;
+    try {
+      await api.post("/setup/wifi-done");
+    } catch {
+      // Не критично: окно просто покажется снова при следующем запуске.
+    }
+    if (!this.root.hidden && this.section === "wifi") this.render();
   }
 
   onConfig(config) {
@@ -188,7 +208,16 @@ export class Settings {
         .join("")}</div>`;
     }
     const busy = this.wifiBusy ? `<div class="busy">${esc(this.wifiBusy)}</div>` : "";
+    const setup = this.setup ? `
+      <div class="setup">
+        <div>
+          <div class="setup-title">Добро пожаловать!</div>
+          <div class="setup-text">Выберите сеть Wi‑Fi, к которой подключить панель. Это можно сделать и позже в настройках.</div>
+        </div>
+        <button class="btn" data-setup-skip>Пропустить</button>
+      </div>` : "";
     return `
+      ${setup}
       <h2>Wi‑Fi</h2>
       <div class="card">
         <div class="row">
@@ -250,7 +279,7 @@ export class Settings {
       if (action === "forget") await this.wifiAction("Удаляю сеть…", () => api.post("/wifi/forget", { ssid: net.ssid }));
       if (action !== "connect") return;
       const ok = await this.wifiAction(`Подключаюсь к ${net.ssid}…`, () => api.post("/wifi/connect", { ssid: net.ssid }));
-      if (ok) toast(`Подключено к ${net.ssid}`);
+      if (ok) this.connected(net.ssid);
       return;
     }
     let password = "";
@@ -259,7 +288,16 @@ export class Settings {
       if (password === null) return;
     }
     const ok = await this.wifiAction(`Подключаюсь к ${net.ssid}…`, () => api.post("/wifi/connect", { ssid: net.ssid, password }));
-    if (ok) toast(`Подключено к ${net.ssid}`);
+    if (ok) this.connected(net.ssid);
+  }
+
+  connected(ssid) {
+    toast(`Подключено к ${ssid}`);
+    // Бэкенд сам отмечает первый запуск пройденным; окно настроек закрываем.
+    if (this.setup) {
+      this.setup = false;
+      this.close();
+    }
   }
 
   async onHiddenNetwork() {
@@ -268,7 +306,7 @@ export class Settings {
     const password = await openKeyboard({ title: `Пароль для ${ssid} (пусто — без пароля)`, password: true });
     if (password === null) return;
     const ok = await this.wifiAction(`Подключаюсь к ${ssid}…`, () => api.post("/wifi/connect", { ssid, password, hidden: true }));
-    if (ok) toast(`Подключено к ${ssid}`);
+    if (ok) this.connected(ssid);
   }
 
   // --- Система ----------------------------------------------------------------
@@ -348,6 +386,8 @@ export class Settings {
         this.wifi = null;
         this.render();
         await this.loadWifi(true);
+      } else if ("setupSkip" in b.dataset) {
+        this.close();
       } else if ("wifiHidden" in b.dataset) {
         await this.onHiddenNetwork();
       } else if ("wifiRadio" in b.dataset) {

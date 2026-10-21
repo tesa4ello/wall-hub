@@ -40,6 +40,9 @@ DEFAULTS = {
     ],
     # Пункты статусной строки (идентификаторы провайдеров из wallhub.status).
     "statusbar": ["address", "wifi", "load", "memory", "temp", "traffic"],
+    # Первый запуск: пока Wi‑Fi не выбран (или шаг не пропущен), киоск
+    # открывает выбор сети.
+    "setup": {"wifi_done": False},
     "admin": {
         # Хеш пароля админки (см. wallhub.auth). Пустой = админка закрыта.
         "password_hash": "",
