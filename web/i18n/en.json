@@ -464,5 +464,15 @@
   "Без ключа, метеослужба Норвегии, весь мир. Бесплатно (CC BY 4.0).": "No key, Norwegian Meteorological Institute, worldwide. Free (CC BY 4.0).",
   "Ключ бесплатного тарифа: 1000 запросов в сутки, прогноз на 5 дней с шагом 3 часа.": "Free plan key: 1,000 calls a day, 5-day forecast in 3-hour steps.",
   "Ключ бесплатного тарифа: 1 млн запросов в месяц, прогноз на 3 дня по часам.": "Free plan key: 1M calls a month, 3-day hourly forecast.",
-  "Ключ API Яндекс Погоды (платный, есть пробный период). Запрос не чаще раза в 30 минут.": "Yandex Weather API key (paid, trial available). Queried at most every 30 minutes."
+  "Ключ API Яндекс Погоды (платный, есть пробный период). Запрос не чаще раза в 30 минут.": "Yandex Weather API key (paid, trial available). Queried at most every 30 minutes.",
+  "Панель": "Panel",
+  "Расширения": "Extensions",
+  "Тема, затемнение, местоположение и фон": "Theme, dimming, location and background",
+  "Виджеты на рабочих столах панели": "Widgets on the panel's desktops",
+  "Что сейчас на экране панели": "What the panel is showing right now",
+  "Дополнительные виджеты из каталогов": "Extra widgets from catalogs",
+  "Источники прогноза и место для виджетов погоды": "Forecast sources and location for weather widgets",
+  "Беспроводная сеть панели": "The panel's wireless network",
+  "Версия панели и автоматические обновления": "Panel version and automatic updates",
+  "Часовой пояс, пароль и питание": "Time zone, password and power"
 }
