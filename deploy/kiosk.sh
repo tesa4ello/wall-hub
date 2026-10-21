@@ -5,7 +5,8 @@
 URL="http://localhost:8080/"
 PROFILE="$HOME/.config/chromium"
 
-# Экран не гаснет сам: затемнением управляет интерфейс.
+# Хранитель экрана X не нужен: затемнением управляет интерфейс,
+# а гашением подсветки (DPMS) — display-sync.py по настройкам панели.
 xset s off
 xset s noblank
 xset -dpms
@@ -16,6 +17,8 @@ while ! curl -fs -o /dev/null "${URL}api/session" && [ $i -lt 60 ]; do
     sleep 1
     i=$((i + 1))
 done
+
+python3 /opt/wallhub/deploy/display-sync.py &
 
 while true; do
     # После выключения питания Chromium считает, что упал, и предлагает

@@ -4,6 +4,7 @@ import { api } from "/lib/api.js";
 import { icon, signalBars } from "/lib/icons.js";
 import { choose, confirmDialog, toast } from "/lib/dialog.js";
 import { openKeyboard } from "/lib/keyboard.js";
+import { formatTime, sunTimes } from "/lib/theme.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -15,6 +16,8 @@ const SECTIONS = [
 
 const DIM_AFTER = [0, 1, 5, 15, 30];
 const DIM_LEVEL = [50, 70, 85, 95];
+const NIGHT_DIM = [0, 20, 40, 60];
+const BLANK_AFTER = [0, 10, 30, 60];
 
 function shiftTime(hhmm, delta) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -98,20 +101,45 @@ export class Settings {
         <span class="stepper-value">${ui[key]}</span>
         <button class="btn" data-time="${key}" data-delta="30">+</button>
       </div>`;
+    const themeChoice = [
+      [{ theme_mode: "manual", theme: "light" }, icon("sun") + "Светлая", ui.theme_mode === "manual" && ui.theme === "light"],
+      [{ theme_mode: "manual", theme: "dark" }, icon("moon") + "Тёмная", ui.theme_mode === "manual" && ui.theme === "dark"],
+      [{ theme_mode: "schedule" }, "По времени", ui.theme_mode === "schedule"],
+      [{ theme_mode: "sun" }, "По солнцу", ui.theme_mode === "sun"],
+    ];
+    // Границы ночи нужны и для темы, и для ночного приглушения.
+    const showSchedule = ui.theme_mode === "schedule" || (ui.theme_mode === "manual" && ui.night_dim > 0);
+    let sunRow = "";
+    if (ui.theme_mode === "sun") {
+      const sun = sunTimes(new Date(), ui.latitude, ui.longitude);
+      const text = sun.polar
+        ? (sun.polar === "day" ? "Полярный день" : "Полярная ночь")
+        : `Восход ${formatTime(sun.sunrise)} · закат ${formatTime(sun.sunset)}`;
+      sunRow = `
+        <div class="row">
+          <div class="row-label">Сегодня<div class="row-hint">Координаты ${ui.latitude.toFixed(2)}, ${ui.longitude.toFixed(2)} задаются в админке</div></div>
+          <div class="row-value">${text}</div>
+        </div>`;
+    }
     return `
       <h2>Экран</h2>
       <div class="card">
-        <div class="row ${ui.auto_theme ? "row-disabled" : ""}">
-          <div class="row-label">Тема</div>
-          ${seg("theme", [["light", icon("sun") + "Светлая"], ["dark", icon("moon") + "Тёмная"]])}
-        </div>
         <div class="row">
-          <div class="row-label">Автопереключение темы<div class="row-hint">Днём светлая, ночью тёмная</div></div>
-          <button class="switch" data-toggle="auto_theme" aria-checked="${ui.auto_theme}"></button>
+          <div class="row-label">Тема</div>
+          <div class="segmented">${themeChoice
+            .map(([patch, label, on]) => `<button data-patch='${JSON.stringify(patch)}' aria-pressed="${on}">${label}</button>`)
+            .join("")}</div>
         </div>
-        ${ui.auto_theme ? `
-          <div class="row"><div class="row-label">Светлая с</div>${timeStepper("day_start")}</div>
-          <div class="row"><div class="row-label">Тёмная с</div>${timeStepper("night_start")}</div>` : ""}
+        ${sunRow}
+        ${showSchedule ? `
+          <div class="row"><div class="row-label">День с</div>${timeStepper("day_start")}</div>
+          <div class="row"><div class="row-label">Ночь с</div>${timeStepper("night_start")}</div>` : ""}
+      </div>
+      <div class="card">
+        <div class="row">
+          <div class="row-label">Приглушать ночью<div class="row-hint">${ui.theme_mode === "sun" ? "От заката до восхода" : "По времени дня и ночи"}</div></div>
+          ${seg("night_dim", NIGHT_DIM.map((l) => [l, l ? `${l}%` : "Нет"]))}
+        </div>
       </div>
       <div class="card">
         <div class="row">
@@ -121,6 +149,10 @@ export class Settings {
         <div class="row ${ui.dim_after_min ? "" : "row-disabled"}">
           <div class="row-label">Сила затемнения</div>
           ${seg("dim_level", DIM_LEVEL.map((l) => [l, `${l}%`]))}
+        </div>
+        <div class="row">
+          <div class="row-label">Гасить экран<div class="row-hint">Выключать подсветку при долгом простое</div></div>
+          ${seg("blank_after_min", BLANK_AFTER.map((m) => [m, m ? `${m} мин` : "Нет"]))}
         </div>
       </div>`;
   }
@@ -302,7 +334,9 @@ export class Settings {
     if (!b || b.disabled) return;
     const ui = this.config.ui;
     try {
-      if (b.dataset.set) {
+      if (b.dataset.patch) {
+        await this.save(JSON.parse(b.dataset.patch));
+      } else if (b.dataset.set) {
         await this.save({ [b.dataset.set]: JSON.parse(b.dataset.value) });
       } else if (b.dataset.toggle) {
         await this.save({ [b.dataset.toggle]: !ui[b.dataset.toggle] });

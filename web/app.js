@@ -2,7 +2,7 @@
 
 import { api } from "/lib/api.js";
 import { icon } from "/lib/icons.js";
-import { themeFor } from "/lib/theme.js";
+import { isNight, themeFor } from "/lib/theme.js";
 import { Settings } from "/settings.js";
 
 const state = {
@@ -18,7 +18,21 @@ const $ = (id) => document.getElementById(id);
 
 function applyTheme() {
   if (!state.config) return;
-  document.documentElement.dataset.theme = themeFor(state.config.ui, new Date());
+  const ui = state.config.ui;
+  const now = new Date();
+  const root = document.documentElement;
+  const theme = themeFor(ui, now);
+  if (root.dataset.theme !== theme) {
+    // Плавная смена темы: временно включаем переходы цветов у всех элементов.
+    root.classList.add("theme-anim");
+    root.dataset.theme = theme;
+    clearTimeout(applyTheme.timer);
+    applyTheme.timer = setTimeout(() => root.classList.remove("theme-anim"), 1600);
+  }
+  // Ночью экран постоянно приглушён, чтобы не светил в глаза.
+  const night = isNight(ui, now) ? ui.night_dim : 0;
+  $("night").style.opacity = night / 100;
+  dimmer.setFloor(night);
 }
 
 // --- модули ---------------------------------------------------------------
@@ -105,28 +119,43 @@ async function pollRevision() {
 
 // --- затемнение при простое -------------------------------------------------
 
+// Два шага: через dim_after_min экран затемняется до dim_level, через
+// blank_after_min становится полностью чёрным (подсветку при этом гасит
+// X-сервер через DPMS, см. deploy/display-sync.py). Первое касание после
+// этого только будит экран и не нажимает кнопку под затемнением.
 const dimmer = {
-  timer: null,
-  afterMs: 0,
+  timers: [],
+  dimMs: 0,
+  blankMs: 0,
   level: 80,
+  floor: 0,
   dimmed: false,
 
   configure(ui) {
-    this.afterMs = ui.dim_after_min * 60 * 1000;
+    this.dimMs = ui.dim_after_min * 60 * 1000;
+    this.blankMs = ui.blank_after_min * 60 * 1000;
     this.level = ui.dim_level;
-    $("dim").style.setProperty("--dim", this.level / 100);
     this.reset();
   },
 
-  reset() {
-    clearTimeout(this.timer);
-    if (this.afterMs > 0) this.timer = setTimeout(() => this.dim(), this.afterMs);
+  // Затемнение при простое не должно быть слабее ночного приглушения.
+  setFloor(percent) {
+    this.floor = percent;
   },
 
-  dim() {
+  reset() {
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    if (this.dimMs > 0) this.timers.push(setTimeout(() => this.dim(Math.max(this.level, this.floor)), this.dimMs));
+    if (this.blankMs > 0) this.timers.push(setTimeout(() => this.dim(100), this.blankMs));
+  },
+
+  dim(percent) {
     this.dimmed = true;
-    $("dim").hidden = false;
-    requestAnimationFrame(() => $("dim").classList.add("on"));
+    const el = $("dim");
+    el.style.setProperty("--dim", percent / 100);
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add("on"));
   },
 
   wake() {

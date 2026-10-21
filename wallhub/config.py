@@ -13,16 +13,25 @@ import threading
 
 DEFAULTS = {
     "ui": {
-        # light | dark
+        # Тема при ручном режиме: light | dark.
         "theme": "dark",
-        # Автопереключение темы по расписанию: днём светлая, ночью тёмная.
-        "auto_theme": False,
+        # Как выбирается тема: manual (вручную), schedule (по времени),
+        # sun (по восходу и закату). В режимах schedule и sun днём светлая,
+        # ночью тёмная. Тем же правилом определяется «ночь» для приглушения.
+        "theme_mode": "manual",
         "day_start": "07:00",
         "night_start": "21:00",
+        # Координаты для расчёта восхода и заката (по умолчанию Москва).
+        "latitude": 55.75,
+        "longitude": 37.62,
+        # Постоянное приглушение ночью, 0..90 %. 0 = выключено.
+        "night_dim": 40,
         # Затемнение при неактивности. 0 минут = выключено.
         "dim_after_min": 5,
         # Насколько затемнять, 0..95 %.
         "dim_level": 80,
+        # Полное гашение экрана (DPMS) при неактивности. 0 минут = не гасить.
+        "blank_after_min": 30,
         "language": "ru",
     },
     # Порядок и включённость модулей главного экрана.
@@ -54,6 +63,13 @@ def _merge(base, override):
     return result
 
 
+def _migrate(data):
+    """Приводит настройки старых версий к текущему виду."""
+    ui = data.get("ui", {})
+    if "auto_theme" in ui:
+        ui.setdefault("theme_mode", "schedule" if ui.pop("auto_theme") else "manual")
+
+
 class Config:
     def __init__(self, path):
         self.path = path
@@ -69,6 +85,7 @@ class Config:
                 data = json.load(f)
         with self._lock:
             self.revision = data.pop("_revision", 0)
+            _migrate(data)
             self._data = _merge(DEFAULTS, data)
 
     def _save_locked(self):

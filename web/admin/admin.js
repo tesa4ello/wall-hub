@@ -105,24 +105,39 @@ async function saveUi(patch) {
 function renderDisplay() {
   const ui = state.config.ui;
   const opts = (values, current) => values.map(([v, l]) => `<option value="${v}" ${v === current ? "selected" : ""}>${l}</option>`).join("");
+  const sched = ui.theme_mode === "sun" ? "disabled" : "";
   return `
     <h1>Экран</h1>
     <section class="panel">
+      <label class="field"><span>Выбор темы</span>
+        <select data-ui="theme_mode">${opts([["manual", "Вручную"], ["schedule", "По времени"], ["sun", "По солнцу"]], ui.theme_mode)}</select>
+      </label>
       <label class="field"><span>Тема</span>
-        <select data-ui="theme" ${ui.auto_theme ? "disabled" : ""}>${opts([["light", "Светлая"], ["dark", "Тёмная"]], ui.theme)}</select>
+        <select data-ui="theme" ${ui.theme_mode === "manual" ? "" : "disabled"}>${opts([["light", "Светлая"], ["dark", "Тёмная"]], ui.theme)}</select>
       </label>
-      <label class="field"><span>Автопереключение темы</span>
-        <button class="switch" data-ui-toggle="auto_theme" aria-checked="${ui.auto_theme}"></button>
+      <label class="field"><span>День с<small>В режиме «по времени» и для ночного приглушения</small></span>
+        <input type="time" data-ui="day_start" value="${ui.day_start}" ${sched}>
       </label>
-      <label class="field"><span>Светлая тема с</span><input type="time" data-ui="day_start" value="${ui.day_start}" ${ui.auto_theme ? "" : "disabled"}></label>
-      <label class="field"><span>Тёмная тема с</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${ui.auto_theme ? "" : "disabled"}></label>
+      <label class="field"><span>Ночь с</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${sched}></label>
+      <label class="field"><span>Широта<small>Для режима «по солнцу»</small></span>
+        <input type="number" step="0.01" min="-90" max="90" data-ui="latitude" data-float value="${ui.latitude}">
+      </label>
+      <label class="field"><span>Долгота</span>
+        <input type="number" step="0.01" min="-180" max="180" data-ui="longitude" data-float value="${ui.longitude}">
+      </label>
     </section>
     <section class="panel">
+      <label class="field"><span>Ночное приглушение, %<small>0 — не приглушать</small></span>
+        <input type="number" min="0" max="90" step="5" data-ui="night_dim" data-int value="${ui.night_dim}">
+      </label>
       <label class="field"><span>Затемнять через, мин<small>0 — не затемнять</small></span>
         <input type="number" min="0" max="240" data-ui="dim_after_min" data-int value="${ui.dim_after_min}">
       </label>
       <label class="field"><span>Сила затемнения, %</span>
         <input type="number" min="0" max="95" step="5" data-ui="dim_level" data-int value="${ui.dim_level}">
+      </label>
+      <label class="field"><span>Гасить экран через, мин<small>0 — не гасить</small></span>
+        <input type="number" min="0" max="240" data-ui="blank_after_min" data-int value="${ui.blank_after_min}">
       </label>
     </section>`;
 }
@@ -287,8 +302,10 @@ function renderSystem() {
 $("content").addEventListener("change", async (e) => {
   const el = e.target;
   if (el.dataset.ui) {
-    const value = "int" in el.dataset ? parseInt(el.value, 10) : el.value;
-    if ("int" in el.dataset && Number.isNaN(value)) return;
+    let value = el.value;
+    if ("int" in el.dataset) value = parseInt(el.value, 10);
+    if ("float" in el.dataset) value = parseFloat(el.value);
+    if (Number.isNaN(value)) return;
     await saveUi({ [el.dataset.ui]: value }).catch(() => render());
   } else if (el.dataset.modOpt !== undefined) {
     const m = state.draftModules[Number(el.dataset.modOpt)];
@@ -318,9 +335,7 @@ $("content").addEventListener("click", async (e) => {
   if (!b || b.disabled || b.type === "submit") return;
   const d = b.dataset;
   try {
-    if (d.uiToggle) {
-      await saveUi({ [d.uiToggle]: !state.config.ui[d.uiToggle] });
-    } else if (d.modToggle !== undefined) {
+    if (d.modToggle !== undefined) {
       const m = state.draftModules[Number(d.modToggle)];
       m.enabled = !m.enabled;
       await saveModules(state.draftModules);
