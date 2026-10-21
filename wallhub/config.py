@@ -72,6 +72,12 @@ DEFAULTS = {
     # Обновления. Канал — ключ из branches (ветка или "tags" — последний релиз).
     # schedule: off | hourly | 6h | daily (в time). Должно совпадать с
     # DEFAULT_SETTINGS в deploy/wallhub-update.py.
+    # Магазин модулей: каталоги — git-репозитории на GitHub (см. store.py).
+    # Основной каталог всегда первый, его можно только выключить.
+    "store": {
+        "main": {"repo": "tesa4ello/wallhub-modules", "branch": "main", "enabled": True},
+        "catalogs": [],
+    },
     "update": {
         "repo": "tesa4ello/wall-hub",
         "channel": "stable",
