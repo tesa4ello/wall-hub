@@ -64,6 +64,7 @@ export class Settings {
     this.wifi = null;
     this.wifiBusy = false;
     this.wifiTimer = null;
+    this.wifiScanning = false;
     this.net = null;
     this.external = null;
     this.externalBusy = false;
@@ -135,7 +136,6 @@ export class Settings {
       b.classList.toggle("active", b.dataset.section === section),
     );
     if (section === "wifi") {
-      this.wifi = null;
       this.loadWifi(true);
       this.wifiTimer = setInterval(() => this.loadWifi(false), 10000);
     }
@@ -227,18 +227,25 @@ export class Settings {
   // --- Wi‑Fi ------------------------------------------------------------------
 
   async loadWifi(rescan) {
+    // Пока идёт поиск, показываем прошлое состояние: иначе переключатель
+    // Wi‑Fi на эти секунды выглядел бы выключенным.
+    if (rescan) {
+      this.wifiScanning = true;
+      if (this.section === "wifi" && !this.root.hidden && !this.wifiBusy) this.render();
+    }
     try {
       this.wifi = await api.get("/wifi" + (rescan ? "?rescan=1" : ""));
     } catch (e) {
       this.wifi = { error: e.message };
     }
+    if (rescan) this.wifiScanning = false;
     if (this.section === "wifi" && !this.root.hidden && !this.wifiBusy) this.render();
   }
 
   renderWifi() {
     const w = this.wifi;
     let list;
-    if (!w) list = `<div class="empty">Ищу сети…</div>`;
+    if (!w || (this.wifiScanning && !(w.networks || []).length)) list = `<div class="empty">Ищу сети…</div>`;
     else if (w.error) list = `<div class="empty">${esc(w.error)}</div>`;
     else if (!w.available) list = `<div class="empty">Wi‑Fi адаптер не найден</div>`;
     else if (!w.radio) list = `<div class="empty">Wi‑Fi выключен</div>`;
@@ -269,12 +276,14 @@ export class Settings {
       <div class="card">
         <div class="row">
           <div class="row-label">Wi‑Fi${w && w.connection ? `<div class="row-hint">Подключено к ${esc(w.connection)}</div>` : ""}</div>
-          <button class="switch" data-wifi-radio aria-checked="${!!(w && w.radio)}" ${w && w.available ? "" : "disabled"}></button>
+          ${w && !w.error
+            ? `<button class="switch" data-wifi-radio aria-checked="${!!w.radio}" ${w.available ? "" : "disabled"}></button>`
+            : `<span class="row-value">…</span>`}
         </div>
       </div>
       ${busy}
       <div class="list-head">
-        <span>Доступные сети</span>
+        <span>Доступные сети${this.wifiScanning && w && (w.networks || []).length ? " · ищу…" : ""}</span>
         <span class="list-actions">
           <button class="btn btn-small" data-wifi-hidden>Скрытая сеть</button>
           <button class="btn btn-small" data-wifi-rescan>${icon("refresh")}</button>
@@ -654,8 +663,6 @@ export class Settings {
       } else if (b.dataset.net !== undefined) {
         await this.onNetwork(this.wifi.networks[Number(b.dataset.net)]);
       } else if ("wifiRescan" in b.dataset) {
-        this.wifi = null;
-        this.render();
         await this.loadWifi(true);
       } else if ("setupSkip" in b.dataset) {
         this.close();
