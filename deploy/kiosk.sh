@@ -51,6 +51,6 @@ while true; do
         --touch-events=enabled \
         --hide-scrollbars \
         --autoplay-policy=no-user-gesture-required \
-        >/dev/null 2>&1
+        >"$HOME/.chromium.log" 2>&1
     sleep 2
 done

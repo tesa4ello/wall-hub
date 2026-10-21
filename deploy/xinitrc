@@ -1,2 +1,5 @@
 #!/bin/sh
-exec openbox-session
+# Сессия киоска: kiosk.sh держит Chromium, openbox нужен только как оконный
+# менеджер. openbox-session не используем: он тянет xdg-автозапуск (PyXDG).
+/opt/wallhub/deploy/kiosk.sh &
+exec openbox
