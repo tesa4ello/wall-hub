@@ -813,13 +813,14 @@ def make_handler(app, trusted, port):
                     body.get("desktops"), app.widget_catalog(), layout["cols"], layout["rows"],
                     providers=status.PROVIDERS.keys(),
                 )
+                carousel = desktops.validate_carousel(body.get("carousel", layout["carousel"]))
             except desktops.LayoutError as e:
                 raise ApiError(str(e))
             minutes = body.get("home_after_min", layout["home_after_min"])
             if not isinstance(minutes, int) or isinstance(minutes, bool) or not 0 <= minutes <= 240:
                 raise ApiError(tr("Возврат на первый стол: от 0 до 240 минут"))
-            app.config.update({"desktops": clean, "layout": {"home_after_min": minutes}})
-            return {"revision": app.config.revision, "desktops": clean}
+            app.config.update({"desktops": clean, "layout": {"home_after_min": minutes, "carousel": carousel}})
+            return {"revision": app.config.revision, "desktops": clean, "carousel": carousel}
 
         # Фон
 

@@ -166,7 +166,11 @@ moved automatically.
 
 The screen consists of one or more desktops. Swipe left and right to switch
 between them; dots at the bottom show where you are. After a set time without
-touches the panel returns to the first desktop. Each desktop is a 16×10 grid
+touches the panel returns to the first desktop. With the carousel on
+(admin panel, "Desktops", "All desktops"), the panel cycles through the desktops
+by itself: each one is shown for the common interval or its own, a desktop can
+be left out, and a touch pauses the carousel for the set number of minutes.
+Each desktop is a 16×10 grid
 (64×60 px per cell), and a widget takes a rectangle of cells. The status bar is
 a widget too, so it can go anywhere or be removed.
 

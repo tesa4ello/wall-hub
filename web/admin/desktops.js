@@ -27,6 +27,7 @@ export class DesktopEditor {
     this.ui = config.ui;
     this.desktops = clone(config.desktops);
     this.homeAfterMin = config.layout.home_after_min;
+    this.carousel = { enabled: false, interval: 30, resume: 2, ...config.layout.carousel };
     this.catalog = catalog.widgets;
     this.providers = catalog.providers;
     this.saveFn = save;
@@ -86,7 +87,7 @@ export class DesktopEditor {
 
   async save() {
     try {
-      this.desktops = await this.saveFn(clone(this.desktops), this.homeAfterMin);
+      this.desktops = await this.saveFn(clone(this.desktops), { homeAfterMin: this.homeAfterMin, carousel: { ...this.carousel } });
       this.index = Math.min(this.index, this.desktops.length - 1);
     } catch {
       // Ошибку показал вызывающий код; возвращаем то, что реально сохранено.
@@ -161,6 +162,7 @@ export class DesktopEditor {
 
   renderDeskProps() {
     const last = this.desktops.length === 1;
+    const car = this.carousel;
     return `
       <div class="props-title">${t("Стол")}</div>
       <label class="prop"><span>${t("Название")}</span><input data-desk-name value="${esc(this.desk.name)}" placeholder="${esc(deskName({}, this.index))}" maxlength="40"></label>
@@ -168,11 +170,27 @@ export class DesktopEditor {
         <button class="btn btn-small" data-desk-move="-1" ${this.index === 0 ? "disabled" : ""}>← ${t("Левее")}</button>
         <button class="btn btn-small" data-desk-move="1" ${this.index === this.desktops.length - 1 ? "disabled" : ""}>${t("Правее")} →</button>
       </div>
+      ${car.enabled && !last ? `
+      <label class="check prop-check"><input type="checkbox" data-desk-carousel ${this.desk.carousel === false ? "" : "checked"}> ${t("Показывать в карусели")}</label>
+      ${this.desk.carousel === false ? "" : `
+      <label class="prop"><span>${t("Показывать этот стол, сек")}<small>${t("Пусто — общий интервал ({n} с)", { n: car.interval })}</small></span>
+        <input type="number" min="5" max="3600" data-desk-interval value="${this.desk.interval || ""}" placeholder="${car.interval}">
+      </label>`}` : ""}
       <button class="btn btn-small btn-danger" data-desk-delete ${last ? "disabled" : ""}>${icon("trash")} ${t("Удалить стол")}</button>
       <div class="props-title">${t("Все столы")}</div>
+      ${last ? "" : `
+      <label class="check prop-check"><input type="checkbox" data-carousel="enabled" ${car.enabled ? "checked" : ""}> ${t("Карусель: листать столы по очереди")}</label>
+      ${car.enabled ? `
+      <label class="prop"><span>${t("Каждый стол показывать, сек")}</span>
+        <input type="number" min="5" max="3600" data-carousel="interval" value="${car.interval}">
+      </label>
+      <label class="prop"><span>${t("После касания продолжать через, мин")}<small>${t("0 — сразу после касания")}</small></span>
+        <input type="number" min="0" max="240" data-carousel="resume" value="${car.resume}">
+      </label>` : ""}`}
+      ${car.enabled && !last ? "" : `
       <label class="prop"><span>${t("Возвращаться на первый стол через, мин")}<small>${t("0 — не возвращаться")}</small></span>
         <input type="number" min="0" max="240" data-home value="${this.homeAfterMin}">
-      </label>
+      </label>`}
       <p class="muted small">${t("Нажмите на виджет на холсте, чтобы изменить его настройки. Перетаскивайте виджеты мышью, размер меняется за правый нижний угол.")}</p>`;
   }
 
@@ -335,6 +353,24 @@ export class DesktopEditor {
     const w = this.selected && this.widget(this.selected);
     if ("deskName" in el.dataset) {
       this.desk.name = el.value.trim();
+      await this.save();
+    } else if (el.dataset.carousel) {
+      const key = el.dataset.carousel;
+      if (key === "enabled") this.carousel.enabled = el.checked;
+      else {
+        const v = parseInt(el.value, 10);
+        if (Number.isNaN(v)) return;
+        this.carousel[key] = key === "interval" ? Math.max(5, Math.min(3600, v)) : Math.max(0, Math.min(240, v));
+      }
+      await this.save();
+    } else if ("deskCarousel" in el.dataset) {
+      if (el.checked) delete this.desk.carousel;
+      else this.desk.carousel = false;
+      await this.save();
+    } else if ("deskInterval" in el.dataset) {
+      const v = parseInt(el.value, 10);
+      if (Number.isNaN(v) || !v) delete this.desk.interval;
+      else this.desk.interval = Math.max(5, Math.min(3600, v));
       await this.save();
     } else if ("home" in el.dataset) {
       const v = parseInt(el.value, 10);

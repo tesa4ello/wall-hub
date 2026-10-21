@@ -173,8 +173,36 @@ def validate(desktops, catalog, cols, rows, providers=()):
             if isinstance(w.get("card"), bool) and w["card"] != bool(meta.get("card")):
                 clean["card"] = w["card"]
             clean_widgets.append(clean)
-        result.append({"id": desk_id, "name": name, "widgets": clean_widgets})
+        clean_desk = {"id": desk_id, "name": name, "widgets": clean_widgets}
+        # Карусель: стол можно исключить или задать ему свой интервал (секунды).
+        if desk.get("carousel") is False:
+            clean_desk["carousel"] = False
+        if desk.get("interval"):
+            clean_desk["interval"] = carousel_seconds(desk["interval"])
+        result.append(clean_desk)
     return result
+
+
+CAROUSEL_SECONDS = (5, 3600)
+CAROUSEL_RESUME_MIN = (0, 240)
+
+
+def carousel_seconds(value):
+    lo, hi = CAROUSEL_SECONDS
+    if not isinstance(value, int) or isinstance(value, bool) or not lo <= value <= hi:
+        raise LayoutError(tr("Интервал карусели: от {lo} до {hi} секунд", lo=lo, hi=hi))
+    return value
+
+
+def validate_carousel(value):
+    """Настройки карусели столов: {enabled, interval (с), resume (мин)}."""
+    if not isinstance(value, dict):
+        raise LayoutError(tr("Некорректные настройки карусели"))
+    resume = value.get("resume", 2)
+    lo, hi = CAROUSEL_RESUME_MIN
+    if not isinstance(resume, int) or isinstance(resume, bool) or not lo <= resume <= hi:
+        raise LayoutError(tr("Пауза карусели после касания: от {lo} до {hi} минут", lo=lo, hi=hi))
+    return {"enabled": bool(value.get("enabled")), "interval": carousel_seconds(value.get("interval", 30)), "resume": resume}
 
 
 def used_providers(desktops):
