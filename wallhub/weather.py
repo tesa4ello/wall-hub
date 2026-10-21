@@ -19,6 +19,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from . import metno
 from .i18n import tr
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ log = logging.getLogger(__name__)
 USER_AGENT = "WallHub (+https://github.com/tesa4ello/wall-hub)"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+# Запасной поиск городов, если Open-Meteo недоступен.
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+SOURCES = ("open-meteo", "met.no")
 
 FORECAST_TTL = 10 * 60
 # Устаревший прогноз ещё показываем, но не дольше суток.
@@ -177,9 +181,13 @@ def normalize(raw, now=None):
 
 
 class Weather:
-    def __init__(self, fetch=get_json, clock=time.time):
+    def __init__(self, fetch=get_json, clock=time.time, local_tz=lambda: None):
         self._fetch = fetch
         self._clock = clock
+        # Часовой пояс панели: для MET Norway, который его не сообщает.
+        self._local_tz = local_tz
+        # Источник, ответивший последним: с него и начинаем.
+        self.source = SOURCES[0]
         self._lock = threading.Lock()
         self._key_locks = {}
         # key -> {"data", "at", "failed_at"}
@@ -190,7 +198,7 @@ class Weather:
         with self._lock:
             return self._key_locks.setdefault(key, threading.Lock())
 
-    def forecast(self, lat, lon):
+    def forecast(self, lat, lon, tz=None):
         key = place_key(lat, lon)
         with self._key_lock(key):
             entry = self._forecasts.get(key)
@@ -202,16 +210,7 @@ class Weather:
                     raise WeatherError(entry["error"])
                 return self._result(entry, now)
             try:
-                raw = self._fetch(FORECAST_URL, {
-                    "latitude": key[0], "longitude": key[1],
-                    "current": CURRENT, "hourly": HOURLY, "daily": DAILY,
-                    "minutely_15": MINUTELY, "forecast_minutely_15": QUARTERS + 4,
-                    "forecast_days": DAYS, "timezone": "auto", "timeformat": "unixtime",
-                    "wind_speed_unit": "ms",
-                })
-                if raw.get("error"):
-                    raise WeatherError(raw.get("reason") or "error")
-                entry = {"data": normalize(raw, now), "at": now}
+                entry = {"data": self._fetch_any(key, tz, now), "at": now}
                 self._store(self._forecasts, key, entry)
             except Exception as e:
                 log.warning("weather for %s failed: %s", key, e)
@@ -223,6 +222,38 @@ class Weather:
                 self._store(self._forecasts, key, {"at": 0, "failed_at": now, "error": error})
                 raise WeatherError(error)
             return self._result(entry, now)
+
+    def _fetch_any(self, key, tz, now):
+        """Прогноз с первого ответившего источника, начиная с последнего удачного."""
+        order = [self.source] + [s for s in SOURCES if s != self.source]
+        errors = []
+        for source in order:
+            try:
+                data = self._fetch_source(source, key, tz, now)
+            except Exception as e:
+                log.warning("weather from %s for %s failed: %s", source, key, e)
+                errors.append(f"{source}: {e}")
+                continue
+            if source != self.source:
+                log.info("weather source switched to %s", source)
+                self.source = source
+            return data
+        raise WeatherError("; ".join(errors))
+
+    def _fetch_source(self, source, key, tz, now):
+        if source == "met.no":
+            raw = self._fetch(metno.URL, {"lat": key[0], "lon": key[1]})
+            return metno.normalize(raw, key[0], key[1], tz or self._local_tz() or "UTC", now, HOURS, DAYS)
+        raw = self._fetch(FORECAST_URL, {
+            "latitude": key[0], "longitude": key[1],
+            "current": CURRENT, "hourly": HOURLY, "daily": DAILY,
+            "minutely_15": MINUTELY, "forecast_minutely_15": QUARTERS + 4,
+            "forecast_days": DAYS, "timezone": "auto", "timeformat": "unixtime",
+            "wind_speed_unit": "ms",
+        })
+        if raw.get("error"):
+            raise WeatherError(raw.get("reason") or "error")
+        return dict(normalize(raw, now), source="open-meteo")
 
     def _result(self, entry, now):
         stale = now - entry["at"] >= FORECAST_TTL + RETRY_AFTER
@@ -246,10 +277,19 @@ class Weather:
         if cached and now - cached["at"] < SEARCH_TTL:
             return cached["data"]
         try:
-            raw = self._fetch(GEOCODING_URL, {"name": query, "count": 8, "language": language, "format": "json"})
+            results = self._search_open_meteo(query, language)
         except Exception as e:
-            log.warning("city search failed: %s", e)
-            raise WeatherError(tr("Поиск города не удался: {error}", error=e))
+            log.warning("city search via open-meteo failed: %s", e)
+            try:
+                results = self._search_nominatim(query, language)
+            except Exception as e2:
+                log.warning("city search via nominatim failed: %s", e2)
+                raise WeatherError(tr("Поиск города не удался: {error}", error=e2))
+        self._store(self._searches, key, {"data": results, "at": now})
+        return results
+
+    def _search_open_meteo(self, query, language):
+        raw = self._fetch(GEOCODING_URL, {"name": query, "count": 8, "language": language, "format": "json"})
         results = []
         for r in raw.get("results") or []:
             if r.get("latitude") is None or r.get("longitude") is None:
@@ -262,14 +302,69 @@ class Weather:
                 "lon": round(r["longitude"], 4),
                 "timezone": r.get("timezone"),
             })
-        self._store(self._searches, key, {"data": results, "at": now})
         return results
+
+    def _search_nominatim(self, query, language):
+        raw = self._fetch(NOMINATIM_URL, {"q": query, "format": "jsonv2", "limit": 8,
+                                          "addressdetails": 1, "accept-language": language})
+        results = []
+        for r in raw if isinstance(raw, list) else []:
+            address = r.get("address") or {}
+            name = next((address[f] for f in ("city", "town", "village", "hamlet", "municipality") if address.get(f)),
+                        r.get("name") or "")
+            region = ", ".join(x for x in (address.get("state"), address.get("country")) if x and x != name)
+            try:
+                results.append({"name": name, "region": region, "lat": round(float(r["lat"]), 4),
+                                "lon": round(float(r["lon"]), 4), "timezone": None})
+            except (KeyError, ValueError):
+                continue
+        return results
+
+
+def fake_metno(lat, lon, now=None):
+    """Правдоподобный ответ MET Norway: по часам на 60 часов, дальше по 6."""
+    import math
+    from datetime import datetime, timezone as tzone
+
+    now = int(time.time() if now is None else now)
+    start = now - now % 3600
+    times = [start + i * 3600 for i in range(60)] + [start + 60 * 3600 + i * 6 * 3600 for i in range(30)]
+    series = []
+    for i, t in enumerate(times):
+        local_h = ((t + 3 * 3600) % 86400) / 3600
+        temp = round(8 + 4 * math.sin((local_h - 9) / 24 * 2 * math.pi) - (t - start) / 86400 * 0.5, 1)
+        rain = 0.6 if 2 <= (t - start) / 3600 <= 5 else 0.0
+        night = "_night" if local_h < 7 or local_h >= 18 else "_day"
+        data = {"instant": {"details": {
+            "air_temperature": temp, "air_pressure_at_sea_level": 1008.4, "cloud_area_fraction": 80.0,
+            "relative_humidity": 85.0, "wind_from_direction": 240.0, "wind_speed": 5.1, "wind_speed_of_gust": 11.0,
+            "ultraviolet_index_clear_sky": 0.4}}}
+        sym = "rain" if rain else ("partlycloudy" + night)
+        data["next_6_hours"] = {"summary": {"symbol_code": sym}, "details": {
+            "air_temperature_max": temp + 1, "air_temperature_min": temp - 1,
+            "precipitation_amount": rain * 3, "probability_of_precipitation": 70.0 if rain else 10.0}}
+        if i < 60:
+            data["next_1_hours"] = {"summary": {"symbol_code": sym}, "details": {
+                "precipitation_amount": rain, "probability_of_precipitation": 80.0 if rain else 5.0}}
+        series.append({"time": datetime.fromtimestamp(t, tzone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "data": data})
+    return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat, 10]},
+            "properties": {"meta": {"units": {}}, "timeseries": series}}
 
 
 def fake_fetch(url, params):
     """Правдоподобный ответ Open-Meteo без сети (WALLHUB_FAKE_WEATHER=1):
-    для разработки интерфейса и скриншотов. Дождь начинается минут через 30."""
+    для разработки интерфейса и скриншотов. Дождь начинается минут через 30.
+    WALLHUB_FAKE_WEATHER=metno: Open-Meteo «недоступен», ответ даёт MET Norway."""
     import math
+    import os
+
+    if url == metno.URL:
+        return fake_metno(params["lat"], params["lon"])
+    if os.environ.get("WALLHUB_FAKE_WEATHER") == "metno" and url in (FORECAST_URL, GEOCODING_URL):
+        raise OSError("timed out")
+    if url == NOMINATIM_URL:
+        return [{"lat": "59.7227", "lon": "30.4136", "name": "Пушкин",
+                 "address": {"town": "Пушкин", "state": "Санкт-Петербург", "country": "Россия"}}]
 
     if url == GEOCODING_URL:
         return {"results": [
