@@ -660,5 +660,14 @@
   "Источник погоды временно ограничил запросы": "The weather source is limiting requests for now",
   "Сервис погоды временно не отвечает": "The weather service is not responding right now",
   "Нет связи с сервисом погоды": "No connection to the weather service",
-  "Сервис погоды прислал непонятный ответ": "The weather service sent an unreadable response"
+  "Сервис погоды прислал непонятный ответ": "The weather service sent an unreadable response",
+  "Модуль «{title}» отключён": "Module “{title}” is turned off",
+  "Модуль ядра нельзя выключить": "Core modules can’t be turned off",
+  "Ожидается enabled: true или false": "Expected enabled: true or false",
+  "Включить модуль": "Turn module on",
+  "Выключить модуль": "Turn module off",
+  "Выключить модуль «{title}»?": "Turn off module “{title}”?",
+  "Его серверная часть остановится, виджеты останутся на столах неактивными. Настройки сохранятся.": "Its server part will stop and its widgets will stay on the desks, inactive. Settings are kept.",
+  "Модуль «{title}» включён": "Module “{title}” turned on",
+  "Модуль «{title}» выключен": "Module “{title}” turned off"
 }

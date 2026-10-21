@@ -367,6 +367,9 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
 .canvas .widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 16px; container-type: size; }
 .canvas .widget-card { background: var(--surface); }
 .canvas .widget-error { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 13px; }
+.canvas .widget-disabled { opacity: 0.6; outline: 1px dashed var(--muted); outline-offset: -1px; }
+.canvas .widget-disabled .widget-error { flex-direction: column; gap: 4px; padding: 8px; text-align: center; }
+.canvas .widget-disabled .widget-error b { color: var(--text); font-weight: 600; }
 /* Сетка клеток видна только в редакторе. */
 .canvas .overlay {
   background-image:
