@@ -33,10 +33,11 @@ DEFAULTS = {
         "dim_level": 80,
         # Полное гашение экрана (DPMS) при неактивности. 0 минут = не гасить.
         "blank_after_min": 30,
-        # Фон: id картинки из wallhub.background или "" (без фона). У тёмной
+        # Фон: id картинки из wallhub.background (встроенной default-… или
+        # загруженной) или "" (без фона). У тёмной
         # темы может быть свой фон; "same" — тот же, что у светлой.
-        "background": "",
-        "background_dark": "same",
+        "background": "default-aurora-light",
+        "background_dark": "default-aurora-dark",
         # Затемнение фона, 0..80 %.
         "bg_dim": 0,
         # Плитки поверх фона: baked | blur | frosted | solid (см. web/lib/wallpaper.js).
