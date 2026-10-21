@@ -590,5 +590,16 @@
   "Обновления модулей: {n}": "Module updates: {n}",
   "В админке": "In the admin",
   "С этого времени — светлая тема": "Light theme from this time",
-  "Для ночного приглушения": "For night dimming"
+  "Для ночного приглушения": "For night dimming",
+  "DNS через пробел": "DNS, separated by spaces",
+  "Адрес и маска, например 192.168.1.50/24": "Address and mask, e.g. 192.168.1.50/24",
+  "Адрес, шлюз и DNS снова будет выдавать роутер. Адрес панели может смениться.": "The router will assign the address, gateway and DNS again. The panel's address may change.",
+  "Вернуть DHCP": "Back to DHCP",
+  "Вернуть DHCP для {name}?": "Switch {name} back to DHCP?",
+  "Закрыть": "Close",
+  "Изменить": "Edit",
+  "Отменить": "Cancel",
+  "Панель перенесёт настройки к себе и проверит связь. Если связь пропадёт, всё вернётся как было.": "The panel will take over its settings and check the connection. If the connection drops, everything is restored.",
+  "Подключитесь к сети Wi‑Fi, чтобы настроить её адрес": "Connect to a Wi‑Fi network to configure its address",
+  "Сетевые адаптеры не найдены": "No network adapters found"
 }

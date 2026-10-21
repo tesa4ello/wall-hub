@@ -11,7 +11,8 @@ import { formatTime, sunTimes } from "/lib/theme.js";
 // при отрисовке.
 
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
-const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
+// Пользователю показываем только номер версии.
+const versionText = (info) => info.version || "—";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 const SECTIONS = [
@@ -31,6 +32,25 @@ const SPEED_PROVIDERS = [
   ["yandex", "Яндекс Интернетометр"],
 ];
 const IFACE_TYPES = { wifi: "Wi‑Fi", ethernet: "Ethernet" };
+const NET_STATES = {
+  connected: "Подключено",
+  disconnected: "Не подключено",
+  unavailable: "Кабель не подключён",
+  unmanaged: "Управляет система",
+  connecting: "Подключаюсь…",
+};
+const NET_JOBS = {
+  applying: "Применяю и проверяю связь…",
+  ok: "Настройки применены",
+  rolled_back: "Связь не появилась, вернул прежние настройки",
+  failed: "Не удалось применить",
+};
+const NET_MIGRATE = {
+  running: "Переношу настройки Ethernet…",
+  done: "Ethernet теперь настраивается из панели",
+  rolled_back: "Связь через Ethernet не поднялась, вернул прежние настройки",
+  failed: "Не удалось передать Ethernet панели",
+};
 
 const UPDATE_CHANNELS = [
   ["stable", "Стабильная"],
@@ -68,6 +88,9 @@ export class Settings {
     this.wifi = null;
     this.wifiBusy = false;
     this.wifiTimer = null;
+    this.netDevices = null;
+    this.netDraft = {}; // несохранённые правки IPv4 по интерфейсу
+    this.netTimer = null;
     this.wifiScanning = false;
     this.net = null;
     this.external = null;
@@ -112,6 +135,7 @@ export class Settings {
     clearInterval(this.wifiTimer);
     clearTimeout(this.speedTimer);
     clearTimeout(this.updateTimer);
+    clearTimeout(this.netTimer);
     // Закрытие окна первого запуска равносильно «Пропустить».
     if (this.setup) this.finishSetup();
   }
@@ -142,6 +166,7 @@ export class Settings {
     clearInterval(this.wifiTimer);
     clearTimeout(this.speedTimer);
     clearTimeout(this.updateTimer);
+    clearTimeout(this.netTimer);
     this.root.querySelectorAll(".nav-item").forEach((b) =>
       b.classList.toggle("active", b.dataset.section === section),
     );
@@ -390,12 +415,34 @@ export class Settings {
   // --- Сеть --------------------------------------------------------------------
 
   async loadNetwork() {
-    const [net, speed] = await Promise.allSettled([api.get("/network"), api.get("/speedtest")]);
+    const [net, devices, speed] = await Promise.allSettled([api.get("/network"), api.get("/network/devices"), api.get("/speedtest")]);
     this.net = net.value || null;
+    this.netDevices = devices.value || null;
     this.speed = speed.value || null;
     if (this.section === "network" && !this.root.hidden) this.render();
+    this.pollDevices();
     if (this.speed && this.speed.running) this.pollSpeed();
     if (!this.external) await this.loadExternal(false);
+  }
+
+  // Пока настройки применяются, раз в 2 с обновляем статус интерфейсов.
+  pollDevices() {
+    clearTimeout(this.netTimer);
+    const d = this.netDevices;
+    const busy = d && (d.devices.some((x) => x.job?.state === "applying") || d.migrate?.state === "running");
+    if (!busy) return;
+    this.netTimer = setTimeout(async () => {
+      if (this.section !== "network" || this.root.hidden) return;
+      try {
+        this.netDevices = await api.get("/network/devices");
+        this.net = await api.get("/network");
+      } catch {
+        // Связь с ядром могла моргнуть при смене адреса: попробуем ещё.
+      }
+      if (this.section !== "network" || this.root.hidden) return;
+      this.render();
+      this.pollDevices();
+    }, 2000);
   }
 
   async loadExternal(refresh) {
@@ -431,23 +478,9 @@ export class Settings {
   }
 
   renderNetwork() {
-    const net = this.net;
-    const ifaces = net
-      ? net.interfaces.map((i) => {
-          const kind = IFACE_TYPES[i.type] || i.name;
-          const label = i.connection ? `${kind} · ${esc(i.connection)}` : kind;
-          const value = i.addresses.length ? i.addresses.map(esc).join("<br>") : t("не подключено");
-          return `<div class="row"><div class="row-label">${label}<div class="row-hint">${esc(i.name)}</div></div>
-            <div class="row-value ${i.addresses.length ? "mono" : ""}">${value}</div></div>`;
-        }).join("")
-      : `<div class="row"><div class="row-label">${t("Загрузка…")}</div></div>`;
-    const extra = net ? `
-        <div class="row"><div class="row-label">${t("Шлюз")}</div><div class="row-value mono">${esc(net.gateway || "—")}</div></div>
-        <div class="row"><div class="row-label">DNS</div><div class="row-value mono">${net.dns.length ? net.dns.map(esc).join("<br>") : "—"}</div></div>` : "";
-
     return `
       <h2>${t("Сеть")}</h2>
-      <div class="card">${ifaces}${extra}</div>
+      ${this.netDevices ? this.renderDevices() : this.renderInterfaces()}
       <div class="list-head"><span>${t("Внешний адрес")}</span>
         <div class="list-actions">
           <button class="btn btn-small" data-external-refresh ${this.externalBusy ? "disabled" : ""}>${icon("refresh")}${t("Перепроверить")}</button>
@@ -456,6 +489,149 @@ export class Settings {
       ${this.renderExternal()}
       <div class="list-head"><span>${t("Скорость интернета")}</span></div>
       ${this.renderSpeed()}`;
+  }
+
+  // Только просмотр: если NetworkManager недоступен и настраивать нечего.
+  renderInterfaces() {
+    const net = this.net;
+    if (!net) return `<div class="empty">${t("Загрузка…")}</div>`;
+    const ifaces = net.interfaces.map((i) => {
+      const kind = IFACE_TYPES[i.type] || i.name;
+      const label = i.connection ? `${kind} · ${esc(i.connection)}` : kind;
+      const value = i.addresses.length ? i.addresses.map(esc).join("<br>") : t("не подключено");
+      return `<div class="row"><div class="row-label">${label}<div class="row-hint">${esc(i.name)}</div></div>
+        <div class="row-value ${i.addresses.length ? "mono" : ""}">${value}</div></div>`;
+    }).join("");
+    return `<div class="card">${ifaces}
+      <div class="row"><div class="row-label">${t("Шлюз")}</div><div class="row-value mono">${esc(net.gateway || "—")}</div></div>
+      <div class="row"><div class="row-label">DNS</div><div class="row-value mono">${net.dns.length ? net.dns.map(esc).join("<br>") : "—"}</div></div>
+    </div>`;
+  }
+
+  // Ethernet и Wi‑Fi: DHCP или адрес вручную, перенос Ethernet под панель.
+  renderDevices() {
+    const data = this.netDevices;
+    const order = { ethernet: 0, wifi: 1 };
+    const list = data.devices.filter((d) => d.type in order).sort((a, b) => order[a.type] - order[b.type]);
+    if (!list.length) return `<div class="empty">${t("Сетевые адаптеры не найдены")}</div>`;
+    const m = data.migrate;
+    // «Готово» видно и так — Ethernet в списке как управляемый.
+    const migrate = m && NET_MIGRATE[m.state] && m.state !== "done"
+      ? `<div class="busy ${m.state === "failed" || m.state === "rolled_back" ? "net-error" : ""}">${esc(t(NET_MIGRATE[m.state]))}${m.state === "failed" && m.message ? `: ${esc(t(m.message, m.message_args))}` : ""}</div>` : "";
+    return migrate + list.map((d) => this.renderDevice(d, m)).join("");
+  }
+
+  renderDevice(d, migrate) {
+    const cur = d.current || {};
+    const kind = IFACE_TYPES[d.type];
+    const title = d.type === "wifi" && d.connection ? `${kind} · ${esc(d.connection)}` : kind;
+    const hint = [d.device, t(NET_STATES[d.state] || d.state), cur.gateway && t("шлюз {ip}", { ip: cur.gateway }), cur.dns?.length && `DNS ${cur.dns.join(", ")}`]
+      .filter(Boolean).map(esc).join(" · ");
+    const head = `<div class="row"><div class="row-label">${title}<div class="row-hint">${hint}</div></div>
+      <div class="row-value ${cur.addresses?.length ? "mono" : ""}">${cur.addresses?.length ? cur.addresses.map(esc).join("<br>") : "—"}</div></div>`;
+    if (!d.managed) {
+      return `<div class="card">${head}
+        <div class="row"><div class="row-label">${t("Сейчас интерфейсом управляет система (netplan)")}<div class="row-hint">${t("Панель перенесёт настройки к себе и проверит связь. Если связь пропадёт, всё вернётся как было.")}</div></div>
+          <button class="btn btn-small btn-primary" data-net-manage="${esc(d.device)}" ${migrate?.state === "running" ? "disabled" : ""}>${t("Управлять из панели")}</button></div>
+      </div>`;
+    }
+    // Настройки IP у Wi‑Fi живут в профиле сети: без подключения менять нечего.
+    if (d.type === "wifi" && !d.connection) {
+      return `<div class="card">${head}<div class="row"><div class="row-label"><div class="row-hint">${t("Подключитесь к сети Wi‑Fi, чтобы настроить её адрес")}</div></div></div></div>`;
+    }
+    const saved = this.savedIpv4(d);
+    const draft = this.netDraft[d.device];
+    const v = draft || saved;
+    const manual = v.method === "manual";
+    const applying = d.job?.state === "applying";
+    const dev = esc(d.device);
+    const seg = `<div class="segmented">${[["auto", t("DHCP")], ["manual", t("Вручную")]].map(([value, label]) =>
+      `<button data-net-method="${value}" data-dev="${dev}" aria-pressed="${v.method === value}">${label}</button>`).join("")}</div>`;
+    const field = (key, label, hint) => `<div class="row"><div class="row-label">${label}${hint ? `<div class="row-hint">${hint}</div>` : ""}</div>
+      <div class="speed-cell"><span class="row-value mono">${esc(v[key] || "—")}</span>
+        <button class="btn btn-small" data-net-edit="${key}" data-dev="${dev}">${t("Изменить")}</button></div></div>`;
+    const rows = [
+      `<div class="row"><div class="row-label">${t("Настройка IP")}</div>${seg}</div>`,
+      manual ? field("address", t("Адрес и маска"), t("Например, 192.168.1.50/24")) : "",
+      manual ? field("gateway", t("Шлюз")) : "",
+      field("dns", "DNS", manual ? t("Через пробел") : t("Пусто — от DHCP")),
+    ];
+    const job = d.job && NET_JOBS[d.job.state]
+      ? `<div class="row-hint ${d.job.state === "ok" ? "" : d.job.state === "applying" ? "speed-phase" : "speed-error"}">${esc(t(NET_JOBS[d.job.state]))}${d.job.message ? `: ${esc(d.job.message)}` : ""}</div>` : "";
+    let buttons = "";
+    if (draft) {
+      buttons = `<button class="btn btn-small" data-net-cancel="${dev}">${t("Отменить")}</button>
+        <button class="btn btn-small btn-primary" data-net-apply="${dev}" ${applying ? "disabled" : ""}>${t("Применить")}</button>`;
+    } else if (saved.method === "manual") {
+      buttons = `<button class="btn btn-small" data-net-dhcp="${dev}" ${applying ? "disabled" : ""}>${t("Вернуть DHCP")}</button>`;
+    }
+    const actions = job || buttons
+      ? `<div class="row"><div class="row-label">${job}</div><div class="list-actions">${buttons}</div></div>` : "";
+    return `<div class="card">${head}${rows.join("")}${actions}</div>`;
+  }
+
+  // Сохранённые настройки IPv4 в виде черновика: dns — строкой через пробел.
+  savedIpv4(d) {
+    const s = d.ipv4 || { method: "auto" };
+    return { method: s.method === "manual" ? "manual" : "auto", address: s.address || "", gateway: s.gateway || "", dns: (s.dns || []).join(" ") };
+  }
+
+  netDevice(name) {
+    return this.netDevices.devices.find((d) => d.device === name);
+  }
+
+  editDraft(name, patch) {
+    const d = this.netDevice(name);
+    const draft = { ...(this.netDraft[d.device] || this.savedIpv4(d)), ...patch };
+    // Переход на «вручную»: подставляем текущие адрес, шлюз и DNS.
+    if (patch.method === "manual") {
+      const cur = d.current || {};
+      draft.address ||= (cur.addresses || [])[0] || "";
+      draft.gateway ||= cur.gateway || "";
+      draft.dns ||= (cur.dns || []).join(" ");
+    }
+    const saved = this.savedIpv4(d);
+    const same = Object.keys(saved).every((k) => saved[k] === draft[k]);
+    if (same) delete this.netDraft[name];
+    else this.netDraft[name] = draft;
+    this.render();
+  }
+
+  async onNetEdit(name, key) {
+    const v = this.netDraft[name] || this.savedIpv4(this.netDevice(name));
+    const titles = { address: t("Адрес и маска, например 192.168.1.50/24"), gateway: t("Шлюз"), dns: t("DNS через пробел") };
+    const value = await openKeyboard({ title: titles[key], value: v[key] || "", layout: "sym" });
+    if (value === null) return;
+    this.editDraft(name, { [key]: value.trim().replace(/\s+/g, " ") });
+  }
+
+  async applyIpv4(name, v) {
+    await api.post("/network/ipv4", { device: name, method: v.method, address: v.address, gateway: v.gateway, dns: v.dns });
+    delete this.netDraft[name];
+    toast(t("Применяю и проверяю связь…"));
+    await this.loadNetwork();
+  }
+
+  async onNetDhcp(name) {
+    const ok = await confirmDialog({
+      title: t("Вернуть DHCP для {name}?", { name }),
+      text: t("Адрес, шлюз и DNS снова будет выдавать роутер. Адрес панели может смениться."),
+      ok: t("Вернуть DHCP"),
+    });
+    if (ok) await this.applyIpv4(name, { method: "auto", address: "", gateway: "", dns: "" });
+  }
+
+  async onNetManage(name) {
+    const ok = await confirmDialog({
+      title: t("Передать {name} панели?", { name }),
+      text: t("Связь через кабель может прерваться на полминуты. Если она не восстановится, настройки вернутся сами."),
+      ok: t("Передать"),
+    });
+    if (!ok) return;
+    await api.post("/network/manage", { device: name });
+    this.netDevices.migrate = { state: "running" };
+    this.render();
+    this.pollDevices();
   }
 
   renderExternal() {
@@ -567,14 +743,14 @@ export class Settings {
       `<div class="segmented">${items
         .map(([value, label]) => `<button data-upd-set="${key}" data-value='${JSON.stringify(value)}' aria-pressed="${set[key] === value}">${t(label)}</button>`)
         .join("")}</div>`;
-    const newVersion = [latest.version, latest.commit && latest.commit.slice(0, 7)].filter(Boolean).join(" · ");
+    const newVersion = latest.version || (latest.commit || "").slice(0, 7);
     const banner = st.state === "installing"
       ? `<div class="update-banner">${icon("refresh")}<div><div class="update-banner-title">${t("Устанавливаю обновление…")}</div>
           <div class="update-banner-text">${t("Экран перезагрузится сам, когда новая версия запустится")}</div></div></div>`
       : u.available
         ? `<div class="update-banner">${icon("refresh")}<div>
             <div class="update-banner-title">${t("Доступна новая версия {version}", { version: esc(newVersion) })}</div>
-            ${latest.date ? `<div class="update-banner-text">${esc(new Date(latest.date).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }))}</div>` : ""}</div>
+</div>
             <button class="btn" data-update-run="install">${t("Обновить")}</button></div>`
         : "";
     const checked = st.checked_at ? ` · ${t("проверено {ago}", { ago: ago(Date.parse(st.checked_at) / 1000) })}` : "";
@@ -703,6 +879,19 @@ export class Settings {
         await this.saveUpdate({ auto: !this.update.settings.auto });
       } else if (b.dataset.updateRun) {
         await this.runUpdate(b.dataset.updateRun);
+      } else if (b.dataset.netMethod) {
+        this.editDraft(b.dataset.dev, { method: b.dataset.netMethod });
+      } else if (b.dataset.netEdit) {
+        await this.onNetEdit(b.dataset.dev, b.dataset.netEdit);
+      } else if (b.dataset.netCancel) {
+        delete this.netDraft[b.dataset.netCancel];
+        this.render();
+      } else if (b.dataset.netApply) {
+        await this.applyIpv4(b.dataset.netApply, this.netDraft[b.dataset.netApply]);
+      } else if (b.dataset.netDhcp) {
+        await this.onNetDhcp(b.dataset.netDhcp);
+      } else if (b.dataset.netManage) {
+        await this.onNetManage(b.dataset.netManage);
       } else if ("externalRefresh" in b.dataset) {
         await this.loadExternal(true);
       } else if (b.dataset.speedtest) {

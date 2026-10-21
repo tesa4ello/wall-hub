@@ -207,13 +207,12 @@ export class StorePanel {
 
   renderCatalog(c, i, count) {
     const error = c.enabled && c.error ? `<div class="small error">${esc(t(c.error, c.error_args))}</div>` : "";
-    const commit = c.commit ? ` · <span class="mono">${esc(c.commit.slice(0, 7))}</span>` : "";
     return `
       <div class="item">
         <div class="item-main">
           <label class="check grow"><input type="checkbox" data-catalog-toggle="${esc(c.id)}" ${c.enabled ? "checked" : ""}>
             <span><span class="item-title">${esc(c.repo)}</span>
-            <span class="muted small">${t("ветка {branch}", { branch: esc(c.branch) })}${commit}${c.main ? ` · ${t("основной")}` : ""}</span></span></label>
+            <span class="muted small">${t("ветка {branch}", { branch: esc(c.branch) })}${c.main ? ` · ${t("основной")}` : ""}</span></span></label>
           ${c.main ? "" : `<div class="order">
             <button class="btn btn-small" data-catalog="up" data-id="${esc(c.id)}" ${i <= 1 ? "disabled" : ""} title="${t("Выше")}">${icon("up")}</button>
             <button class="btn btn-small" data-catalog="down" data-id="${esc(c.id)}" ${i === count - 1 ? "disabled" : ""} title="${t("Ниже")}">${icon("down")}</button>

@@ -1,5 +1,6 @@
 // Экранная клавиатура для сенсорного экрана без физической клавиатуры.
-// openKeyboard({title, value, password, minLength}) -> Promise<string|null>
+// openKeyboard({title, value, password, minLength, layout}) -> Promise<string|null>
+// layout: "en" (по умолчанию), "ru" или "sym" — например, для IP-адресов.
 
 import { t } from "./i18n.js";
 import { icon } from "./icons.js";
@@ -25,10 +26,10 @@ const LAYOUTS = {
   ],
 };
 
-export function openKeyboard({ title = "", value = "", password = false, minLength = 0 } = {}) {
+export function openKeyboard({ title = "", value = "", password = false, minLength = 0, layout: start = "en" } = {}) {
   return new Promise((resolve) => {
     let text = value;
-    let layout = "en";
+    let layout = LAYOUTS[start] ? start : "en";
     let shift = false;
     let reveal = !password;
 
