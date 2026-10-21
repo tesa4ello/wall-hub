@@ -294,3 +294,13 @@ input:disabled, select:disabled { opacity: 0.45; }
 .place-result:hover { background: var(--surface-3); }
 .place-result small { font-size: 12px; color: var(--muted); }
 .panel > .panel-inset { margin: 0; padding: 4px 18px 12px; }
+
+/* --- модули ----------------------------------------------------------------- */
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); font-size: 13px; }
+.accent { color: var(--accent); }
+.inline-form input.narrow { flex: none; width: 120px; }
+.item-main > div.order:nth-child(n) { flex: none; }
+.row-buttons.flush { padding: 0 0 14px; }
+p.panel-inset { margin: -6px 2px 14px; }

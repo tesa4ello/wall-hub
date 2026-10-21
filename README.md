@@ -177,8 +177,16 @@ stored in `desktops` in `config.json` and checked on the server
 Clock, status bar and weather are built-in modules in `web/modules/`. Other
 modules come from the module store, the repository
 [tesa4ello/wallhub-modules](https://github.com/tesa4ello/wallhub-modules) (its
-`CLAUDE.md` describes the format). Installed modules live in
-`/var/lib/wallhub/modules/<id>/`. Each `module.json` has `id`, `version` and
+`CLAUDE.md` describes the format). The admin panel's "Modules" tab lists the
+modules of all connected catalogs and installs, updates and deletes them;
+deleting a module also removes its widgets from the desktops. A catalog is any
+GitHub repository with the same layout (`modules/<id>/` plus `catalog.json`);
+more catalogs are connected on the same tab, and if two catalogs have a module
+with the same id, the one higher in the list wins. Connecting a catalog means
+trusting its code. Private catalogs use the GitHub token from the "Updates"
+tab. Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
+`previous` point to versions); the service installs them itself, without root.
+Modules with a server part are not supported yet. Each `module.json` has `id`, `version` and
 `core`, the major version of the core module API (`CORE_API` in
 `wallhub/__init__.py`); a store module with a different `core` is not loaded.
 A widget whose module is missing stays on its desktop as a placeholder.

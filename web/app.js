@@ -298,7 +298,7 @@ async function loadConfig() {
 
 async function pollRevision() {
   try {
-    const { revision, build, update, progress, version } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
+    const { revision, build, update, progress, version, modules } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
     $("status-offline").hidden = true;
     updateBanner.show(progress, version);
     state.updateAvailable = Boolean(update);
@@ -308,6 +308,9 @@ async function pollRevision() {
     // чтобы подхватить новый фронтенд.
     if (state.build === null) state.build = build;
     else if (build !== state.build) return location.reload();
+    // Поставили или удалили модуль: каталог виджетов поменялся.
+    if (state.modules === undefined) state.modules = modules;
+    else if (modules !== state.modules) return location.reload();
     if (revision !== state.revision) await loadConfig();
   } catch {
     // Во время установки сервис перезапускается: это не обрыв связи.

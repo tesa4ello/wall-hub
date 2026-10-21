@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from .modules import Registry
+from .store import Store, StoreError
 from .location import MODES as LOCATION_MODES, LocationError, Locator
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
@@ -166,6 +167,11 @@ class App:
         self.modules = Registry(os.path.join(self.web_root, "modules"), modules_dirs,
                                 os.path.join(state_dir, "modules"))
         i18n.load(self.web_root, self.modules.loaded())
+        # Счётчик смен набора модулей: киоск перезагружается, когда он меняется.
+        self.modules_rev = 0
+        builtin = [m.id for m in self.modules.scan().values() if m.builtin]
+        self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
+                           on_change=self.modules_changed)
         i18n.set_language(config.get("ui", "language"))
         status.load_all()
         self.collector = StatusCollector(config)
@@ -182,6 +188,10 @@ class App:
             return self.system.timezone()
         except CommandError:
             return None
+
+    def modules_changed(self):
+        i18n.load(self.web_root, self.modules.loaded())
+        self.modules_rev += 1
 
     def widget_catalog(self):
         return desktops.load_catalog(self.modules.loaded())
@@ -425,6 +435,7 @@ def make_handler(app, trusted, port):
                 "update": app.updates.available(BUILD.get("commit", "")),
                 # progress: ход обновления, панель показывает его поверх столов.
                 "progress": app.updates.progress(),
+                "modules": app.modules_rev,
                 "version": __version__,
             }
 
@@ -677,6 +688,44 @@ def make_handler(app, trusted, port):
                 raise ApiError(tr("Это не похоже на токен GitHub"))
             app.updates.set_token(token)
 
+        # Магазин модулей
+
+        def store_call(self, fn, *args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except StoreError as e:
+                raise ApiError(tr(e.message, **e.params), HTTPStatus.BAD_GATEWAY)
+
+        def api_store(self, **_):
+            return app.store.listing()
+
+        def api_store_refresh(self, **_):
+            app.store.refresh()
+            return app.store.listing()
+
+        def api_store_install(self, body, **_):
+            self.store_call(app.store.install, str(body.get("id", "")))
+            return app.store.listing()
+
+        def api_store_remove(self, body, **_):
+            self.store_call(app.store.remove, str(body.get("id", "")))
+            return app.store.listing()
+
+        def api_store_catalogs(self, body, **_):
+            action, cat_id = body.get("action"), str(body.get("id", ""))
+            if action == "add":
+                self.store_call(app.store.add_catalog, str(body.get("url", "")), str(body.get("branch") or "main"))
+            elif action == "remove":
+                self.store_call(app.store.remove_catalog, cat_id)
+            elif action in ("enable", "disable"):
+                self.store_call(app.store.set_catalog, cat_id, enabled=action == "enable")
+            elif action in ("up", "down"):
+                self.store_call(app.store.set_catalog, cat_id, move=-1 if action == "up" else 1)
+            else:
+                raise ApiError(tr("Неизвестное действие"))
+            app.store.refresh()
+            return app.store.listing()
+
         def api_update_run(self, body, **_):
             mode = body.get("mode")
             if mode not in ("check", "install", "rollback"):
@@ -727,6 +776,11 @@ def make_handler(app, trusted, port):
         ("POST", "/update/settings"): (H.api_update_settings, False),
         ("POST", "/update/token"): (H.api_update_token, False),
         ("POST", "/update/run"): (H.api_update_run, False),
+        ("GET", "/store"): (H.api_store, False),
+        ("POST", "/store/refresh"): (H.api_store_refresh, False),
+        ("POST", "/store/install"): (H.api_store_install, False),
+        ("POST", "/store/remove"): (H.api_store_remove, False),
+        ("POST", "/store/catalogs"): (H.api_store_catalogs, False),
     }
     return Handler
 
