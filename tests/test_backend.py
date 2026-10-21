@@ -481,11 +481,24 @@ class BuiltinBackgroundsTest(unittest.TestCase):
             self.assertIn(DEFAULTS["ui"]["background"], ids)
             self.assertIn(DEFAULTS["ui"]["background_dark"], ids)
             for item in bgs.list():
-                self.assertIsNotNone(bgs.file(item["url"][len("/bg/"):]))
-                self.assertIsNotNone(bgs.file(item["blur"][len("/bg/"):]))
+                # Каждый встроенный фон есть под все ходовые разрешения.
+                self.assertEqual(sorted(item["sizes"]), ["1024x600", "1366x768", "1920x1080"])
+                self.assertEqual(item["url"], item["sizes"]["1024x600"]["url"])
+                for files in item["sizes"].values():
+                    self.assertIsNotNone(bgs.file(files["url"][len("/bg/"):]))
+                    self.assertIsNotNone(bgs.file(files["blur"][len("/bg/"):]))
+                    self.assertTrue(files["blur"].endswith("-blur.jpg"))
             with self.assertRaises(BackgroundError):
                 bgs.delete("default-aurora-dark")
-            validate_ui({"background": "default-waves-light", "background_dark": "default-orbs-dark"})
+            validate_ui({"background": "default-prism-light", "background_dark": "default-mist-dark"})
+
+    def test_old_builtins_migrated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            with open(path, "w") as f:
+                json.dump({"ui": {"background": "default-waves-light", "background_dark": "default-orbs-dark"}}, f)
+            ui = Config(path).get()["ui"]
+            self.assertEqual((ui["background"], ui["background_dark"]), ("default-aurora-light", "default-aurora-dark"))
 
 
 class WeatherTest(unittest.TestCase):

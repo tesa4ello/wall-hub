@@ -18,6 +18,21 @@ export function backgroundFor(ui, theme) {
   return ui.background;
 }
 
+// Встроенные фоны нарисованы под несколько разрешений: берём самый маленький
+// вариант, который закрывает экран в физических пикселях, иначе самый большой.
+export function pickSize(item, width, height) {
+  const sizes = Object.entries(item.sizes || {})
+    .map(([key, files]) => ({ w: Number(key.split("x")[0]), h: Number(key.split("x")[1]), files }))
+    .sort((a, b) => a.w * a.h - b.w * b.h);
+  if (!sizes.length) return item;
+  return (sizes.find((s) => s.w >= width && s.h >= height) || sizes[sizes.length - 1]).files;
+}
+
+function screenSize() {
+  const dpr = window.devicePixelRatio || 1;
+  return [Math.round(screen.width * dpr), Math.round(screen.height * dpr)];
+}
+
 function preload(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -69,14 +84,15 @@ export class Wallpaper {
     if (id !== this.id) return;
     const back = this.layers[1 - this.front];
     if (item) {
+      const files = pickSize(item, ...screenSize());
       try {
-        await Promise.all([preload(item.url), preload(item.blur)]);
+        await Promise.all([preload(files.url), preload(files.blur)]);
       } catch {
         return;
       }
       if (id !== this.id) return;
-      back.style.backgroundImage = `url("${item.url}")`;
-      document.documentElement.style.setProperty("--wallpaper-blur", `url("${item.blur}")`);
+      back.style.backgroundImage = `url("${files.url}")`;
+      document.documentElement.style.setProperty("--wallpaper-blur", `url("${files.blur}")`);
     }
     // Новая картинка проявляется поверх старой.
     back.classList.toggle("on", Boolean(item));
