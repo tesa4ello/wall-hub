@@ -6,6 +6,7 @@ import { language, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 import { confirmWifiOff } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
+import { Wallpaper } from "/lib/wallpaper.js";
 import { destroyAll, loadCatalog, renderDesktop } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 
@@ -34,11 +35,14 @@ function applyTheme() {
     clearTimeout(applyTheme.timer);
     applyTheme.timer = setTimeout(() => root.classList.remove("theme-anim"), 1600);
   }
+  wallpaper.apply(ui, theme).catch((e) => console.error("wallpaper", e));
   // Ночью экран постоянно приглушён, чтобы не светил в глаза.
   const night = isNight(ui, now) ? ui.night_dim : 0;
   $("night").style.opacity = night / 100;
   dimmer.setFloor(night);
 }
+
+const wallpaper = new Wallpaper($("wallpaper"), $("desktops"));
 
 // --- рабочие столы ------------------------------------------------------------
 
@@ -66,6 +70,7 @@ const desks = {
     $("dots").innerHTML = config.desktops.map(() => "<i></i>").join("");
     $("dots").hidden = config.desktops.length < 2;
     this.go(Math.min(this.index, config.desktops.length - 1), false);
+    wallpaper.layout();
   },
 
   get count() {

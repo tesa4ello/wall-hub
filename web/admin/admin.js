@@ -7,6 +7,7 @@ import { language, languages, locale, setLanguage, t, translateDom } from "/lib/
 import { icon, signalBars } from "/lib/icons.js";
 import { confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { loadCatalog } from "/lib/widgets.js";
+import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
 
 const $ = (id) => document.getElementById(id);
@@ -137,6 +138,7 @@ function show(tab) {
   if (tab === "wifi") loadWifi(false);
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
+  if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
   render();
 }
 
@@ -200,8 +202,17 @@ function renderDisplay() {
       <label class="field"><span>${t("Гасить экран через, мин")}<small>${t("0 — не гасить")}</small></span>
         <input type="number" min="0" max="240" data-ui="blank_after_min" data-int value="${ui.blank_after_min}">
       </label>
-    </section>`;
+    </section>
+    ${backgrounds.render(ui)}`;
 }
+
+const backgrounds = new BackgroundPanel({
+  saveUi: (patch) => saveUi(patch),
+  guarded,
+  toast,
+  confirm: confirmDialog,
+  render: () => state.tab === "display" && render(),
+});
 
 // --- рабочие столы ------------------------------------------------------------------
 
@@ -398,6 +409,7 @@ async function saveUpdateSettings(patch) {
 
 $("content").addEventListener("change", async (e) => {
   const el = e.target;
+  if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
   if (el.dataset.ui) {
     let value = el.value;
     if ("int" in el.dataset) value = parseInt(el.value, 10);
@@ -441,6 +453,7 @@ $("content").addEventListener("submit", async (e) => {
 $("content").addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b || b.disabled || b.getAttribute("type") === "submit") return;
+  if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   const d = b.dataset;
   try {
     if ("wifiRescan" in d) {

@@ -6,6 +6,8 @@
     пароль не задан, первый вошедший в админку его придумывает.
 """
 
+import base64
+import binascii
 import json
 import logging
 import mimetypes
@@ -21,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, desktops, i18n, status
+from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
@@ -31,6 +34,8 @@ log = logging.getLogger(__name__)
 COOKIE = "wallhub_session"
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_BODY = 64 * 1024
+# Загрузка фона: две картинки в base64 внутри JSON.
+MAX_UPLOAD = 16 * 1024 * 1024
 
 
 class ApiError(Exception):
@@ -63,6 +68,10 @@ def validate_ui(patch):
         "dim_after_min": lambda v: _int(v) and 0 <= v <= 240,
         "dim_level": lambda v: _int(v) and 0 <= v <= 95,
         "language": lambda v: v in i18n.languages(),
+        "background": lambda v: v == "" or (isinstance(v, str) and BG_ID_RE.match(v)),
+        "background_dark": lambda v: v in ("", "same") or (isinstance(v, str) and BG_ID_RE.match(v)),
+        "bg_dim": lambda v: _int(v) and 0 <= v <= 80,
+        "tiles": lambda v: v in ("baked", "blur", "frosted", "solid"),
     }
     for key, value in patch.items():
         check = rules.get(key)
@@ -142,6 +151,7 @@ class App:
         state_dir = os.path.dirname(os.path.abspath(config.path))
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
+        self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"))
         self.login_lock = threading.Lock()
         # Тема, которую сейчас показывает экран (сообщает сам киоск), чтобы
         # админка выглядела так же.
@@ -169,6 +179,16 @@ class App:
             sock.close()
         port = "" if self.admin_port == 80 else f":{self.admin_port}"
         return f"http://{ip}{port}/"
+
+
+def decode_image(value):
+    """Картинка из data:-URL или голого base64."""
+    if not isinstance(value, str) or not value:
+        raise BackgroundError(tr("Нет картинки"))
+    try:
+        return base64.b64decode(value.partition(",")[2] if value.startswith("data:") else value, validate=True)
+    except (binascii.Error, ValueError):
+        raise BackgroundError(tr("Картинка повреждена"))
 
 
 def check_new_password(body):
@@ -206,8 +226,8 @@ def make_handler(app, trusted, port):
         def send_error_json(self, message, code):
             self.send_json({"error": message}, code)
 
-        def send_file(self, path):
-            ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        def send_file(self, path, ctype=None, cache="no-cache"):
+            ctype = ctype or mimetypes.guess_type(path)[0] or "application/octet-stream"
             if ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
                 ctype += "; charset=utf-8"
             with open(path, "rb") as f:
@@ -216,19 +236,19 @@ def make_handler(app, trusted, port):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             # Интерфейс обновляется вместе с пакетом, кешировать его незачем.
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", cache)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
 
         # --- запрос ----------------------------------------------------
 
-        def read_json(self):
+        def read_json(self, limit=MAX_BODY):
             if self.headers.get_content_type() != "application/json":
                 # Заодно защищает от CSRF: обычная HTML-форма так не отправит.
                 raise ApiError(tr("Ожидается application/json"), HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
+            if length > limit:
                 raise ApiError(tr("Слишком большой запрос"), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             raw = self.rfile.read(length) if length else b"{}"
             try:
@@ -261,6 +281,8 @@ def make_handler(app, trusted, port):
                 return
             if url.path.startswith("/api/"):
                 self.handle_api(method, url.path[len("/api"):], parse_qs(url.query))
+            elif method in ("GET", "HEAD") and url.path.startswith("/bg/"):
+                self.handle_background(url.path[len("/bg/"):])
             elif method in ("GET", "HEAD"):
                 self.handle_static(url.path)
             else:
@@ -277,6 +299,15 @@ def make_handler(app, trusted, port):
                 return
             self.send_file(full)
 
+        def handle_background(self, name):
+            # В админке фоны (возможно, личные фото) видны только после входа.
+            found = app.backgrounds.file(name) if self.authorized() else None
+            if found is None:
+                self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
+                return
+            # Имя файла уникально для каждой загрузки, содержимое не меняется.
+            self.send_file(found[0], found[1], cache="private, max-age=31536000, immutable")
+
         def handle_api(self, method, path, query):
             # Язык общий для экрана и админки: ошибки API приходят на нём же.
             i18n.set_language(app.config.get("ui", "language"))
@@ -289,7 +320,8 @@ def make_handler(app, trusted, port):
                 self.send_error_json(tr("Нужно войти"), HTTPStatus.UNAUTHORIZED)
                 return
             try:
-                body = self.read_json() if method == "POST" else None
+                limit = MAX_UPLOAD if path == "/admin/background" else MAX_BODY
+                body = self.read_json(limit) if method == "POST" else None
                 result = func(self, body=body, query=query)
             except ApiError as e:
                 self.send_error_json(str(e), e.code)
@@ -367,6 +399,9 @@ def make_handler(app, trusted, port):
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
+            for key in ("background", "background_dark"):
+                if patch.get(key) not in (None, "", "same") and not app.backgrounds.exists(patch[key]):
+                    raise ApiError(tr("Нет такого фона"))
             return {"revision": app.config.update({"ui": patch})}
 
         def api_status(self, **_):
@@ -477,6 +512,33 @@ def make_handler(app, trusted, port):
             app.config.update({"desktops": clean, "layout": {"home_after_min": minutes}})
             return {"revision": app.config.revision, "desktops": clean}
 
+        # Фон
+
+        def api_backgrounds(self, **_):
+            return {"items": app.backgrounds.list()}
+
+        def api_admin_background(self, body, **_):
+            try:
+                image, blur = (decode_image(body.get(key)) for key in ("image", "blur"))
+                bg_id = app.backgrounds.add(image, blur)
+            except BackgroundError as e:
+                raise ApiError(str(e))
+            return {"id": bg_id, "items": app.backgrounds.list()}
+
+        def api_admin_background_delete(self, body, **_):
+            bg_id = body.get("id")
+            try:
+                app.backgrounds.delete(bg_id)
+            except BackgroundError as e:
+                raise ApiError(str(e))
+            # Удалённый фон больше не выбран ни в одной теме.
+            ui = app.config.get("ui")
+            patch = {key: value for key, value in (("background", ""), ("background_dark", "same"))
+                     if ui.get(key) == bg_id}
+            if patch:
+                app.config.update({"ui": patch})
+            return {"items": app.backgrounds.list(), "revision": app.config.revision}
+
         # Обновления
 
         def api_update(self, **_):
@@ -557,6 +619,9 @@ def make_handler(app, trusted, port):
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),
+        ("GET", "/backgrounds"): (H.api_backgrounds, False),
+        ("POST", "/admin/background"): (H.api_admin_background, False),
+        ("POST", "/admin/background/delete"): (H.api_admin_background_delete, False),
         ("GET", "/update"): (H.api_update, False),
         ("POST", "/update/settings"): (H.api_update_settings, False),
         ("POST", "/update/token"): (H.api_update_token, False),

@@ -54,12 +54,14 @@ class AuthTest(unittest.TestCase):
 class ValidateTest(unittest.TestCase):
     def test_valid(self):
         validate_ui({"theme": "light", "theme_mode": "sun", "day_start": "06:30", "dim_after_min": 0,
-                     "latitude": 59.94, "longitude": 30.3, "night_dim": 40, "blank_after_min": 60})
+                     "latitude": 59.94, "longitude": 30.3, "night_dim": 40, "blank_after_min": 60,
+                     "background": "0123456789ab", "background_dark": "same", "bg_dim": 30, "tiles": "blur"})
 
     def test_invalid(self):
         for patch in ({"theme": "pink"}, {"day_start": "25:00"}, {"dim_level": 100},
                       {"dim_after_min": True}, {"unknown": 1}, {"theme_mode": "auto"},
-                      {"latitude": 91}, {"night_dim": 95}, {"auto_theme": True}):
+                      {"latitude": 91}, {"night_dim": 95}, {"auto_theme": True},
+                      {"background": "../config"}, {"background_dark": 1}, {"bg_dim": 90}, {"tiles": "glass"}):
             with self.assertRaises(ApiError):
                 validate_ui(patch)
 
@@ -266,3 +268,51 @@ class WifiWatchdogTest(unittest.TestCase):
         dog.check(0)
         dog.check(WifiWatchdog.TIMEOUT * 2)
         self.assertFalse(system.turned_on)
+
+
+class BackgroundsTest(unittest.TestCase):
+    JPEG = b"\xff\xd8\xff\xe0" + b"0" * 100
+    PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+
+    def test_add_list_delete(self):
+        from wallhub.background import Backgrounds
+        with tempfile.TemporaryDirectory() as tmp:
+            bgs = Backgrounds(os.path.join(tmp, "backgrounds"))
+            self.assertEqual(bgs.list(), [])
+            bg_id = bgs.add(self.JPEG, self.PNG)
+            [item] = bgs.list()
+            self.assertEqual(item["url"], f"/bg/{bg_id}.jpg")
+            self.assertEqual(item["blur"], f"/bg/{bg_id}-blur.png")
+            self.assertTrue(bgs.exists(bg_id))
+            self.assertEqual(bgs.file(f"{bg_id}.jpg")[1], "image/jpeg")
+            self.assertIsNone(bgs.file("../config.json"))
+            bgs.delete(bg_id)
+            self.assertEqual(bgs.list(), [])
+
+    def test_rejects_non_images(self):
+        from wallhub.background import BackgroundError, Backgrounds
+        with tempfile.TemporaryDirectory() as tmp:
+            bgs = Backgrounds(tmp)
+            with self.assertRaises(BackgroundError):
+                bgs.add(b"<svg onload=alert(1)>", self.JPEG)
+            with self.assertRaises(BackgroundError):
+                bgs.delete("../x")
+
+    def test_decode_image(self):
+        import base64
+        from wallhub.background import BackgroundError
+        from wallhub.server import decode_image
+        url = "data:image/jpeg;base64," + base64.b64encode(self.JPEG).decode()
+        self.assertEqual(decode_image(url), self.JPEG)
+        for bad in (None, "", "data:image/jpeg;base64,***"):
+            with self.assertRaises(BackgroundError):
+                decode_image(bad)
+
+
+class WidgetCardTest(unittest.TestCase):
+    def test_card_override_kept_only_when_differs(self):
+        catalog = {"clock/clock": {"id": "clock/clock", "title": "Часы", "card": False, "options": []}}
+        desk = lambda card: [{"id": "d1", "widgets": [dict({"id": "w1", "type": "clock/clock", "x": 0, "y": 0, "w": 4, "h": 4}, **card)]}]
+        self.assertTrue(desktops.validate(desk({"card": True}), catalog, 16, 10)[0]["widgets"][0]["card"])
+        self.assertNotIn("card", desktops.validate(desk({"card": False}), catalog, 16, 10)[0]["widgets"][0])
+        self.assertNotIn("card", desktops.validate(desk({"card": "yes"}), catalog, 16, 10)[0]["widgets"][0])

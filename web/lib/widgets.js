@@ -38,7 +38,8 @@ export async function mountWidget(el, w, catalog) {
   const meta = catalog[w.type];
   const [module, id] = w.type.split("/");
   el.classList.add("widget", `widget-${module}-${id}`);
-  el.classList.toggle("widget-card", Boolean(meta && meta.card));
+  // Подложку можно включить или убрать у конкретного виджета (w.card).
+  el.classList.toggle("widget-card", Boolean(w.card ?? (meta && meta.card)));
   try {
     if (!meta) throw new Error("нет в каталоге");
     const mod = await loadModule(module);

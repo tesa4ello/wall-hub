@@ -23,8 +23,42 @@ body.kiosk {
   gap: 6px;
   padding: 6px;
 }
-.widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 16px; container-type: size; }
+.widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: var(--tile-radius); container-type: size; }
 .widget-card { background: var(--surface); }
+
+/* --- фон и стекло (см. lib/wallpaper.js) -------------------------------------- */
+
+.wallpaper { position: fixed; inset: 0; pointer-events: none; }
+.wallpaper-layer {
+  position: absolute;
+  inset: 0;
+  background: center / cover no-repeat;
+  opacity: 0;
+  transition: opacity 1.2s;
+}
+.wallpaper-layer.on { opacity: 1; }
+/* Затемнение фона, чтобы текст читался на ярких картинках. */
+.wallpaper::after { content: ""; position: absolute; inset: 0; background: #000; opacity: var(--bg-dim, 0); }
+.has-wallpaper:not(.tiles-solid) .widget-card {
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+.tiles-blur .widget-card {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+/* Кусок заранее размытого фона под плиткой: тонировка, затемнение, картинка. */
+.tiles-baked .widget-card {
+  background:
+    linear-gradient(var(--glass), var(--glass)),
+    linear-gradient(rgba(0, 0, 0, var(--bg-dim, 0)), rgba(0, 0, 0, var(--bg-dim, 0))),
+    var(--wallpaper-blur) var(--tile-x, 0) var(--tile-y, 0) / 100vw 100vh no-repeat;
+}
+.tiles-frosted .widget-card { background: var(--glass-frosted); }
+/* Виджеты без плитки прямо на картинке: мягкая тень, чтобы текст читался. */
+.has-wallpaper .widget:not(.widget-card) { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 18px rgba(0, 0, 0, 0.25); }
+[data-theme="light"] .has-wallpaper .widget:not(.widget-card) { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5), 0 0 18px rgba(255, 255, 255, 0.4); }
 .widget-error { display: flex; align-items: center; justify-content: center; height: 100%; padding: 8px; color: var(--muted); text-align: center; font-size: 13px; }
 
 .dots { position: fixed; left: 50%; bottom: 8px; z-index: 5; display: flex; gap: 8px; transform: translateX(-50%); pointer-events: none; }
