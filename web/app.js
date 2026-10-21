@@ -1,16 +1,18 @@
-// Оболочка киоска: тема, статусная строка, модули, затемнение, настройки.
+// Оболочка киоска: тема, рабочие столы с виджетами, шторка, затемнение,
+// настройки.
 
 import { api } from "/lib/api.js";
 import { icon } from "/lib/icons.js";
 import { isNight, themeFor } from "/lib/theme.js";
+import { destroyAll, loadCatalog, renderDesktop } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 
 const state = {
   config: null,
+  catalog: null,
   revision: -1,
   build: null,
-  modulesKey: "",
-  mounted: [],
+  updateAvailable: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -36,83 +38,239 @@ function applyTheme() {
   dimmer.setFloor(night);
 }
 
-// --- модули ---------------------------------------------------------------
+// --- рабочие столы ------------------------------------------------------------
 
-async function mountModules() {
-  const enabled = state.config.modules.filter((m) => m.enabled);
-  const key = JSON.stringify(enabled);
-  if (key === state.modulesKey) return;
-  state.modulesKey = key;
+// Все столы смонтированы сразу и лежат лентой; перелистывание — сдвиг ленты.
+const desks = {
+  index: 0,
+  key: "",
+  instances: [],
+  homeTimer: null,
 
-  for (const m of state.mounted) m.instance?.destroy?.();
-  state.mounted = [];
-  const host = $("modules");
-  host.innerHTML = "";
-  host.dataset.count = enabled.length;
-
-  for (const m of enabled) {
-    const el = document.createElement("section");
-    el.className = `module module-${m.id}`;
-    host.appendChild(el);
-    try {
-      ensureStyle(`/modules/${m.id}/module.css`);
-      const mod = await import(`/modules/${m.id}/module.js`);
-      const instance = mod.mount(el, { options: m.options || {}, api });
-      state.mounted.push({ id: m.id, instance });
-    } catch (e) {
-      console.error("module failed", m.id, e);
-      el.innerHTML = `<div class="module-error">Модуль «${m.id}» не загрузился</div>`;
+  async render(config, catalog) {
+    const key = JSON.stringify([config.desktops, config.layout, Object.keys(catalog)]);
+    if (key === this.key) return;
+    this.key = key;
+    destroyAll(this.instances);
+    this.instances = [];
+    const track = $("desk-track");
+    track.innerHTML = "";
+    for (const desktop of config.desktops) {
+      const el = document.createElement("div");
+      el.className = "desk";
+      track.appendChild(el);
+      this.instances.push(...(await renderDesktop(el, desktop, config.layout, catalog)));
     }
-  }
-}
+    $("dots").innerHTML = config.desktops.map(() => "<i></i>").join("");
+    $("dots").hidden = config.desktops.length < 2;
+    this.go(Math.min(this.index, config.desktops.length - 1), false);
+  },
 
-function ensureStyle(href) {
-  if (document.querySelector(`link[href="${href}"]`)) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = href;
-  document.head.appendChild(link);
-}
+  get count() {
+    return state.config ? state.config.desktops.length : 1;
+  },
 
-// --- статусная строка -----------------------------------------------------
+  go(index, animate = true) {
+    this.index = Math.max(0, Math.min(this.count - 1, index));
+    const track = $("desk-track");
+    track.style.transition = animate ? "" : "none";
+    track.style.transform = `translateX(${-this.index * 100}%)`;
+    $("dots").querySelectorAll("i").forEach((d, i) => d.classList.toggle("on", i === this.index));
+  },
 
-function renderStatus(items) {
-  const host = $("status-items");
-  host.innerHTML = items
-    .map((it) => `<div class="status-item" data-level="${it.level || "ok"}" title="">${icon(it.icon)}<span></span></div>`)
-    .join("");
-  // Текст вставляем через textContent: он приходит из системы (имена сетей и т. п.).
-  host.querySelectorAll(".status-item").forEach((el, i) => {
-    el.querySelector("span").textContent = items[i].text;
-    el.title = items[i].title || "";
+  // Через layout.home_after_min минут без касаний возвращаемся на первый стол.
+  touched() {
+    clearTimeout(this.homeTimer);
+    const minutes = state.config ? state.config.layout.home_after_min : 0;
+    if (minutes > 0 && this.index > 0) this.homeTimer = setTimeout(() => this.go(0), minutes * 60000);
+  },
+};
+
+// Жесты на столах: свайп влево/вправо листает столы, долгое нажатие (2 с)
+// открывает настройки.
+const LONG_PRESS_MS = 2000;
+{
+  let start = null;
+  let longTimer = null;
+  const host = $("desktops");
+  host.addEventListener("pointerdown", (e) => {
+    start = { x: e.clientX, y: e.clientY, swiping: false };
+    clearTimeout(longTimer);
+    longTimer = setTimeout(() => {
+      start = null;
+      settings.open();
+    }, LONG_PRESS_MS);
   });
+  window.addEventListener("pointermove", (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearTimeout(longTimer);
+    if (!start.swiping && Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) && desks.count > 1) start.swiping = true;
+    if (start.swiping) {
+      const track = $("desk-track");
+      track.style.transition = "none";
+      track.style.transform = `translateX(calc(${-desks.index * 100}% + ${dx}px))`;
+    }
+  });
+  const end = (e) => {
+    clearTimeout(longTimer);
+    if (start && start.swiping) {
+      const dx = e.clientX - start.x;
+      const threshold = window.innerWidth * 0.15;
+      desks.go(desks.index + (dx < -threshold ? 1 : dx > threshold ? -1 : 0));
+    }
+    start = null;
+  };
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
 }
 
-async function pollStatus() {
-  try {
-    const data = await api.get("/status");
-    renderStatus(data.items);
-    $("status-offline").hidden = true;
-  } catch {
-    $("status-offline").hidden = false;
-  }
+// --- шторка ---------------------------------------------------------------------
+
+// Свайп вниз от верхнего края открывает шторку: Wi‑Fi, тема, настройки и
+// уведомление о новой версии.
+const THEMES = [
+  [{ theme_mode: "manual", theme: "dark" }, "moon", "Тёмная"],
+  [{ theme_mode: "manual", theme: "light" }, "sun", "Светлая"],
+  [{ theme_mode: "schedule" }, "clock", "По времени"],
+];
+
+const shade = {
+  open: false,
+  wifi: null,
+
+  themeIndex() {
+    const ui = state.config.ui;
+    if (ui.theme_mode === "manual") return ui.theme === "light" ? 1 : 0;
+    return 2;
+  },
+
+  render() {
+    const ui = state.config.ui;
+    const t = THEMES[this.themeIndex()];
+    const themeLabel = ui.theme_mode === "sun" ? "По солнцу" : t[2];
+    const w = this.wifi;
+    const wifiSub = !w ? "…" : !w.radio ? "Выключен" : w.connection || "Не подключён";
+    $("shade").innerHTML = `
+      <div class="shade-tiles">
+        <button class="tile ${w && w.radio ? "on" : ""}" data-shade="wifi" ${w && w.available ? "" : "disabled"}>
+          ${icon("wifi")}<span class="tile-title">Wi‑Fi</span><span class="tile-sub"></span>
+        </button>
+        <button class="tile" data-shade="theme">${icon(ui.theme_mode === "sun" ? "sun" : t[1])}<span class="tile-title">Тема</span><span class="tile-sub">${themeLabel}</span></button>
+        <button class="tile" data-shade="settings">${icon("gear")}<span class="tile-title">Настройки</span><span class="tile-sub">Все параметры</span></button>
+      </div>
+      ${state.updateAvailable ? `
+      <button class="shade-update" data-shade="update">${icon("refresh")}<span>Доступна новая версия</span><b>Подробнее</b></button>` : ""}
+      <div class="shade-handle"></div>`;
+    // Имя сети вставляем через textContent: оно приходит извне.
+    $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
+  },
+
+  async show() {
+    this.open = true;
+    this.render();
+    $("shade-backdrop").hidden = false;
+    requestAnimationFrame(() => {
+      $("shade").style.transform = "";
+      $("shade").classList.add("open");
+      $("shade-backdrop").classList.add("on");
+    });
+    try {
+      this.wifi = await api.get("/wifi");
+    } catch {
+      this.wifi = null;
+    }
+    if (this.open) this.render();
+  },
+
+  hide() {
+    this.open = false;
+    $("shade").style.transform = "";
+    $("shade").classList.remove("open");
+    $("shade-backdrop").classList.remove("on");
+    setTimeout(() => { if (!this.open) $("shade-backdrop").hidden = true; }, 300);
+  },
+
+  async action(name) {
+    if (name === "settings" || name === "update") {
+      this.hide();
+      settings.open(name === "update" ? "system" : undefined);
+    } else if (name === "theme") {
+      const next = THEMES[(this.themeIndex() + 1) % THEMES.length][0];
+      await api.post("/settings", { ui: next });
+      await loadConfig();
+      this.render();
+    } else if (name === "wifi" && this.wifi) {
+      await api.post("/wifi/radio", { enabled: !this.wifi.radio });
+      this.wifi = await api.get("/wifi");
+      this.render();
+    }
+  },
+};
+
+{
+  // Тянем шторку пальцем от верхнего края и закрываем свайпом вверх.
+  let drag = null;
+  const shadeEl = $("shade");
+  const begin = (e, fromOpen) => {
+    drag = { y: e.clientY, fromOpen, height: shadeEl.offsetHeight || 220 };
+    shadeEl.style.transition = "none";
+  };
+  $("edge").addEventListener("pointerdown", (e) => {
+    if (!shade.open) {
+      shade.render();
+      begin(e, false);
+    }
+  });
+  shadeEl.addEventListener("pointerdown", (e) => begin(e, true));
+  window.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    const offset = drag.fromOpen ? Math.min(0, dy) : Math.min(0, dy - drag.height);
+    shadeEl.style.transform = `translateY(${offset}px)`;
+  });
+  window.addEventListener("pointerup", (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    shadeEl.style.transition = "";
+    const wasOpen = drag.fromOpen;
+    drag = null;
+    if (!wasOpen) {
+      if (dy > 50) shade.show();
+      else shadeEl.style.transform = "";
+    } else if (dy < -40) {
+      shade.hide();
+    } else {
+      shadeEl.style.transform = "";
+    }
+  });
+  shadeEl.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-shade]");
+    if (b && !b.disabled) shade.action(b.dataset.shade).catch((err) => console.error(err));
+  });
+  $("shade-backdrop").addEventListener("click", () => shade.hide());
 }
 
 // --- настройки и их изменения из админки ------------------------------------
 
 async function loadConfig() {
-  state.config = await api.get("/config");
-  state.revision = state.config.revision;
+  const [config, catalog] = await Promise.all([api.get("/config"), state.catalog ? null : loadCatalog()]);
+  if (catalog) state.catalog = catalog;
+  state.config = config;
+  state.revision = config.revision;
   applyTheme();
-  dimmer.configure(state.config.ui);
-  await mountModules();
-  settings.onConfig(state.config);
+  dimmer.configure(config.ui);
+  await desks.render(config, state.catalog.widgets);
+  settings.onConfig(config);
 }
 
 async function pollRevision() {
   try {
     const { revision, build, update } = await api.get("/revision");
-    $("open-settings").classList.toggle("badge", Boolean(update));
+    $("status-offline").hidden = true;
+    state.updateAvailable = Boolean(update);
+    $("edge-dot").hidden = !update;
     settings.setUpdateBadge(update);
     // После обновления сервис отдаёт новую версию: перезагружаем страницу,
     // чтобы подхватить новый фронтенд.
@@ -120,7 +278,7 @@ async function pollRevision() {
     else if (build !== state.build) return location.reload();
     if (revision !== state.revision) await loadConfig();
   } catch {
-    // Сервис перезапускается: статусная строка покажет «нет связи».
+    $("status-offline").hidden = false;
   }
 }
 
@@ -184,6 +342,7 @@ window.addEventListener("pointerdown", (e) => {
     return;
   }
   dimmer.reset();
+  desks.touched();
 }, true);
 window.addEventListener("keydown", () => (dimmer.dimmed ? dimmer.wake() : dimmer.reset()), true);
 $("dim").addEventListener("click", (e) => e.stopPropagation());
@@ -201,9 +360,6 @@ const settings = new Settings($("settings"), {
   },
 });
 
-$("open-settings").innerHTML = icon("gear");
-$("open-settings").addEventListener("click", () => settings.open());
-
 async function start() {
   try {
     await loadConfig();
@@ -215,9 +371,7 @@ async function start() {
   }
   // Первый запуск: сразу предлагаем выбрать Wi‑Fi сеть.
   if (!state.config.setup.wifi_done) settings.openSetup();
-  pollStatus();
   pollRevision();
-  setInterval(pollStatus, 2000);
   setInterval(pollRevision, 3000);
   setInterval(applyTheme, 30000);
 }

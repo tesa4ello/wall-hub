@@ -11,50 +11,104 @@ body.kiosk {
   touch-action: manipulation;
 }
 
-/* --- статусная строка ---------------------------------------------------- */
+/* --- рабочие столы ------------------------------------------------------- */
 
-.statusbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 44px;
-  padding: 0 6px 0 16px;
+.desktops { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
+.desk-track { display: flex; height: 100%; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.desk {
   flex: none;
-  color: var(--muted);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 6px;
+  padding: 6px;
 }
-.status-items { display: flex; align-items: center; gap: 20px; flex: 1; min-width: 0; overflow: hidden; }
-.status-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.status-item .icon { width: 17px; height: 17px; opacity: 0.85; }
-.status-item[data-level="warn"] { color: var(--warn); }
-.status-item[data-level="crit"] { color: var(--crit); }
-.status-offline { color: var(--crit); white-space: nowrap; }
-.status-btn {
+.widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 16px; container-type: size; }
+.widget-card { background: var(--surface); }
+.widget-error { display: flex; align-items: center; justify-content: center; height: 100%; padding: 8px; color: var(--muted); text-align: center; font-size: 13px; }
+
+.dots { position: fixed; left: 50%; bottom: 8px; z-index: 5; display: flex; gap: 8px; transform: translateX(-50%); pointer-events: none; }
+.dots[hidden] { display: none; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: 0.35; transition: opacity 0.3s; }
+.dots i.on { opacity: 0.9; }
+
+.status-offline {
+  position: fixed;
+  top: 8px;
+  right: 10px;
+  z-index: 15;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--crit);
+  font-size: 13px;
+}
+
+/* --- верхний край и шторка ----------------------------------------------- */
+
+.edge { position: fixed; top: 0; left: 0; right: 0; z-index: 12; height: 22px; touch-action: none; }
+.edge-dot {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--crit);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.shade-backdrop { position: fixed; inset: 0; z-index: 13; background: rgba(0, 0, 0, 0.4); opacity: 0; transition: opacity 0.25s; }
+.shade-backdrop.on { opacity: 1; }
+.shade {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 14;
+  width: min(720px, 100%);
+  margin-left: max(-360px, -50%);
+  padding: 18px 18px 10px;
+  border-radius: 0 0 22px 22px;
+  background: var(--surface);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  transform: translateY(-110%);
+  transition: transform 0.25s ease;
+  touch-action: none;
+}
+.shade.open { transform: translateY(0); }
+.shade-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 96px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 16px;
+  background: var(--surface-2);
+  text-align: left;
+}
+.tile .icon { width: 26px; height: 26px; margin-bottom: 6px; }
+.tile.on { background: var(--accent); color: var(--accent-text); }
+.tile-title { font-size: 17px; font-weight: 600; }
+.tile-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; opacity: 0.75; }
+.shade-update {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: none;
-  border-radius: 12px;
-  background: none;
-  color: var(--muted);
-}
-.status-btn:active { background: var(--surface-2); }
-
-/* --- модули -------------------------------------------------------------- */
-
-.modules {
-  flex: 1;
-  min-height: 0;
-  display: grid;
   gap: 12px;
-  padding: 0 12px 12px;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 16px;
+  text-align: left;
 }
-.module { position: relative; min-width: 0; min-height: 0; border-radius: 20px; overflow: hidden; }
-.module-error { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); }
+.shade-update span { flex: 1; }
+.shade-handle { width: 44px; height: 5px; margin: 12px auto 0; border-radius: 3px; background: var(--muted); opacity: 0.5; }
 
 /* --- затемнение ---------------------------------------------------------- */
 
@@ -215,8 +269,8 @@ body.kiosk {
 .update-banner .btn { background: rgba(255, 255, 255, 0.2); border-color: transparent; color: inherit; }
 
 /* Красная точка: есть новая версия (шестерёнка и пункт «Система»). */
-.status-btn, .nav-item { position: relative; }
-.status-btn.badge::after, .nav-item.badge::after {
+.nav-item { position: relative; }
+.nav-item.badge::after {
   content: "";
   position: absolute;
   width: 10px;
@@ -225,7 +279,6 @@ body.kiosk {
   background: var(--crit);
   box-shadow: 0 0 0 2px var(--bg);
 }
-.status-btn.badge::after { top: 9px; right: 9px; }
 .nav-item.badge::after { top: 50%; right: 14px; margin-top: -5px; }
 
 /* QR админки: светлый фон в любой теме, иначе телефон его не прочтёт. */

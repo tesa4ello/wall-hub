@@ -4,6 +4,8 @@
 import { api } from "/lib/api.js";
 import { icon, signalBars } from "/lib/icons.js";
 import { confirmDialog, toast } from "/lib/dialog.js";
+import { loadCatalog } from "/lib/widgets.js";
+import { DesktopEditor } from "/admin/desktops.js";
 
 const $ = (id) => document.getElementById(id);
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
@@ -12,7 +14,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 const TABS = [
   { id: "display", title: "Экран", icon: "display" },
-  { id: "modules", title: "Модули", icon: "gear" },
+  { id: "desktops", title: "Столы", icon: "grid" },
   { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
   { id: "updates", title: "Обновления", icon: "refresh" },
   { id: "system", title: "Система", icon: "info" },
@@ -78,7 +80,7 @@ $("tabs").addEventListener("click", (e) => {
 });
 
 async function reload() {
-  const [config, catalog] = await guarded(() => Promise.all([api.get("/config"), api.get("/modules")]));
+  const [config, catalog] = await guarded(() => Promise.all([api.get("/config"), loadCatalog()]));
   state.config = config;
   state.catalog = catalog;
   show(state.tab);
@@ -94,8 +96,12 @@ function show(tab) {
 }
 
 function render() {
-  const views = { display: renderDisplay, modules: renderModules, wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  editor?.destroy();
+  editor = null;
+  $("content").classList.toggle("wide", state.tab === "desktops");
   $("content").innerHTML = views[state.tab]();
+  if (state.tab === "desktops") mountEditor();
 }
 
 async function saveUi(patch) {
@@ -146,73 +152,30 @@ function renderDisplay() {
     </section>`;
 }
 
-// --- модули и статусная строка ------------------------------------------------------
+// --- рабочие столы ------------------------------------------------------------------
 
-function renderModules() {
-  const catalog = Object.fromEntries(state.catalog.modules.map((m) => [m.id, m]));
-  const configured = state.config.modules.filter((m) => catalog[m.id]);
-  // Модули из каталога, которых ещё нет в настройках, показываем выключенными.
-  for (const m of state.catalog.modules) {
-    if (!configured.some((c) => c.id === m.id)) configured.push({ id: m.id, enabled: false, options: {} });
-  }
-  const modules = configured.map((m, i) => {
-    const meta = catalog[m.id];
-    const options = (meta.options || []).map((o) => {
-      const value = m.options[o.key] ?? o.default;
-      return `<label class="check"><input type="checkbox" data-mod-opt="${i}" data-key="${esc(o.key)}" ${value ? "checked" : ""}> ${esc(o.title)}</label>`;
-    }).join("");
-    return `
-      <div class="item">
-        <div class="item-main">
-          <button class="switch" data-mod-toggle="${i}" aria-checked="${m.enabled}"></button>
-          <div><div class="item-title">${esc(meta.title)}</div><div class="muted small">${esc(meta.description || "")}</div></div>
-          <div class="order">
-            <button class="btn btn-small" data-mod-move="${i}" data-dir="-1" ${i === 0 ? "disabled" : ""}>↑</button>
-            <button class="btn btn-small" data-mod-move="${i}" data-dir="1" ${i === configured.length - 1 ? "disabled" : ""}>↓</button>
-          </div>
-        </div>
-        ${options ? `<div class="item-options">${options}</div>` : ""}
-      </div>`;
-  }).join("");
-  state.draftModules = configured;
+// Редактор живёт в /admin/desktops.js и сам управляет своим DOM: здесь только
+// место под него и пересоздание при смене вкладки или настроек.
+let editor = null;
 
-  const active = state.config.statusbar;
-  const providers = [...active.map((id) => state.catalog.providers.find((p) => p.id === id)).filter(Boolean),
-    ...state.catalog.providers.filter((p) => !active.includes(p.id))];
-  state.draftStatus = providers.map((p) => ({ id: p.id, on: active.includes(p.id) }));
-  const status = providers.map((p, i) => `
-    <div class="item"><div class="item-main">
-      <button class="switch" data-st-toggle="${i}" aria-checked="${active.includes(p.id)}"></button>
-      <div class="item-title">${esc(p.title)}</div>
-      <div class="order">
-        <button class="btn btn-small" data-st-move="${i}" data-dir="-1" ${i === 0 ? "disabled" : ""}>↑</button>
-        <button class="btn btn-small" data-st-move="${i}" data-dir="1" ${i === providers.length - 1 ? "disabled" : ""}>↓</button>
-      </div>
-    </div></div>`).join("");
-
-  return `
-    <h1>Модули</h1>
-    <p class="muted">Модули главного экрана в порядке показа.</p>
-    <section class="panel list">${modules}</section>
-    <h1>Статусная строка</h1>
-    <section class="panel list">${status}</section>`;
+function renderDesktops() {
+  return `<h1>Рабочие столы</h1><div id="desk-editor"></div>`;
 }
 
-async function saveModules(modules) {
-  await guarded(() => api.post("/admin/modules", { modules }));
-  await reload();
-}
-
-async function saveStatus(items) {
-  await guarded(() => api.post("/admin/statusbar", { items: items.filter((i) => i.on).map((i) => i.id) }));
-  await reload();
-}
-
-function move(list, i, dir) {
-  const copy = [...list];
-  const [item] = copy.splice(i, 1);
-  copy.splice(i + dir, 0, item);
-  return copy;
+function mountEditor() {
+  editor?.destroy();
+  editor = new DesktopEditor($("desk-editor"), {
+    config: state.config,
+    catalog: state.catalog,
+    save: async (desktops, homeAfterMin) => {
+      const res = await guarded(() => api.post("/admin/desktops", { desktops, home_after_min: homeAfterMin }));
+      state.config.desktops = res.desktops;
+      state.config.layout.home_after_min = homeAfterMin;
+      return res.desktops;
+    },
+    toast,
+    confirm: confirmDialog,
+  });
 }
 
 // --- Wi‑Fi --------------------------------------------------------------------------
@@ -390,10 +353,6 @@ $("content").addEventListener("change", async (e) => {
     if ("float" in el.dataset) value = parseFloat(el.value);
     if (Number.isNaN(value)) return;
     await saveUi({ [el.dataset.ui]: value }).catch(() => render());
-  } else if (el.dataset.modOpt !== undefined) {
-    const m = state.draftModules[Number(el.dataset.modOpt)];
-    m.options = { ...m.options, [el.dataset.key]: el.checked };
-    await saveModules(state.draftModules);
   } else if (el.id === "update-channel") {
     await saveUpdateSettings({ channel: el.value }).catch(() => {});
   } else if (el.id === "update-schedule") {
@@ -433,19 +392,7 @@ $("content").addEventListener("click", async (e) => {
   if (!b || b.disabled || b.getAttribute("type") === "submit") return;
   const d = b.dataset;
   try {
-    if (d.modToggle !== undefined) {
-      const m = state.draftModules[Number(d.modToggle)];
-      m.enabled = !m.enabled;
-      await saveModules(state.draftModules);
-    } else if (d.modMove !== undefined) {
-      await saveModules(move(state.draftModules, Number(d.modMove), Number(d.dir)));
-    } else if (d.stToggle !== undefined) {
-      const item = state.draftStatus[Number(d.stToggle)];
-      item.on = !item.on;
-      await saveStatus(state.draftStatus);
-    } else if (d.stMove !== undefined) {
-      await saveStatus(move(state.draftStatus, Number(d.stMove), Number(d.dir)));
-    } else if ("wifiRescan" in d) {
+    if ("wifiRescan" in d) {
       await loadWifi(true);
     } else if ("wifiRadio" in d) {
       await guarded(() => api.post("/wifi/radio", { enabled: !state.wifi.radio }));

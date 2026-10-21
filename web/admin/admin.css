@@ -116,3 +116,121 @@ input:disabled, select:disabled { opacity: 0.45; }
 .update-state.new { color: var(--accent); font-weight: 600; }
 .update-state.error { color: var(--crit, #d33); }
 .row-buttons { flex-wrap: wrap; }
+
+/* --- редактор столов --- */
+
+.content.wide { max-width: none; }
+.desk-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.desk-tab {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.desk-tab.active { background: var(--accent); border-color: transparent; color: var(--accent-text); }
+.desk-tab.add { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.desk-tab .icon { width: 16px; height: 16px; }
+
+.editor { display: grid; grid-template-columns: 200px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.palette, .props { padding: 12px; border-radius: 14px; background: var(--surface); }
+.palette-group { margin: 8px 6px 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.palette-group:first-child { margin-top: 0; }
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.palette-item:hover { background: var(--surface-2); }
+.palette-item span { flex: 1; }
+.palette-item .icon { width: 18px; height: 18px; }
+
+.canvas-wrap { position: relative; overflow: hidden; border-radius: 14px; box-shadow: 0 0 0 1px var(--border); }
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1024px;
+  height: 600px;
+  transform-origin: 0 0;
+  background: var(--bg);
+  color: var(--text);
+  user-select: none;
+}
+.canvas .desk { position: absolute; inset: 0; display: grid; gap: 6px; padding: 6px; }
+.canvas .preview { pointer-events: none; }
+.canvas .widget { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 16px; container-type: size; }
+.canvas .widget-card { background: var(--surface); }
+.canvas .widget-error { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 13px; }
+/* Сетка клеток видна только в редакторе. */
+.canvas .overlay {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--muted) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--muted) 18%, transparent) 1px, transparent 1px);
+  background-size: calc(100% / 16) calc(100% / 10);
+}
+.box {
+  position: relative;
+  border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 16px;
+  cursor: grab;
+  touch-action: none;
+}
+.box:hover { border-style: solid; }
+.box.selected { border: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.box.bad { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 15%, transparent); }
+.box-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  opacity: 0;
+}
+.box:hover .box-label, .box.selected .box-label { opacity: 1; }
+.box-resize {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px 0 14px 0;
+  background: var(--accent);
+  cursor: nwse-resize;
+  opacity: 0;
+}
+.box:hover .box-resize, .box.selected .box-resize { opacity: 1; }
+.canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 22px; }
+
+.props { display: flex; flex-direction: column; gap: 12px; }
+.props-title { display: flex; align-items: center; justify-content: space-between; font-weight: 650; font-size: 16px; }
+.prop { display: flex; flex-direction: column; gap: 6px; }
+.prop > span { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; }
+.prop small { font-size: 12px; }
+.prop input, .prop select { width: 100%; }
+.prop-row { display: flex; gap: 10px; }
+.prop-row > * { flex: 1; }
+.props p { margin: 0; }
+.prov-list { display: flex; flex-direction: column; gap: 4px; }
+.prov { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.prov .btn-small { min-height: 28px; padding: 0 8px; }
+.props .btn-danger .icon, .props .btn .icon { width: 16px; height: 16px; }
+
+@media (max-width: 1100px) {
+  .editor { grid-template-columns: minmax(0, 1fr); }
+  .palette { display: flex; flex-wrap: wrap; gap: 6px; }
+  .palette-group { flex-basis: 100%; }
+  .palette-item { width: auto; }
+}

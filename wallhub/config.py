@@ -34,17 +34,25 @@ DEFAULTS = {
         "blank_after_min": 30,
         "language": "ru",
     },
-    # Порядок и включённость модулей главного экрана.
-    "modules": [
-        {"id": "clock", "enabled": True, "options": {"seconds": True, "date": True}},
+    # Сетка экрана и поведение столов. home_after_min: через сколько минут
+    # без касаний вернуться на первый стол (0 — не возвращаться).
+    "layout": {"cols": 16, "rows": 10, "home_after_min": 5},
+    # Рабочие столы: виджеты в клетках сетки (см. wallhub.desktops).
+    "desktops": [
+        {
+            "id": "d1",
+            "name": "Стол 1",
+            "widgets": [
+                {"id": "w1", "type": "system/statusbar", "x": 0, "y": 0, "w": 16, "h": 1,
+                 "options": {"items": ["wifi", "load", "memory", "temp", "traffic"], "align": "left"}},
+                {"id": "w2", "type": "clock/clock", "x": 0, "y": 1, "w": 16, "h": 9,
+                 "options": {"seconds": True, "date": True}},
+            ],
+        },
     ],
-    # Пункты статусной строки (идентификаторы провайдеров из wallhub.status).
-    "statusbar": ["wifi", "load", "memory", "temp", "traffic"],
     # Первый запуск: пока Wi‑Fi не выбран (или шаг не пропущен), киоск
     # открывает выбор сети.
     "setup": {"wifi_done": False},
-    # Обновления: канал main (каждый коммит в ветку) или releases (теги v*),
-    # автоустановка по ночному таймеру.
     # Обновления. Канал — ключ из branches (ветка или "tags" — последний релиз).
     # schedule: off | hourly | 6h | daily (в time). Должно совпадать с
     # DEFAULT_SETTINGS в deploy/wallhub-update.py.
@@ -84,6 +92,20 @@ def _migrate(data):
     ui = data.get("ui", {})
     if "auto_theme" in ui:
         ui.setdefault("theme_mode", "schedule" if ui.pop("auto_theme") else "manual")
+    # До столов были список модулей и отдельная статусная строка.
+    modules = data.pop("modules", None)
+    statusbar = data.pop("statusbar", None)
+    if (modules is not None or statusbar is not None) and "desktops" not in data:
+        desk = copy.deepcopy(DEFAULTS["desktops"][0])
+        bar, clock = desk["widgets"]
+        if statusbar is not None:
+            bar["options"]["items"] = list(statusbar)
+        clock_cfg = next((m for m in modules or [] if m.get("id") == "clock"), None)
+        if clock_cfg is not None:
+            clock["options"].update(clock_cfg.get("options", {}))
+            if not clock_cfg.get("enabled", True):
+                desk["widgets"].remove(clock)
+        data["desktops"] = [desk]
 
 
 class Config:

@@ -9,12 +9,13 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body class="kiosk">
-  <header class="statusbar">
-    <div class="status-items" id="status-items"></div>
-    <div class="status-offline" id="status-offline" hidden>нет связи с сервисом</div>
-    <button class="status-btn" id="open-settings" aria-label="Настройки"></button>
-  </header>
-  <main class="modules" id="modules"></main>
+  <main class="desktops" id="desktops"><div class="desk-track" id="desk-track"></div></main>
+  <div class="dots" id="dots" hidden></div>
+  <!-- Верхний край: свайп вниз открывает шторку. Точка — есть новая версия. -->
+  <div class="edge" id="edge"><span class="edge-dot" id="edge-dot" hidden></span></div>
+  <div class="status-offline" id="status-offline" hidden>нет связи с сервисом</div>
+  <div class="shade-backdrop" id="shade-backdrop" hidden></div>
+  <div class="shade" id="shade"></div>
   <div class="settings" id="settings" hidden></div>
   <div class="night" id="night"></div>
   <div class="dim" id="dim" hidden></div>
