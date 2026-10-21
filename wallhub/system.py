@@ -111,6 +111,19 @@ class System:
                 "saved": sorted(saved),
             }
 
+    def wifi_bssids(self):
+        """Видимые точки Wi‑Fi для Яндекс Локатора: [{bssid, signal %}]."""
+        if self.dry_run:
+            return [{"bssid": "00:11:22:33:44:55", "signal": 70}]
+        with self._lock:
+            out = self._run(["nmcli", "-t", "-f", "BSSID,SIGNAL", "device", "wifi", "list", "--rescan", "auto"], timeout=40)
+        points = []
+        for line in out.splitlines():
+            bssid, signal = (split_terse(line) + [""] * 2)[:2]
+            if bssid:
+                points.append({"bssid": bssid.lower(), "signal": int(signal or 0)})
+        return sorted(points, key=lambda p: -p["signal"])
+
     def _saved_wifi(self):
         out = self._run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"])
         saved = set()

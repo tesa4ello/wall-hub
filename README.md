@@ -183,6 +183,27 @@ There is no gear icon; the interface is touch only:
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
 
+### Weather and location
+
+The Weather module (`web/modules/weather`, backend `wallhub/weather.py`)
+provides widgets: Weather now, Now and hourly, Hourly forecast (curve), Daily
+forecast (temperature range bars), Precipitation (next 2 hours in 15-minute
+steps or 12 hours), Details and Weather: large. The forecast comes from
+[Open-Meteo](https://open-meteo.com) without a key, the service caches it for
+10 minutes and shows the last one it got while offline. Each widget has its own
+place ("same as panel" or a city found by name) and units (°C/°F,
+m/s·km/h·mph, mmHg/hPa).
+
+The panel location is set in the admin panel, Display → Location:
+
+- **Automatically by IP** (default): no keys, city-level accuracy;
+- **Yandex Locator**: by visible Wi‑Fi access points, more precise. Needs a
+  Locator API key from the Yandex developer console; falls back to IP on error;
+- **Manual**: city search or coordinates.
+
+The automatic location is refreshed every 6 hours. Sunrise and sunset for the
+"by the sun" theme use it as well.
+
 ### Status bar
 
 A status bar item is a provider function in the `wallhub/status/` package,
@@ -218,6 +239,7 @@ serves a test list of Wi‑Fi networks:
 
 ```sh
 python3 -m wallhub --dry-run --config var/config.json --admin-port 8088
+# prefix with WALLHUB_FAKE_WEATHER=1 for a made-up forecast without network
 # kiosk: http://localhost:8080/  (1024×600 window)
 # admin: http://localhost:8088/  (the password is set at first sign-in)
 python3 -m unittest discover -s tests

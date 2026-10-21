@@ -1,0 +1,545 @@
+{
+  "title": "Погода",
+  "description": "Прогноз Open-Meteo: сейчас, по часам, по дням, осадки",
+  "widgets": [
+    {
+      "id": "now",
+      "title": "Погода сейчас",
+      "description": "Температура, состояние и диапазон за день",
+      "icon": "sun",
+      "size": {
+        "default": [
+          3,
+          3
+        ],
+        "min": [
+          2,
+          2
+        ],
+        "max": [
+          8,
+          6
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "title": "Показывать название места",
+          "default": true
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "now_hourly",
+      "title": "Сейчас и по часам",
+      "description": "Текущая погода и ближайшие часы",
+      "icon": "sun",
+      "size": {
+        "default": [
+          7,
+          3
+        ],
+        "min": [
+          5,
+          3
+        ],
+        "max": [
+          16,
+          5
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "title": "Показывать название места",
+          "default": true
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "hourly",
+      "title": "Почасовой прогноз",
+      "description": "График температуры с иконками и вероятностью осадков",
+      "icon": "clock",
+      "size": {
+        "default": [
+          10,
+          3
+        ],
+        "min": [
+          5,
+          2
+        ],
+        "max": [
+          16,
+          5
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "hours",
+          "type": "select",
+          "title": "Часов",
+          "default": "12",
+          "choices": [
+            [
+              "12",
+              "12"
+            ],
+            [
+              "24",
+              "24"
+            ]
+          ]
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "title": "Показывать название места",
+          "default": true
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "daily",
+      "title": "Прогноз по дням",
+      "description": "Дни с диапазоном температур, как в iOS",
+      "icon": "grid",
+      "size": {
+        "default": [
+          5,
+          6
+        ],
+        "min": [
+          4,
+          3
+        ],
+        "max": [
+          8,
+          10
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "days",
+          "type": "select",
+          "title": "Дней",
+          "default": "7",
+          "choices": [
+            [
+              "5",
+              "5"
+            ],
+            [
+              "7",
+              "7"
+            ],
+            [
+              "10",
+              "10"
+            ]
+          ]
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "title": "Показывать название места",
+          "default": true
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "precip",
+      "title": "Осадки",
+      "description": "Когда начнётся или закончится дождь",
+      "icon": "down",
+      "size": {
+        "default": [
+          5,
+          3
+        ],
+        "min": [
+          4,
+          2
+        ],
+        "max": [
+          16,
+          5
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "range",
+          "type": "select",
+          "title": "Период",
+          "default": "2h",
+          "choices": [
+            [
+              "2h",
+              "2 часа, по 15 минут"
+            ],
+            [
+              "12h",
+              "12 часов, по часам"
+            ]
+          ]
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "details",
+      "title": "Подробности",
+      "description": "Ощущается как, ветер, влажность, давление, УФ, восход",
+      "icon": "info",
+      "size": {
+        "default": [
+          5,
+          4
+        ],
+        "min": [
+          3,
+          2
+        ],
+        "max": [
+          12,
+          8
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "wind_unit",
+          "type": "select",
+          "title": "Ветер",
+          "default": "ms",
+          "choices": [
+            [
+              "ms",
+              "м/с"
+            ],
+            [
+              "kmh",
+              "км/ч"
+            ],
+            [
+              "mph",
+              "миль/ч"
+            ]
+          ]
+        },
+        {
+          "key": "pressure_unit",
+          "type": "select",
+          "title": "Давление",
+          "default": "mmhg",
+          "choices": [
+            [
+              "mmhg",
+              "мм рт. ст."
+            ],
+            [
+              "hpa",
+              "гПа"
+            ]
+          ]
+        }
+      ],
+      "card": true
+    },
+    {
+      "id": "large",
+      "title": "Погода: большой",
+      "description": "Сводка, ближайшие часы и прогноз на дни",
+      "icon": "grid",
+      "size": {
+        "default": [
+          8,
+          8
+        ],
+        "min": [
+          6,
+          6
+        ],
+        "max": [
+          16,
+          10
+        ]
+      },
+      "options": [
+        {
+          "key": "location",
+          "type": "location",
+          "title": "Место",
+          "default": {
+            "mode": "panel"
+          }
+        },
+        {
+          "key": "temp_unit",
+          "type": "select",
+          "title": "Температура",
+          "default": "c",
+          "choices": [
+            [
+              "c",
+              "°C"
+            ],
+            [
+              "f",
+              "°F"
+            ]
+          ]
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "title": "Показывать название места",
+          "default": true
+        }
+      ],
+      "card": true
+    }
+  ],
+  "i18n": {
+    "en": {
+      "Погода": "Weather",
+      "Прогноз Open-Meteo: сейчас, по часам, по дням, осадки": "Open-Meteo forecast: now, hourly, daily, precipitation",
+      "Погода сейчас": "Weather now",
+      "Температура, состояние и диапазон за день": "Temperature, conditions and today's range",
+      "Сейчас и по часам": "Now and hourly",
+      "Текущая погода и ближайшие часы": "Current weather and the next hours",
+      "Почасовой прогноз": "Hourly forecast",
+      "График температуры с иконками и вероятностью осадков": "Temperature curve with icons and chance of precipitation",
+      "Прогноз по дням": "Daily forecast",
+      "Дни с диапазоном температур, как в iOS": "Days with temperature range bars, iOS style",
+      "Осадки": "Precipitation",
+      "Когда начнётся или закончится дождь": "When rain starts or stops",
+      "Подробности": "Details",
+      "Ощущается как, ветер, влажность, давление, УФ, восход": "Feels like, wind, humidity, pressure, UV, sunrise",
+      "Погода: большой": "Weather: large",
+      "Сводка, ближайшие часы и прогноз на дни": "Summary, next hours and daily forecast",
+      "Место": "Location",
+      "Температура": "Temperature",
+      "Показывать название места": "Show place name",
+      "Ветер": "Wind",
+      "Давление": "Pressure",
+      "Часов": "Hours",
+      "Дней": "Days",
+      "Период": "Period",
+      "2 часа, по 15 минут": "2 hours, 15-minute steps",
+      "12 часов, по часам": "12 hours, hourly",
+      "м/с": "m/s",
+      "км/ч": "km/h",
+      "миль/ч": "mph",
+      "мм рт. ст.": "mmHg",
+      "гПа": "hPa",
+      "{v} км/ч": "{v} km/h",
+      "{v} миль/ч": "{v} mph",
+      "{v} м/с": "{v} m/s",
+      "{v} гПа": "{v} hPa",
+      "{v} мм рт. ст.": "{v} mmHg",
+      "{v} мм": "{v} mm",
+      "Ясно": "Clear",
+      "Преимущественно ясно": "Mostly clear",
+      "Переменная облачность": "Partly cloudy",
+      "Пасмурно": "Cloudy",
+      "Туман": "Fog",
+      "Туман с изморозью": "Freezing fog",
+      "Слабая морось": "Light drizzle",
+      "Морось": "Drizzle",
+      "Сильная морось": "Heavy drizzle",
+      "Ледяная морось": "Freezing drizzle",
+      "Небольшой дождь": "Light rain",
+      "Дождь": "Rain",
+      "Сильный дождь": "Heavy rain",
+      "Ледяной дождь": "Freezing rain",
+      "Небольшой снег": "Light snow",
+      "Снег": "Snow",
+      "Сильный снег": "Heavy snow",
+      "Снежная крупа": "Snow grains",
+      "Небольшой ливень": "Light showers",
+      "Ливень": "Showers",
+      "Сильный ливень": "Heavy showers",
+      "Небольшой снегопад": "Light snow showers",
+      "Снегопад": "Snow showers",
+      "Гроза": "Thunderstorm",
+      "Гроза с градом": "Thunderstorm with hail",
+      "Нет данных": "No data",
+      "С": "N",
+      "СВ": "NE",
+      "В": "E",
+      "ЮВ": "SE",
+      "Ю": "S",
+      "ЮЗ": "SW",
+      "З": "W",
+      "СЗ": "NW",
+      "низкий": "low",
+      "умеренный": "moderate",
+      "высокий": "high",
+      "очень высокий": "very high",
+      "экстремальный": "extreme",
+      "Снег в ближайшие 2 часа": "Snow for the next 2 hours",
+      "Дождь в ближайшие 2 часа": "Rain for the next 2 hours",
+      "Снег закончится через {n} минуту|Снег закончится через {n} минуты|Снег закончится через {n} минут": "Snow ending in {n} minute|Snow ending in {n} minutes",
+      "Дождь закончится через {n} минуту|Дождь закончится через {n} минуты|Дождь закончится через {n} минут": "Rain ending in {n} minute|Rain ending in {n} minutes",
+      "Снег начнётся через {n} минуту|Снег начнётся через {n} минуты|Снег начнётся через {n} минут": "Snow starting in {n} minute|Snow starting in {n} minutes",
+      "Дождь начнётся через {n} минуту|Дождь начнётся через {n} минуты|Дождь начнётся через {n} минут": "Rain starting in {n} minute|Rain starting in {n} minutes",
+      "Без осадков ближайшие 2 часа": "No precipitation for the next 2 hours",
+      "Осадки в ближайшие 12 часов": "Precipitation for the next 12 hours",
+      "Осадки до {time}": "Precipitation until {time}",
+      "Без осадков ближайшие 12 часов": "No precipitation for the next 12 hours",
+      "Осадки около {time}": "Precipitation around {time}",
+      "Макс. {max}, мин. {min}": "H:{max} L:{min}",
+      "Сейчас": "Now",
+      "Сегодня": "Today",
+      "Ощущается": "Feels like",
+      "порывы {v}": "gusts {v}",
+      "Влажность": "Humidity",
+      "УФ-индекс": "UV index",
+      "Осадки сегодня": "Precipitation today",
+      "вероятность {v}%": "chance {v}%",
+      "Восход": "Sunrise",
+      "закат {time}": "sunset {time}",
+      "Облачность": "Cloud cover",
+      "Обновлено в {time}": "Updated at {time}",
+      "Прогноз на {n} день|Прогноз на {n} дня|Прогноз на {n} дней": "{n}-day forecast|{n}-day forecast",
+      "Нет данных о погоде": "No weather data",
+      "Загружаю погоду…": "Loading weather…",
+      "Осадки в течение часа": "Precipitation within the hour"
+    }
+  }
+}

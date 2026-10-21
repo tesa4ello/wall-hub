@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 import unittest
 
 from wallhub import auth
@@ -372,3 +373,100 @@ class BuiltinBackgroundsTest(unittest.TestCase):
             with self.assertRaises(BackgroundError):
                 bgs.delete("default-aurora-dark")
             validate_ui({"background": "default-waves-light", "background_dark": "default-orbs-dark"})
+
+
+class WeatherTest(unittest.TestCase):
+    def setUp(self):
+        from wallhub import weather
+        self.weather = weather
+        # fake_fetch строит прогноз от текущего времени.
+        self.now = time.time()
+        self.calls = []
+
+        def fetch(url, params):
+            self.calls.append((url, params))
+            if self.fail:
+                raise OSError("offline")
+            return weather.fake_fetch(url, params)
+
+        self.fail = False
+        self.clock = [self.now]
+        self.w = weather.Weather(fetch=fetch, clock=lambda: self.clock[0])
+
+    def test_normalize_shape(self):
+        data = self.w.forecast(55.7512, 37.6184)
+        self.assertEqual(data["place"]["timezone"], "Europe/Moscow")
+        self.assertEqual(len(data["hourly"]), self.weather.HOURS)
+        self.assertEqual(len(data["daily"]), self.weather.DAYS)
+        self.assertIn("temp", data["current"])
+        self.assertIsInstance(data["hourly"][0]["day"], bool)
+        self.assertFalse(data["stale"])
+
+    def test_cache_shared_by_nearby_points(self):
+        self.w.forecast(55.7512, 37.6184)
+        self.w.forecast(55.7498, 37.6201)
+        self.assertEqual(len(self.calls), 1)
+        self.clock[0] += self.weather.FORECAST_TTL + 1
+        self.w.forecast(55.75, 37.62)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_stale_on_failure(self):
+        self.w.forecast(55.75, 37.62)
+        self.fail = True
+        self.clock[0] += self.weather.FORECAST_TTL + self.weather.RETRY_AFTER + 1
+        data = self.w.forecast(55.75, 37.62)
+        self.assertTrue(data["stale"])
+        with self.assertRaises(self.weather.WeatherError):
+            self.w.forecast(10, 10)
+
+    def test_search(self):
+        results = self.w.search("Мос")
+        self.assertEqual(results[0]["name"], "Москва")
+        self.assertIn("Россия", results[0]["region"])
+        self.assertEqual(self.w.search("М"), [])
+
+
+class LocationTest(unittest.TestCase):
+    def test_clean_location(self):
+        self.assertEqual(desktops.clean_location(None), {"mode": "panel"})
+        self.assertEqual(desktops.clean_location({"mode": "custom", "lat": "x"}), {"mode": "panel"})
+        self.assertEqual(desktops.clean_location({"mode": "custom", "lat": 91, "lon": 0}), {"mode": "panel"})
+        self.assertEqual(desktops.clean_location({"mode": "custom", "name": "Сочи", "lat": 43.585472, "lon": 39.723098}),
+                         {"mode": "custom", "name": "Сочи", "lat": 43.5855, "lon": 39.7231})
+
+    def test_parsers(self):
+        from wallhub import location
+        self.assertEqual(location.parse_ip_service("ipwho.is", {"success": False}), None)
+        found = location.parse_ip_service("ipwho.is", {"success": True, "latitude": 59.93, "longitude": 30.31, "city": "СПб"})
+        self.assertEqual((found["lat"], found["name"]), (59.93, "СПб"))
+        self.assertEqual(location.parse_yandex({"location": {"point": {"lat": 55.1, "lon": 37.2}, "accuracy": 40}})["accuracy"], 40)
+        self.assertIsNone(location.parse_yandex({}))
+        self.assertEqual(location.signal_to_dbm(100), -50)
+
+    def test_locate_by_ip_updates_config(self):
+        from wallhub import location
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            loc = location.Locator(config, None, request=lambda url, body=None: {
+                "success": True, "latitude": 59.9386, "longitude": 30.3141, "city": "Санкт-Петербург"})
+            found = loc.locate("ip")
+            self.assertTrue(found["changed"])
+            ui = config.get("ui")
+            self.assertEqual((ui["latitude"], ui["location_name"]), (59.9386, "Санкт-Петербург"))
+            self.assertFalse(loc.locate("ip")["changed"])
+
+    def test_manual_coordinates_kept_on_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.json")
+            with open(path, "w") as f:
+                json.dump({"ui": {"latitude": 59.9, "longitude": 30.3}}, f)
+            self.assertEqual(Config(path).get("ui", "location_mode"), "manual")
+            self.assertEqual(Config(os.path.join(tmp, "new.json")).get("ui", "location_mode"), "ip")
+
+    def test_yandex_key_is_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            config.update({"location": {"yandex_key": "abc-123-def"}})
+            public = config.public()
+            self.assertNotIn("yandex_key", public["location"])
+            self.assertTrue(public["location"]["yandex_key_set"])

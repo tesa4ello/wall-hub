@@ -1,0 +1,150 @@
+/* Модуль «Погода». Своего фона нет: содержимое лежит на плитке панели
+   (сплошной или стеклянной) или прямо на фоновой картинке. Размеры шрифтов
+   от контейнера (у .widget стоит container-type: size). */
+
+:root,
+[data-theme="dark"] {
+  --wx-cloud: #eef2f8;
+  --wx-cloud-back: #aeb8c8;
+  --wx-cloud-edge: rgba(0, 0, 0, 0);
+  --wx-moon: #e9edf5;
+  --wx-moon-edge: #b9c3d6;
+  --wx-rain: #4da3ff;
+  --wx-snow: #b8dcff;
+  --wx-fog: #aeb6c2;
+  --wx-track: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="light"] {
+  --wx-cloud: #ffffff;
+  --wx-cloud-back: #c9d1dd;
+  --wx-cloud-edge: rgba(60, 80, 110, 0.35);
+  --wx-moon: #f1f3f8;
+  --wx-moon-edge: #8e9ab0;
+  --wx-rain: #1f7fe6;
+  --wx-snow: #6aaef0;
+  --wx-fog: #8a94a3;
+  --wx-track: rgba(0, 0, 0, 0.09);
+}
+
+.wx {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--tile-pad, 14px);
+  overflow: hidden;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.wx-col { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: min(4cqh, 10px); }
+.wx-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; color: var(--muted); text-align: center; font-size: 14px; }
+.wx-empty small { font-size: 11px; opacity: 0.8; }
+.wx-stale { margin-top: auto; font-size: 11px; color: var(--muted); }
+
+/* --- иконки ------------------------------------------------------------- */
+
+.wx-icon { display: block; width: 32px; height: 32px; flex: none; overflow: visible; }
+.wx-sun { fill: #ffc83a; stroke: #f39a0c; stroke-width: 1.4; }
+.wx-ray { fill: none; stroke: #ffb21a; stroke-width: 3.4; stroke-linecap: round; }
+.wx-moon { fill: var(--wx-moon); stroke: var(--wx-moon-edge); stroke-width: 1.2; }
+.wx-cloud { fill: var(--wx-cloud); stroke: var(--wx-cloud-edge); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.wx-cloud-back { fill: var(--wx-cloud-back); }
+.wx-drop { fill: none; stroke: var(--wx-rain); stroke-width: 3; stroke-linecap: round; }
+.wx-flake { fill: none; stroke: var(--wx-snow); stroke-width: 1.8; stroke-linecap: round; }
+.wx-fog { fill: none; stroke: var(--wx-fog); stroke-width: 3.2; stroke-linecap: round; }
+.wx-bolt { fill: #ffc83a; stroke: #e08a00; stroke-width: 1.2; stroke-linejoin: round; }
+.wx-glyph { width: 1.1em; height: 1.1em; flex: none; vertical-align: -0.15em; }
+/* Без плитки, прямо на картинке: иконкам нужен контур. */
+.has-wallpaper .widget:not(.widget-card) .wx-icon { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35)); }
+
+/* --- общие куски ---------------------------------------------------------- */
+
+.wx-place { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-place-pin { width: 11px; height: 11px; opacity: 0.8; }
+.wx-cond { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-hl { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.wx-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-pop { display: block; min-height: 1.2em; font-size: 11px; font-style: normal; font-weight: 600; color: var(--wx-rain); }
+
+.wx-head { display: flex; justify-content: space-between; gap: 10px; }
+.wx-head-main { min-width: 0; }
+.wx-head .wx-temp { font-size: min(30cqh, 52px); font-weight: 300; line-height: 1; letter-spacing: -0.02em; }
+.wx-head-side { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; text-align: right; }
+.wx-head-icon { width: min(22cqh, 34px); height: min(22cqh, 34px); margin-bottom: 2px; }
+
+.wx-hours { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); align-items: center; margin-top: auto; text-align: center; }
+.wx-hour { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wx-hour-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wx-hour-icon { width: 28px; height: 28px; }
+.wx-hour-temp { font-size: 15px; font-weight: 500; }
+
+/* --- «Погода сейчас» ----------------------------------------------------- */
+
+.wx-now { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+.wx-now .wx-temp { font-size: min(34cqh, 30cqw); font-weight: 300; line-height: 1.05; letter-spacing: -0.02em; }
+.wx-now-foot { margin-top: auto; min-width: 0; }
+.wx-now-icon { width: min(20cqh, 30px); height: min(20cqh, 30px); margin-bottom: 2px; }
+.wx-now.tiny { align-items: center; justify-content: center; gap: 2px; }
+.wx-now.tiny .wx-now-icon { width: min(42cqh, 40cqw); height: min(42cqh, 40cqw); }
+.wx-now.tiny .wx-temp { font-size: min(34cqh, 30cqw); }
+
+/* --- почасовой график ----------------------------------------------------- */
+
+.wx-chart { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.wx-chart-row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); text-align: center; }
+.wx-chart-times span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wx-chart-icons span { display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
+.wx-chart-plot { position: relative; flex: 1; min-height: 40px; margin: 22px 0 4px; }
+.wx-chart-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wx-dot { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--text); }
+.wx-chart-temp { position: absolute; transform: translate(-50%, -150%); font-size: 15px; font-weight: 500; white-space: nowrap; }
+
+/* --- по дням ------------------------------------------------------------- */
+
+.wx-days { display: flex; flex-direction: column; justify-content: space-around; flex: 1; min-height: 0; }
+.wx-day {
+  display: grid;
+  grid-template-columns: minmax(2.6em, 1fr) 34px 2.6em minmax(40px, 2.2fr) 2.6em;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 15px;
+}
+.wx-day + .wx-day { border-top: 1px solid var(--border); }
+.wx-day-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-day-icon { display: flex; flex-direction: column; align-items: center; }
+.wx-day-icon .wx-icon { width: 26px; height: 26px; }
+.wx-day-icon .wx-pop { min-height: 0; font-size: 10px; line-height: 1; }
+.wx-day-min { text-align: right; color: var(--muted); }
+.wx-day-max { text-align: right; }
+.wx-bar { position: relative; height: 5px; border-radius: 3px; background: var(--wx-track); }
+.wx-bar > i { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.wx-bar-now { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--surface, #000); }
+
+/* --- осадки -------------------------------------------------------------- */
+
+.wx-precip-head { display: flex; align-items: center; gap: 8px; font-size: min(18cqh, 16px); font-weight: 500; }
+.wx-precip-head .wx-glyph { color: var(--wx-rain); width: 1.3em; height: 1.3em; }
+.wx-precip-line { font-size: 13px; color: var(--muted); }
+.wx-bars { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 4px; flex: 1; min-height: 20px; align-items: end; }
+.wx-bars-grid { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.wx-bars-grid i { border-top: 1px dashed var(--border); }
+.wx-bar-col { position: relative; height: 100%; display: flex; align-items: flex-end; }
+.wx-bar-col i { width: 100%; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--wx-rain) 80%, transparent); }
+.wx-bar-col.snow i { background: color-mix(in srgb, var(--wx-snow) 85%, transparent); }
+.wx-bars-labels { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 4px; font-size: 11px; color: var(--muted); }
+.wx-bars-labels span { white-space: nowrap; overflow: visible; }
+
+/* --- подробности ----------------------------------------------------------- */
+
+.wx-tiles { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px 14px; height: 100%; }
+.wx-tile { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.wx-tile-title { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-tile-value small { margin-left: 0.25em; font-size: 0.6em; font-weight: 400; color: var(--muted); }
+.wx-tile-value { margin-top: 3px; font-size: min(14cqh, 22px); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-tile-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- большой ------------------------------------------------------------- */
+
+.wx-large .wx-head .wx-temp { font-size: min(14cqh, 64px); }
+.wx-large .wx-hours { margin-top: 0; padding: 8px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
