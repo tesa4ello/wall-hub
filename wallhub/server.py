@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, status
 from .network import SPEED_PROVIDERS, Network
-from .update import Updates
+from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
 
 log = logging.getLogger(__name__)
@@ -287,7 +287,12 @@ def make_handler(app, trusted, port):
 
         def api_revision(self, **_):
             # build: киоск перезагружает страницу, когда версия сменилась.
-            return {"revision": app.config.revision, "build": BUILD.get("commit", "")}
+            # update: шестерёнка на экране показывает значок новой версии.
+            return {
+                "revision": app.config.revision,
+                "build": BUILD.get("commit", ""),
+                "update": app.updates.available(BUILD.get("commit", "")),
+            }
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
@@ -401,7 +406,8 @@ def make_handler(app, trusted, port):
 
         def api_update(self, **_):
             return {
-                "settings": app.config.get("update"),
+                "settings": normalize_settings(app.config.get("update")),
+                "available": app.updates.available(BUILD.get("commit", "")),
                 "token_set": app.updates.token_set(),
                 "status": app.updates.status(),
                 "build": BUILD,
@@ -410,12 +416,27 @@ def make_handler(app, trusted, port):
         def api_update_settings(self, body, **_):
             patch = {}
             if "channel" in body:
-                if body["channel"] not in ("main", "releases"):
+                if body["channel"] not in CHANNELS:
                     raise ApiError("Неизвестный канал обновлений")
                 patch["channel"] = body["channel"]
             if "auto" in body:
                 patch["auto"] = bool(body["auto"])
+            if "schedule" in body:
+                if body["schedule"] not in SCHEDULES:
+                    raise ApiError("Неизвестное расписание")
+                patch["schedule"] = body["schedule"]
+            if "time" in body:
+                if not isinstance(body["time"], str) or not TIME_RE.fullmatch(body["time"]):
+                    raise ApiError("Время в формате ЧЧ:ММ")
+                patch["time"] = body["time"]
+            channel_changed = "channel" in patch and patch["channel"] != normalize_settings(app.config.get("update"))["channel"]
             app.config.update({"update": patch})
+            # Сменили канал — сразу узнаём, что в нём есть.
+            if channel_changed:
+                try:
+                    app.updates.start("check")
+                except (subprocess.SubprocessError, OSError) as e:
+                    log.warning("update check after channel change failed: %s", e)
 
         def api_update_token(self, body, **_):
             token = str(body.get("token", "")).strip()

@@ -347,13 +347,22 @@ function renderUpdates() {
       </div>
     </section>
     <section class="panel">
-      <label class="field"><span>Канал<small>main — каждый коммит, релизы — только теги v*</small></span>
+      <label class="field"><span>Канал<small>Разработка — свежие, но менее проверенные версии</small></span>
         <select id="update-channel">
-          <option value="main" ${u.settings.channel === "main" ? "selected" : ""}>Ветка ${esc(u.settings.branch)}</option>
-          <option value="releases" ${u.settings.channel === "releases" ? "selected" : ""}>Релизы</option>
+          <option value="stable" ${u.settings.channel === "stable" ? "selected" : ""}>Стабильная (${esc(u.settings.branches.stable)})</option>
+          <option value="dev" ${u.settings.channel === "dev" ? "selected" : ""}>Разработка (${esc(u.settings.branches.dev)})</option>
         </select>
       </label>
-      <label class="field"><span>Ставить автоматически<small>Проверка каждую ночь около 4:00</small></span>
+      <label class="field"><span>Проверять обновления</span>
+        <select id="update-schedule">
+          ${[["off", "Не проверять"], ["hourly", "Каждый час"], ["6h", "Каждые 6 часов"], ["daily", "Раз в день"]]
+            .map(([v, l]) => `<option value="${v}" ${u.settings.schedule === v ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field"><span>Время проверки<small>Для «раз в день»</small></span>
+        <input type="time" id="update-time" value="${esc(u.settings.time)}" ${u.settings.schedule === "daily" ? "" : "disabled"}>
+      </label>
+      <label class="field"><span>Ставить автоматически<small>Иначе только показывать, что вышла новая версия</small></span>
         <input type="checkbox" id="update-auto" ${u.settings.auto ? "checked" : ""}>
       </label>
     </section>
@@ -387,6 +396,10 @@ $("content").addEventListener("change", async (e) => {
     await saveModules(state.draftModules);
   } else if (el.id === "update-channel") {
     await saveUpdateSettings({ channel: el.value }).catch(() => {});
+  } else if (el.id === "update-schedule") {
+    await saveUpdateSettings({ schedule: el.value }).catch(() => {});
+  } else if (el.id === "update-time") {
+    if (el.value) await saveUpdateSettings({ time: el.value }).catch(() => {});
   } else if (el.id === "update-auto") {
     await saveUpdateSettings({ auto: el.checked }).catch(() => {});
   } else if (el.id === "tz") {

@@ -1,10 +1,11 @@
 [Unit]
-Description=Wall-HUB nightly update check
+Description=Wall-HUB update check (schedule is in the panel settings)
 
+# Таймер только будит обновлятор, а пора ли проверять, он решает сам по
+# расписанию из настроек (update.schedule / update.time).
 [Timer]
-OnCalendar=*-*-* 04:00
-RandomizedDelaySec=30min
-Persistent=true
+OnCalendar=*:0/15
+RandomizedDelaySec=1min
 Unit=wallhub-update@auto.service
 
 [Install]

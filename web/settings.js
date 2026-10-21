@@ -28,6 +28,17 @@ const SPEED_PROVIDERS = [
 ];
 const IFACE_TYPES = { wifi: "Wi‑Fi", ethernet: "Ethernet" };
 
+const UPDATE_CHANNELS = [
+  ["stable", "Стабильная"],
+  ["dev", "Разработка"],
+];
+const UPDATE_SCHEDULES = [
+  ["off", "Не проверять"],
+  ["hourly", "Каждый час"],
+  ["6h", "Каждые 6 ч"],
+  ["daily", "Раз в день"],
+];
+
 function ago(seconds) {
   const min = Math.round((Date.now() / 1000 - seconds) / 60);
   if (min < 1) return "только что";
@@ -58,6 +69,8 @@ export class Settings {
     this.externalBusy = false;
     this.speed = null;
     this.speedTimer = null;
+    this.update = null;
+    this.updateTimer = null;
     // Режим первого запуска: экран выбора Wi‑Fi с кнопкой «Пропустить».
     this.setup = false;
 
@@ -87,6 +100,7 @@ export class Settings {
     this.root.hidden = true;
     clearInterval(this.wifiTimer);
     clearTimeout(this.speedTimer);
+    clearTimeout(this.updateTimer);
     // Закрытие окна первого запуска равносильно «Пропустить».
     if (this.setup) this.finishSetup();
   }
@@ -116,6 +130,7 @@ export class Settings {
     this.section = section;
     clearInterval(this.wifiTimer);
     clearTimeout(this.speedTimer);
+    clearTimeout(this.updateTimer);
     this.root.querySelectorAll(".nav-item").forEach((b) =>
       b.classList.toggle("active", b.dataset.section === section),
     );
@@ -464,11 +479,112 @@ export class Settings {
 
   // --- Система ----------------------------------------------------------------
 
+  // Значок новой версии на пункте «Система» (на шестерёнке его ставит app.js).
+  setUpdateBadge(on) {
+    this.root.querySelector('.nav-item[data-section="system"]').classList.toggle("badge", Boolean(on));
+  }
+
   async loadInfo() {
     const [info, net] = await Promise.allSettled([api.get("/info"), api.get("/network")]);
     this.info = info.value || null;
     this.net = net.value || this.net;
+    await this.loadUpdate();
     if (this.section === "system" && !this.root.hidden) this.render();
+  }
+
+  // --- обновления (часть раздела «Система») ------------------------------------
+
+  async loadUpdate() {
+    clearTimeout(this.updateTimer);
+    try {
+      this.update = await api.get("/update");
+    } catch {
+      // Во время установки сервис перезапускается: просто ждём.
+    }
+    const st = this.update && this.update.status;
+    const busy = st && ["checking", "installing"].includes(st.state);
+    if (this.section !== "system" || this.root.hidden) return;
+    this.render();
+    if (busy) this.updateTimer = setTimeout(() => this.loadUpdate(), 2000);
+  }
+
+  async saveUpdate(patch) {
+    await api.post("/update/settings", patch);
+    await this.loadUpdate();
+  }
+
+  async runUpdate(mode) {
+    if (mode === "install") {
+      const ok = await confirmDialog({
+        title: "Обновить панель?",
+        text: "Экран перезагрузится сам, когда новая версия запустится.",
+        ok: "Обновить",
+      });
+      if (!ok) return;
+    }
+    await api.post("/update/run", { mode });
+    this.update.status = { ...this.update.status, state: mode === "check" ? "checking" : "installing", message: "Запускаю…" };
+    this.render();
+    this.updateTimer = setTimeout(() => this.loadUpdate(), 1000);
+  }
+
+  renderUpdate() {
+    const u = this.update;
+    if (!u) return "";
+    const st = u.status || {};
+    const set = u.settings;
+    const busy = ["checking", "installing"].includes(st.state);
+    const latest = st.latest || {};
+    const seg = (key, items) =>
+      `<div class="segmented">${items
+        .map(([value, label]) => `<button data-upd-set="${key}" data-value='${JSON.stringify(value)}' aria-pressed="${set[key] === value}">${label}</button>`)
+        .join("")}</div>`;
+    const newVersion = [latest.version, latest.commit && latest.commit.slice(0, 7)].filter(Boolean).join(" · ");
+    const banner = st.state === "installing"
+      ? `<div class="update-banner">${icon("refresh")}<div><div class="update-banner-title">Устанавливаю обновление…</div>
+          <div class="update-banner-text">Экран перезагрузится сам, когда новая версия запустится</div></div></div>`
+      : u.available
+        ? `<div class="update-banner">${icon("refresh")}<div>
+            <div class="update-banner-title">Доступна новая версия ${esc(newVersion)}</div>
+            <div class="update-banner-text">${esc(latest.title || "")}</div></div>
+            <button class="btn" data-update-run="install">Обновить</button></div>`
+        : "";
+    const checked = st.checked_at ? ` · проверено ${ago(Date.parse(st.checked_at) / 1000)}` : "";
+    const failed = st.result === "failed" && !busy;
+    return `
+      ${banner}
+      <div class="card">
+        <div class="row">
+          <div class="row-label">Версия
+            <div class="row-hint ${failed ? "speed-error" : ""}">${esc(st.message || "Ещё не проверялось")}${failed ? "" : checked}</div>
+          </div>
+          <div class="speed-cell">
+            <div class="row-value mono">${esc(versionText(this.info || {}))}</div>
+            <button class="btn btn-small" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")}${st.state === "checking" ? "Проверяю…" : "Проверить"}</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-label">Канал<div class="row-hint">Разработка — свежие, но менее проверенные версии</div></div>
+          ${seg("channel", UPDATE_CHANNELS)}
+        </div>
+        <div class="row">
+          <div class="row-label">Проверять обновления</div>
+          ${seg("schedule", UPDATE_SCHEDULES)}
+        </div>
+        ${set.schedule === "daily" ? `
+        <div class="row">
+          <div class="row-label">Время проверки</div>
+          <div class="stepper">
+            <button class="btn" data-upd-time="-30">−</button>
+            <span class="stepper-value">${esc(set.time)}</span>
+            <button class="btn" data-upd-time="30">+</button>
+          </div>
+        </div>` : ""}
+        <div class="row ${set.schedule === "off" ? "row-disabled" : ""}">
+          <div class="row-label">Ставить автоматически<div class="row-hint">Иначе только показывать, что вышла новая версия</div></div>
+          <button class="switch" data-upd-auto aria-checked="${set.auto}"></button>
+        </div>
+      </div>`;
   }
 
   renderSystem() {
@@ -477,9 +593,10 @@ export class Settings {
     const initial = this.config.admin.initial_password;
     return `
       <h2>Система</h2>
+      ${this.renderUpdate()}
       <div class="card">
         <div class="row"><div class="row-label">Имя устройства</div><div class="row-value">${esc(info.hostname || "—")}</div></div>
-        <div class="row"><div class="row-label">Версия</div><div class="row-value">${esc(versionText(info))}</div></div>
+        ${this.update ? "" : `<div class="row"><div class="row-label">Версия</div><div class="row-value">${esc(versionText(info))}</div></div>`}
       </div>
       <div class="card">
         <div class="row">
@@ -547,6 +664,14 @@ export class Settings {
       } else if ("wifiRadio" in b.dataset) {
         const enable = !this.wifi.radio;
         await this.wifiAction(enable ? "Включаю Wi‑Fi…" : "Выключаю Wi‑Fi…", () => api.post("/wifi/radio", { enabled: enable }));
+      } else if (b.dataset.updSet) {
+        await this.saveUpdate({ [b.dataset.updSet]: JSON.parse(b.dataset.value) });
+      } else if (b.dataset.updTime) {
+        await this.saveUpdate({ time: shiftTime(this.update.settings.time, Number(b.dataset.updTime)) });
+      } else if ("updAuto" in b.dataset) {
+        await this.saveUpdate({ auto: !this.update.settings.auto });
+      } else if (b.dataset.updateRun) {
+        await this.runUpdate(b.dataset.updateRun);
       } else if ("externalRefresh" in b.dataset) {
         await this.loadExternal(true);
       } else if (b.dataset.speedtest) {

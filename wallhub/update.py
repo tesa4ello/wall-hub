@@ -14,6 +14,16 @@ import time
 log = logging.getLogger(__name__)
 
 MODES = ("check", "install", "rollback")
+CHANNELS = ("stable", "dev")
+SCHEDULES = ("off", "hourly", "6h", "daily")
+
+
+def normalize_settings(settings):
+    """Настройки обновлений с учётом старых значений канала (main/releases)."""
+    settings = dict(settings)
+    if settings.get("channel") not in CHANNELS:
+        settings["channel"] = "stable"
+    return settings
 
 
 class Updates:
@@ -28,6 +38,12 @@ class Updates:
                 return json.load(f)
         except (OSError, ValueError):
             return {"state": "idle", "message": "Обновления ещё не проверялись"}
+
+    def available(self, build_commit):
+        """Есть ли версия новее установленной (по результату последней проверки)."""
+        status = self.status()
+        latest = (status.get("latest") or {}).get("commit")
+        return bool(status.get("available") and latest and latest != build_commit)
 
     def token_set(self):
         try:
@@ -69,7 +85,7 @@ class Updates:
         self._write(state="checking", message="Проверяю обновления…")
         time.sleep(1.5)
         latest = {"commit": "0123456789abcdef", "ref": "main", "date": "2026-10-21T10:00:00Z",
-                  "title": "Тестовое обновление"}
+                  "title": "Тестовое обновление", "version": "0.1.2"}
         if mode == "install":
             self._write(state="installing", message="Устанавливаю…")
             time.sleep(2)

@@ -45,7 +45,17 @@ DEFAULTS = {
     "setup": {"wifi_done": False},
     # Обновления: канал main (каждый коммит в ветку) или releases (теги v*),
     # автоустановка по ночному таймеру.
-    "update": {"repo": "tesa4ello/wall-hub", "channel": "main", "branch": "main", "auto": True},
+    # Обновления. Канал — ключ из branches (ветка или "tags" — последний релиз).
+    # schedule: off | hourly | 6h | daily (в time). Должно совпадать с
+    # DEFAULT_SETTINGS в deploy/wallhub-update.py.
+    "update": {
+        "repo": "tesa4ello/wall-hub",
+        "channel": "stable",
+        "branches": {"stable": "main", "dev": "dev"},
+        "auto": True,
+        "schedule": "daily",
+        "time": "04:00",
+    },
     "admin": {
         # Хеш пароля админки (см. wallhub.auth). Пустой = админка закрыта.
         "password_hash": "",
