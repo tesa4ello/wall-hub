@@ -51,6 +51,18 @@ class AuthTest(unittest.TestCase):
         self.assertFalse(auth.check_password("x", ""))
 
 
+class SessionsTest(unittest.TestCase):
+    def test_sessions_survive_restart(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "sessions.json")
+            token = auth.Sessions(path).create()
+            self.assertTrue(auth.Sessions(path).valid(token))
+            with open(path, encoding="utf-8") as f:
+                self.assertNotIn(token, f.read())
+            auth.Sessions(path).clear()
+            self.assertFalse(auth.Sessions(path).valid(token))
+
+
 class ValidateTest(unittest.TestCase):
     def test_valid(self):
         validate_ui({"theme": "light", "theme_mode": "sun", "day_start": "06:30", "dim_after_min": 0,
