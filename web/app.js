@@ -111,7 +111,9 @@ async function loadConfig() {
 
 async function pollRevision() {
   try {
-    const { revision, build } = await api.get("/revision");
+    const { revision, build, update } = await api.get("/revision");
+    $("open-settings").classList.toggle("badge", Boolean(update));
+    settings.setUpdateBadge(update);
     // После обновления сервис отдаёт новую версию: перезагружаем страницу,
     // чтобы подхватить новый фронтенд.
     if (state.build === null) state.build = build;
@@ -214,6 +216,7 @@ async function start() {
   // Первый запуск: сразу предлагаем выбрать Wi‑Fi сеть.
   if (!state.config.setup.wifi_done) settings.openSetup();
   pollStatus();
+  pollRevision();
   setInterval(pollStatus, 2000);
   setInterval(pollRevision, 3000);
   setInterval(applyTheme, 30000);

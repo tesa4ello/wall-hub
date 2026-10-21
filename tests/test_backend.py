@@ -8,6 +8,7 @@ from wallhub.config import Config
 from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
 from wallhub.system import split_terse
+from wallhub.update import normalize_settings
 
 
 class ConfigTest(unittest.TestCase):
@@ -83,6 +84,13 @@ class ExternalIpTest(unittest.TestCase):
             {"ip": "2.2.2.2", "services": ["B"]},
         ])
         self.assertEqual(result["failed"], ["D"])
+
+
+class UpdateSettingsTest(unittest.TestCase):
+    def test_old_channels_become_stable(self):
+        for old in ("main", "releases", None):
+            self.assertEqual(normalize_settings({"channel": old})["channel"], "stable")
+        self.assertEqual(normalize_settings({"channel": "dev"})["channel"], "dev")
 
 
 if __name__ == "__main__":

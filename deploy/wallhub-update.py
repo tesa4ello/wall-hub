@@ -4,8 +4,9 @@
 Режимы:
   check    только узнать, есть ли новая версия;
   install  проверить и, если есть новая версия, поставить её;
-  auto     то же, что install, но только при включённой автоустановке
-           (иначе как check) — так работает ночной таймер;
+  auto     запускается таймером каждые 15 минут: если по расписанию
+           (update.schedule) пора, проверяет и при включённой автоустановке
+           ставит новую версию;
   rollback вернуть прошлую версию (/opt/wallhub/previous).
 
 Как ставится версия: архив коммита скачивается из GitHub в
@@ -23,6 +24,7 @@ import fcntl
 import json
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -45,7 +47,19 @@ SERVICE_USER = "wallhub"
 HEALTH_URL = "http://127.0.0.1:8080/api/info"
 HEALTH_TIMEOUT = 60
 
-DEFAULT_SETTINGS = {"repo": "tesa4ello/wall-hub", "channel": "main", "branch": "main", "auto": True}
+# Должно совпадать с DEFAULTS["update"] в wallhub/config.py.
+DEFAULT_SETTINGS = {
+    "repo": "tesa4ello/wall-hub",
+    "channel": "stable",
+    "branches": {"stable": "main", "dev": "dev"},
+    "auto": True,
+    "schedule": "daily",
+    "time": "04:00",
+}
+# Интервалы расписания (для daily — раз в сутки в заданное время).
+SCHEDULE_INTERVALS = {"hourly": datetime.timedelta(hours=1), "6h": datetime.timedelta(hours=6)}
+# Таймер срабатывает раз в 15 минут, допуск — чтобы не пропустить слот.
+SLACK = datetime.timedelta(minutes=5)
 
 
 class UpdateError(Exception):
@@ -75,16 +89,24 @@ def settings():
             data = json.load(f)
     except (OSError, ValueError):
         data = {}
-    return dict(DEFAULT_SETTINGS, **data.get("update", {}))
+    cfg = dict(DEFAULT_SETTINGS, **data.get("update", {}))
+    cfg["branches"] = dict(DEFAULT_SETTINGS["branches"], **cfg.get("branches", {}))
+    if cfg["channel"] not in cfg["branches"]:
+        cfg["channel"] = "stable"
+    return cfg
+
+
+def read_status():
+    try:
+        with open(STATUS, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 def write_status(**fields):
     """Обновляет update.json (атомарно, файл читает сервис wallhub)."""
-    try:
-        with open(STATUS, encoding="utf-8") as f:
-            status = json.load(f)
-    except (OSError, ValueError):
-        status = {}
+    status = read_status()
     status.update(fields)
     tmp = STATUS + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -105,8 +127,8 @@ def log(message):
 # --- GitHub --------------------------------------------------------------------
 
 
-def github(url, raw=False):
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "wallhub-updater"}
+def github(url, raw=False, accept="application/vnd.github+json"):
+    headers = {"Accept": accept, "User-Agent": "wallhub-updater"}
     try:
         with open(TOKEN, encoding="utf-8") as f:
             token = f.read().strip()
@@ -130,9 +152,14 @@ def github(url, raw=False):
 
 
 def latest(cfg):
-    """Последняя версия в выбранном канале: {commit, ref, date, title}."""
+    """Последняя версия в выбранном канале: {commit, ref, date, title, version}.
+
+    Канал — это ветка из update.branches; особое значение "tags" означает
+    последний релиз (или тег) вместо ветки.
+    """
     api = f"https://api.github.com/repos/{cfg['repo']}"
-    if cfg["channel"] == "releases":
+    ref = cfg["branches"][cfg["channel"]]
+    if ref == "tags":
         try:
             release = github(f"{api}/releases/latest")
             ref = release["tag_name"]
@@ -142,15 +169,45 @@ def latest(cfg):
             if not tags:
                 raise UpdateError("В репозитории ещё нет релизов")
             ref = tags[0]["name"]
-    else:
-        ref = cfg["branch"]
-    commit = github(f"{api}/commits/{ref}")
+    try:
+        commit = github(f"{api}/commits/{ref}")
+    except UpdateError as e:
+        if "404" in str(e) or "422" in str(e):
+            raise UpdateError(f"В репозитории нет ветки {ref} (или нет доступа к нему)")
+        raise
     return {
         "commit": commit["sha"],
         "ref": ref,
         "date": commit["commit"]["committer"]["date"],
         "title": commit["commit"]["message"].splitlines()[0][:200],
+        "version": remote_version(api, commit["sha"]),
     }
+
+
+def remote_version(api, sha):
+    """Номер версии (__version__) в указанном коммите, если его удалось узнать."""
+    try:
+        with github(f"{api}/contents/wallhub/__init__.py?ref={sha}", raw=True,
+                    accept="application/vnd.github.raw") as response:
+            text = response.read(65536).decode("utf-8", "replace")
+    except UpdateError:
+        return ""
+    match = re.search(r'^__version__\s*=\s*["\']([^"\']+)', text, re.M)
+    return match.group(1) if match else ""
+
+
+def due(cfg, last, now):
+    """Пора ли автопроверке по расписанию. last — время прошлой автопроверки."""
+    schedule = cfg.get("schedule", "daily")
+    if schedule in SCHEDULE_INTERVALS:
+        return last is None or now - last >= SCHEDULE_INTERVALS[schedule] - SLACK
+    if schedule == "daily":
+        hour, minute = map(int, cfg.get("time", "04:00").split(":"))
+        slot = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if now < slot:
+            slot -= datetime.timedelta(days=1)
+        return last is None or last < slot
+    return False
 
 
 def download(cfg, version):
@@ -270,6 +327,15 @@ def main():
         if mode == "rollback":
             rollback()
             return 0
+        if mode == "auto":
+            current = datetime.datetime.now().astimezone()
+            try:
+                last = datetime.datetime.fromisoformat(read_status()["auto_at"])
+            except (KeyError, ValueError):
+                last = None
+            if not due(cfg, last, current):
+                return 0
+            write_status(auto_at=now())
         version, available = check(cfg)
         if available and (mode == "install" or (mode == "auto" and cfg.get("auto"))):
             install(cfg, version)

@@ -232,7 +232,9 @@ ADMIN_PASSWORD="$(cd "$CURRENT" && runuser -u "$SERVICE_USER" -- \
 
 systemctl daemon-reload
 systemctl enable wallhub.service
-systemctl enable --now wallhub-update-auto.timer
+systemctl enable wallhub-update-auto.timer
+# restart, а не start: так подхватывается новое расписание таймера.
+systemctl restart wallhub-update-auto.timer
 systemctl restart wallhub.service
 
 # --- киоск ----------------------------------------------------------------------------

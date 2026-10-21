@@ -196,6 +196,38 @@ body.kiosk {
 .speed-phase { color: var(--accent); }
 .speed-error { color: var(--crit); }
 
+/* --- обновления ------------------------------------------------------------ */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.update-banner > .icon { flex: none; width: 26px; height: 26px; }
+.update-banner > div { flex: 1; min-width: 0; }
+.update-banner-title { font-size: 18px; font-weight: 650; }
+.update-banner-text { margin-top: 3px; opacity: 0.9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.update-banner .btn { background: rgba(255, 255, 255, 0.2); border-color: transparent; color: inherit; }
+
+/* Красная точка: есть новая версия (шестерёнка и пункт «Система»). */
+.status-btn, .nav-item { position: relative; }
+.status-btn.badge::after, .nav-item.badge::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--crit);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.status-btn.badge::after { top: 9px; right: 9px; }
+.nav-item.badge::after { top: 50%; right: 14px; margin-top: -5px; }
+
 /* QR админки: светлый фон в любой теме, иначе телефон его не прочтёт. */
 .qr { flex: none; width: 176px; height: 176px; padding: 8px; border-radius: 12px; background: #fff; color: #000; }
 .qr svg { display: block; width: 100%; height: 100%; }
