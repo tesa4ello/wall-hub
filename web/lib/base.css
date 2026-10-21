@@ -18,7 +18,7 @@
   /* Стекло плиток поверх фона: тонировка, тонировка без размытия, рамка, блик. */
   --glass: rgba(16, 19, 24, 0.42);
   --glass-frosted: rgba(16, 19, 24, 0.74);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.14);
   --glass-highlight: rgba(255, 255, 255, 0.06);
   color-scheme: dark;
 }
