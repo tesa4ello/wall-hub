@@ -206,6 +206,8 @@ async function start() {
     setTimeout(start, 2000);
     return;
   }
+  // Первый запуск: сразу предлагаем выбрать Wi‑Fi сеть.
+  if (!state.config.setup.wifi_done) settings.openSetup();
   pollStatus();
   setInterval(pollStatus, 2000);
   setInterval(pollRevision, 3000);

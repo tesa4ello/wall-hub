@@ -83,10 +83,11 @@ if ! dpkg -s chrony >/dev/null 2>&1; then
     timedatectl set-ntp true || true
 fi
 # Armbian поднимает Wi‑Fi через netplan + networkd, и NetworkManager его не
-# трогает. Переносим Wi‑Fi (только его) под NetworkManager.
+# трогает. Отдаём Wi‑Fi адаптер (только его) NetworkManager-у; сеть потом
+# выбирается на самой панели при первом запуске.
 if [ -d /etc/netplan ] && command -v netplan >/dev/null; then
     log "Передаю Wi‑Fi под управление NetworkManager"
-    python3 "$SRC_DIR/deploy/netplan-wifi-to-nm.py"
+    python3 "$SRC_DIR/deploy/netplan-release-wifi.py"
     sleep 3
 fi
 if nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^wifi:unmanaged'; then
