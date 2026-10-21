@@ -151,6 +151,11 @@ def _migrate(data):
             if not clock_cfg.get("enabled", True):
                 desk["widgets"].remove(clock)
         data["desktops"] = [desk]
+    # Встроенные фоны первых версий убраны, вместо них — сияние той же темы.
+    for key in ("background", "background_dark"):
+        m = re.fullmatch(r"default-(?:waves|orbs)-(light|dark)", str(ui.get(key, "")))
+        if m:
+            ui[key] = f"default-aurora-{m.group(1)}"
     # Раньше имя «Стол N» записывалось в настройки. Пустое имя интерфейс
     # показывает как «Стол N» на языке панели.
     for desk in data.get("desktops", []):

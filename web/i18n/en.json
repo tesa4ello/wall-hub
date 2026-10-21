@@ -322,7 +322,6 @@
   "Фон и плитки": "Background and tiles",
   "Фон светлой темы": "Light theme background",
   "Фон": "Background",
-  "Картинка обрезается под экран 1024×600": "The image is cropped to the 1024×600 screen",
   "Загружаю…": "Uploading…",
   "Загрузить": "Upload",
   "Отдельный фон для тёмной темы": "Separate background for the dark theme",
@@ -565,5 +564,6 @@
   "Эта страница открыта по старому адресу. После смены откройте админку по новому: http://{ip}/": "This page is open at the old address. After the change, open the admin at the new one: http://{ip}/",
   "нет адреса или шлюз не отвечает": "no address or the gateway does not respond",
   "шлюз {ip}": "gateway {ip}",
-  "Настройки модуля": "Module settings"
+  "Настройки модуля": "Module settings",
+  "Картинка обрезается под экран {w}×{h}": "The image is cropped to the {w}×{h} screen"
 }

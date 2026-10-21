@@ -5,10 +5,16 @@ import { ApiError, api } from "/lib/api.js";
 import { t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 
-// Экран панели. Картинка обрезается под него, размытая копия вдвое меньше:
-// после размытия детали не нужны, а распаковывать меньше.
+// Экран панели, пока /api/info не сказал точнее. Картинка обрезается под
+// экран, размытая копия шириной 512: после размытия детали не нужны,
+// а распаковывать меньше.
 const SCREEN = { w: 1024, h: 600 };
-const BLUR = { w: 512, h: 300, radius: 10 };
+const BLUR = { w: 512, radius: 10 };
+
+function screenOf(info) {
+  const d = info && info.display;
+  return d && d.width > 0 && d.height > 0 ? { w: d.width, h: d.height } : SCREEN;
+}
 
 // Названия переводятся при отрисовке.
 const TILES = [
@@ -38,40 +44,42 @@ function canvas(w, h) {
 
 // Размытая копия. ctx.filter есть не во всех браузерах (Safari на телефоне),
 // там размываем уменьшением в 16 раз и плавным растяжением обратно.
-function blurred(img) {
-  const out = canvas(BLUR.w, BLUR.h);
+function blurred(img, screen) {
+  const w = BLUR.w;
+  const h = Math.round((screen.h * w) / screen.w);
+  const out = canvas(w, h);
   const ctx = out.getContext("2d");
   if ("filter" in ctx) {
     ctx.filter = `blur(${BLUR.radius}px) saturate(1.4)`;
     if (ctx.filter !== "none") {
-      drawCover(ctx, img, BLUR.w, BLUR.h, BLUR.radius * 3);
+      drawCover(ctx, img, w, h, BLUR.radius * 3);
       return out;
     }
   }
-  const small = canvas(BLUR.w / 16, BLUR.h / 16);
+  const small = canvas(Math.round(w / 16), Math.round(h / 16));
   const sctx = small.getContext("2d");
   sctx.imageSmoothingQuality = "high";
   drawCover(sctx, img, small.width, small.height);
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(small, 0, 0, BLUR.w, BLUR.h);
+  ctx.drawImage(small, 0, 0, w, h);
   return out;
 }
 
-// Файл пользователя → {image, blur} в виде data:-URL JPEG.
-export async function prepareImage(file) {
+// Файл пользователя → {image, blur} в виде data:-URL JPEG под экран screen.
+export async function prepareImage(file, screen = SCREEN) {
   let img;
   try {
     img = await createImageBitmap(file);
   } catch {
     throw new Error(t("Не получилось открыть картинку"));
   }
-  const full = canvas(SCREEN.w, SCREEN.h);
+  const full = canvas(screen.w, screen.h);
   const ctx = full.getContext("2d");
   ctx.imageSmoothingQuality = "high";
-  drawCover(ctx, img, SCREEN.w, SCREEN.h);
+  drawCover(ctx, img, screen.w, screen.h);
   return {
     image: full.toDataURL("image/jpeg", 0.88),
-    blur: blurred(img).toDataURL("image/jpeg", 0.8),
+    blur: blurred(img, screen).toDataURL("image/jpeg", 0.8),
   };
 }
 
@@ -94,11 +102,16 @@ export class BackgroundPanel {
     this.opts = opts;
     this.items = null;
     this.busy = false;
+    this.screen = SCREEN;
   }
 
   async load() {
-    const { items } = await this.opts.guarded(() => api.get("/backgrounds"));
+    const [{ items }, info] = await Promise.all([
+      this.opts.guarded(() => api.get("/backgrounds")),
+      api.get("/info").catch(() => null),
+    ]);
     this.items = items;
+    this.screen = screenOf(info);
   }
 
   render(ui) {
@@ -110,7 +123,7 @@ export class BackgroundPanel {
     <h1>${t("Фон и плитки")}</h1>
     <section class="panel">
       <div class="field bg-field">
-        <span>${split ? t("Фон светлой темы") : t("Фон")}<small>${t("Картинка обрезается под экран 1024×600")}</small></span>
+        <span>${split ? t("Фон светлой темы") : t("Фон")}<small>${t("Картинка обрезается под экран {w}×{h}", this.screen)}</small></span>
         <label class="btn btn-small ${this.busy ? "disabled" : ""}">${icon("plus")}<span>${this.busy ? t("Загружаю…") : t("Загрузить")}</span>
           <input type="file" accept="image/*" data-bg-upload hidden ${this.busy ? "disabled" : ""}>
         </label>
@@ -162,7 +175,7 @@ export class BackgroundPanel {
       this.busy = true;
       this.opts.render();
       try {
-        const body = await prepareImage(file);
+        const body = await prepareImage(file, this.screen);
         const res = await this.opts.guarded(() => api.post("/admin/background", body));
         this.items = res.items;
         // Только что загруженный фон сразу ставим на экран.

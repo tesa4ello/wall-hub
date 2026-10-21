@@ -7,7 +7,8 @@
 в каталоге backgrounds рядом с настройками.
 
 Встроенные фоны (default-<имя>-light|dark) лежат в web/backgrounds и приходят
-с версией панели; их нельзя удалить.
+с версией панели; их нельзя удалить. Каждый встроенный фон нарисован под
+несколько разрешений (default-<имя>-<тема>@<Ш>x<В>.jpg), экран берёт свой.
 """
 
 import os
@@ -17,11 +18,11 @@ import threading
 
 from .i18n import tr
 
-# Готовая картинка 1024×600 весит сотни килобайт; запас на PNG.
+# Готовая картинка под экран весит сотни килобайт; запас на PNG и большие экраны.
 MAX_IMAGE = 6 * 1024 * 1024
 MAX_COUNT = 30
 ID_RE = re.compile(r"^([0-9a-f]{12}|default-[a-z]+-(light|dark))$")
-FILE_RE = re.compile(r"^([0-9a-f]{12}|default-[a-z]+-(?:light|dark))(-blur)?\.(jpg|png|webp)$")
+FILE_RE = re.compile(r"^([0-9a-f]{12}|default-[a-z]+-(?:light|dark))(?:@(\d+x\d+))?(-blur)?\.(jpg|png|webp)$")
 TYPES = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 
 
@@ -48,7 +49,7 @@ class Backgrounds:
 
     @staticmethod
     def _scan(path):
-        """{id: {имя суффикса: имя файла}} для файлов каталога."""
+        """{id: {размер или "": {"url"|"blur": имя файла}}} для файлов каталога."""
         found = {}
         try:
             names = os.listdir(path) if path else []
@@ -57,14 +58,20 @@ class Backgrounds:
         for name in names:
             m = FILE_RE.match(name)
             if m:
-                found.setdefault(m.group(1), {})["blur" if m.group(2) else "url"] = name
+                found.setdefault(m.group(1), {}).setdefault(m.group(2) or "", {})["blur" if m.group(3) else "url"] = name
         return found
 
     def _user(self):
-        return {k: v for k, v in self._scan(self.path).items() if not k.startswith("default-")}
+        return {k: v.get("", {}) for k, v in self._scan(self.path).items() if not k.startswith("default-")}
 
     def _builtin(self):
-        return {k: v for k, v in self._scan(self.builtin_path).items() if k.startswith("default-")}
+        """{id: {"ШxВ": {"url", "blur"}}}, только размеры с основным файлом."""
+        found = {}
+        for bg_id, sizes in self._scan(self.builtin_path).items():
+            sizes = {k: v for k, v in sizes.items() if k and "url" in v}
+            if bg_id.startswith("default-") and sizes:
+                found[bg_id] = sizes
+        return found
 
     def list(self):
         """Загруженные фоны (новые первыми), затем встроенные."""
@@ -81,10 +88,14 @@ class Backgrounds:
             user.append(item)
         user.sort(key=lambda i: i["mtime"], reverse=True)
         builtin = []
-        for bg_id, files in sorted(self._builtin().items()):
-            if "url" in files:
-                builtin.append({"id": bg_id, "url": f"/bg/{files['url']}", "blur": f"/bg/{files.get('blur', files['url'])}",
-                                "builtin": True, "theme": bg_id.rsplit("-", 1)[1]})
+        area = lambda size: int(size.split("x")[0]) * int(size.split("x")[1])
+        for bg_id, sizes in sorted(self._builtin().items()):
+            urls = {size: {"url": f"/bg/{f['url']}", "blur": f"/bg/{f.get('blur', f['url'])}"}
+                    for size, f in sorted(sizes.items(), key=lambda kv: area(kv[0]))}
+            # url и blur — самый маленький размер: его берут превью в админке
+            # и экран, если не нашёл в sizes подходящего.
+            builtin.append(dict(next(iter(urls.values())), id=bg_id, sizes=urls,
+                                builtin=True, theme=bg_id.rsplit("-", 1)[1]))
         # Тёмные встроенные после светлых, чтобы галереи шли по темам.
         builtin.sort(key=lambda i: i["theme"] == "dark")
         return user + builtin
@@ -129,4 +140,4 @@ class Backgrounds:
         full = os.path.join(base or "", name)
         if not base or not os.path.isfile(full):
             return None
-        return full, TYPES[m.group(3)]
+        return full, TYPES[m.group(4)]
