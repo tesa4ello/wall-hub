@@ -43,6 +43,9 @@ DEFAULTS = {
     # Первый запуск: пока Wi‑Fi не выбран (или шаг не пропущен), киоск
     # открывает выбор сети.
     "setup": {"wifi_done": False},
+    # Обновления: канал main (каждый коммит в ветку) или releases (теги v*),
+    # автоустановка по ночному таймеру.
+    "update": {"repo": "tesa4ello/wall-hub", "channel": "main", "branch": "main", "auto": True},
     "admin": {
         # Хеш пароля админки (см. wallhub.auth). Пустой = админка закрыта.
         "password_hash": "",

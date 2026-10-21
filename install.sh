@@ -9,15 +9,25 @@
 #   * ставит минимальную графику: Xorg + openbox + chromium;
 #   * создаёт пользователя kiosk с автологином на tty1, который запускает
 #     chromium в режиме киоска на http://localhost:8080/;
-#   * создаёт системного пользователя wallhub и сервис wallhub.service
-#     (бэкенд в /opt/wallhub, venv в /opt/wallhub/venv, настройки в /var/lib/wallhub);
-#   * разрешает сервису через polkit управлять Wi‑Fi, питанием и часовым поясом.
+#   * создаёт системного пользователя wallhub и сервис wallhub.service;
+#   * раскладывает код по версиям: /opt/wallhub/releases/<коммит> (у каждой
+#     свой venv), рабочая версия — симлинк /opt/wallhub/current, прошлая —
+#     /opt/wallhub/previous; настройки в /var/lib/wallhub;
+#   * ставит автообновление (deploy/wallhub-update.py и ночной таймер);
+#   * разрешает сервису через polkit управлять Wi‑Fi, питанием, часовым поясом
+#     и запускать проверку/установку обновлений.
 #
 # Сбросить пароль админки: sudo ./install.sh --reset-password
+#
+# Обновлятор запускает install.sh скачанной версии с --updater: тогда пакеты
+# ставятся, только если чего-то не хватает, а сеанс киоска перезапускается,
+# только если поменялись его файлы (страницу экран перезагрузит сам).
 
 set -euo pipefail
 
 APP_DIR=/opt/wallhub
+RELEASES_DIR="$APP_DIR/releases"
+CURRENT="$APP_DIR/current"
 STATE_DIR=/var/lib/wallhub
 SERVICE_USER=wallhub
 KIOSK_USER=kiosk
@@ -45,16 +55,25 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Сброс пароля админки без переустановки.
-if [ "${1:-}" = "--reset-password" ]; then
-    systemctl stop wallhub.service
-    cd "$APP_DIR"
-    PASSWORD="$(runuser -u "$SERVICE_USER" -- "$APP_DIR/venv/bin/python" -m wallhub \
-        --config "$STATE_DIR/config.json" --reset-password)"
-    systemctl start wallhub.service
-    echo "Новый пароль админки: $PASSWORD"
-    exit 0
-fi
+UPDATER=0
+case "${1:-}" in
+    "") ;;
+    --updater) UPDATER=1 ;;
+    --reset-password)
+        # Сброс пароля админки без переустановки.
+        systemctl stop wallhub.service
+        cd "$CURRENT"
+        PASSWORD="$(runuser -u "$SERVICE_USER" -- "$CURRENT/venv/bin/python" -m wallhub \
+            --config "$STATE_DIR/config.json" --reset-password)"
+        systemctl start wallhub.service
+        echo "Новый пароль админки: $PASSWORD"
+        exit 0
+        ;;
+    *)
+        echo "Использование: $0 [--reset-password]" >&2
+        exit 2
+        ;;
+esac
 
 if [ -r /etc/os-release ]; then
     . /etc/os-release
@@ -65,18 +84,25 @@ fi
 
 # --- пакеты -------------------------------------------------------------------
 
-log "Устанавливаю пакеты"
+log "Проверяю пакеты"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-TO_INSTALL=()
+MISSING=()
 for pkg in "${PACKAGES[@]}"; do
     # Если время уже синхронизирует chrony, второй демон не нужен.
     if [ "$pkg" = systemd-timesyncd ] && dpkg -s chrony >/dev/null 2>&1; then
         continue
     fi
-    TO_INSTALL+=("$pkg")
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+        MISSING+=("$pkg")
+    fi
 done
-apt-get install -y --no-install-recommends "${TO_INSTALL[@]}"
+# Индекс apt обновляем, только когда есть что ставить: ночное
+# автообновление не должно каждый раз ходить в репозитории Debian.
+if [ ${#MISSING[@]} -gt 0 ]; then
+    log "Устанавливаю: ${MISSING[*]}"
+    apt-get update
+    apt-get install -y --no-install-recommends "${MISSING[@]}"
+fi
 
 systemctl enable --now NetworkManager
 if ! dpkg -s chrony >/dev/null 2>&1; then
@@ -112,39 +138,99 @@ usermod -aG video,input,render,tty "$KIOSK_USER" 2>/dev/null || usermod -aG vide
 
 # --- приложение -------------------------------------------------------------------
 
-log "Копирую приложение в $APP_DIR"
-install -d -m 0755 "$APP_DIR"
-rm -rf "$APP_DIR/wallhub" "$APP_DIR/web" "$APP_DIR/deploy"
-cp -r "$SRC_DIR/wallhub" "$SRC_DIR/web" "$SRC_DIR/deploy" "$SRC_DIR/requirements.txt" "$APP_DIR/"
-find "$APP_DIR" -name __pycache__ -prune -exec rm -rf {} +
-chown -R root:root "$APP_DIR"
-chmod 0755 "$APP_DIR/deploy/kiosk.sh"
+# Клон обычно принадлежит обычному пользователю, а скрипт идёт от root:
+# без safe.directory git отказывается с ним работать.
+src_git() { git -c safe.directory='*' -C "$SRC_DIR" "$@"; }
 
-log "Готовлю venv"
-if [ ! -x "$APP_DIR/venv/bin/python" ]; then
-    python3 -m venv "$APP_DIR/venv"
+# Версия: из файла VERSION (его пишет обновлятор) или из git-клона.
+if [ -f "$SRC_DIR/VERSION" ]; then
+    COMMIT="$(sed -n 's/^commit=//p' "$SRC_DIR/VERSION")"
+elif src_git rev-parse HEAD >/dev/null 2>&1; then
+    COMMIT="$(src_git rev-parse HEAD)"
+else
+    COMMIT="local-$(date +%Y%m%d%H%M%S)"
 fi
-"$APP_DIR/venv/bin/pip" install --quiet --upgrade pip
-if grep -qv '^\s*\(#\|$\)' "$APP_DIR/requirements.txt"; then
-    "$APP_DIR/venv/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
+RELEASE_ID="${COMMIT:0:12}"
+RELEASE="$RELEASES_DIR/$RELEASE_ID"
+
+# Файлы, от которых зависит сеанс киоска: если они не менялись, обновлятору
+# не нужно перезапускать X и Chromium.
+kiosk_files_hash() {
+    cat "$1"/deploy/{kiosk.sh,display-sync.py,xinitrc,bash_profile,openbox-rc.xml,chromium-policy.json,autologin.conf} 2>/dev/null | sha256sum
+}
+OLD_KIOSK_HASH="$(kiosk_files_hash "$CURRENT")"
+PREVIOUS="$(readlink "$CURRENT" 2>/dev/null || true)"
+
+log "Раскладываю версию $RELEASE_ID"
+install -d -m 0755 "$APP_DIR" "$RELEASES_DIR"
+if [ "$(realpath "$SRC_DIR")" != "$(realpath -m "$RELEASE")" ]; then
+    rm -rf "$RELEASE"
+    install -d -m 0755 "$RELEASE"
+    cp -r "$SRC_DIR/wallhub" "$SRC_DIR/web" "$SRC_DIR/deploy" "$SRC_DIR/requirements.txt" "$SRC_DIR/install.sh" "$RELEASE/"
+fi
+if [ ! -f "$RELEASE/VERSION" ]; then
+    {
+        echo "commit=$COMMIT"
+        echo "ref=$(src_git rev-parse --abbrev-ref HEAD 2>/dev/null || echo local)"
+        echo "date=$(src_git log -1 --format=%cI 2>/dev/null || date -Iseconds)"
+    } > "$RELEASE/VERSION"
+fi
+find "$RELEASE" -name __pycache__ -prune -exec rm -rf {} +
+chown -R root:root "$RELEASE"
+chmod 0755 "$RELEASE/deploy/kiosk.sh" "$RELEASE/install.sh"
+
+if [ ! -x "$RELEASE/venv/bin/python" ]; then
+    python3 -m venv "$RELEASE/venv"
+fi
+if grep -qv '^\s*\(#\|$\)' "$RELEASE/requirements.txt"; then
+    "$RELEASE/venv/bin/pip" install --quiet -r "$RELEASE/requirements.txt"
 fi
 
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$STATE_DIR"
 
+# Токен для приватного репозитория: если клон сделан по ссылке с токеном,
+# сохраняем его для обновлятора (один раз, потом меняется в админке).
+TOKEN_FILE="$STATE_DIR/github-token"
+REMOTE_URL="$(src_git remote get-url origin 2>/dev/null || true)"
+if [ ! -s "$TOKEN_FILE" ] && [[ "$REMOTE_URL" =~ ^https://[^:/@]+:([^@]+)@github\.com/ ]]; then
+    install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" /dev/null "$TOKEN_FILE"
+    printf '%s' "${BASH_REMATCH[1]}" > "$TOKEN_FILE"
+    log "Токен GitHub для обновлений взят из git remote"
+fi
+
 # --- сервис и права ----------------------------------------------------------------
 
-log "Настраиваю сервис и polkit"
+log "Переключаю рабочую версию"
+# Симлинк меняется атомарно: mv -T поверх старого.
+ln -sfn "releases/$RELEASE_ID" "$APP_DIR/current.new"
+mv -T "$APP_DIR/current.new" "$CURRENT"
+if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "releases/$RELEASE_ID" ]; then
+    ln -sfn "$PREVIOUS" "$APP_DIR/previous.new"
+    mv -T "$APP_DIR/previous.new" "$APP_DIR/previous"
+fi
+# Раскладка до версий: код лежал прямо в /opt/wallhub.
+rm -rf "$APP_DIR/wallhub" "$APP_DIR/web" "$APP_DIR/deploy" "$APP_DIR/venv" "$APP_DIR/requirements.txt"
+# Храним рабочую, прошлую и ещё пару последних версий.
+keep="$(basename "$(readlink -f "$CURRENT")") $(basename "$(readlink -f "$APP_DIR/previous" 2>/dev/null || echo none)")"
+for old in $(ls -1t "$RELEASES_DIR" | tail -n +4); do
+    case " $keep " in *" $old "*) ;; *) rm -rf "${RELEASES_DIR:?}/$old" ;; esac
+done
+
+log "Настраиваю сервисы и polkit"
 install -m 0644 "$SRC_DIR/deploy/wallhub.service" /etc/systemd/system/wallhub.service
+install -m 0644 "$SRC_DIR/deploy/wallhub-update@.service" /etc/systemd/system/wallhub-update@.service
+install -m 0644 "$SRC_DIR/deploy/wallhub-update-auto.timer" /etc/systemd/system/wallhub-update-auto.timer
 install -d /etc/polkit-1/rules.d
 install -m 0644 "$SRC_DIR/deploy/50-wallhub.rules" /etc/polkit-1/rules.d/50-wallhub.rules
 systemctl restart polkit 2>/dev/null || true
 
 # Пароль админки: генерируется один раз, при обновлении сохраняется.
-ADMIN_PASSWORD="$(cd "$APP_DIR" && runuser -u "$SERVICE_USER" -- \
-    "$APP_DIR/venv/bin/python" -m wallhub --config "$STATE_DIR/config.json" --init-password)"
+ADMIN_PASSWORD="$(cd "$CURRENT" && runuser -u "$SERVICE_USER" -- \
+    "$CURRENT/venv/bin/python" -m wallhub --config "$STATE_DIR/config.json" --init-password)"
 
 systemctl daemon-reload
 systemctl enable wallhub.service
+systemctl enable --now wallhub-update-auto.timer
 systemctl restart wallhub.service
 
 # --- киоск ----------------------------------------------------------------------------
@@ -184,8 +270,13 @@ systemctl set-default multi-user.target >/dev/null
 # --- тихая загрузка ----------------------------------------------------------------
 
 log "Настраиваю заставку загрузки"
-install -d /usr/share/plymouth/themes/wallhub
-install -m 0644 "$SRC_DIR"/deploy/plymouth/wallhub/* /usr/share/plymouth/themes/wallhub/
+THEME_DIR=/usr/share/plymouth/themes/wallhub
+THEME_CHANGED=0
+if ! diff -rq "$SRC_DIR/deploy/plymouth/wallhub" "$THEME_DIR" >/dev/null 2>&1; then
+    THEME_CHANGED=1
+    install -d "$THEME_DIR"
+    install -m 0644 "$SRC_DIR"/deploy/plymouth/wallhub/* "$THEME_DIR/"
+fi
 install -d /etc/systemd/system/plymouth-quit.service.d
 install -m 0644 "$SRC_DIR/deploy/plymouth-quit.conf" /etc/systemd/system/plymouth-quit.service.d/wallhub.conf
 
@@ -217,16 +308,26 @@ else
     warn "Не найден $ARMBIAN_ENV: добавьте в параметры ядра вручную: $QUIET_ARGS"
 fi
 # -R пересобирает initramfs, чтобы заставка появлялась как можно раньше.
-plymouth-set-default-theme -R wallhub
+# Это долго, поэтому только когда тема поменялась.
+if [ "$THEME_CHANGED" = 1 ] || [ "$(plymouth-set-default-theme)" != wallhub ]; then
+    plymouth-set-default-theme -R wallhub
+fi
 
-log "Перезапускаю сеанс киоска на tty1"
 # На части образов Armbian getty@tty1 выключен и стартует только при
 # переключении на tty1, тогда киоск после загрузки не появляется.
 systemctl enable getty@tty1.service
-systemctl restart getty@tty1.service
-chvt 1 || true
+if [ "$UPDATER" = 0 ] || [ "$OLD_KIOSK_HASH" != "$(kiosk_files_hash "$CURRENT")" ]; then
+    log "Перезапускаю сеанс киоска на tty1"
+    systemctl restart getty@tty1.service
+    [ "$UPDATER" = 1 ] || chvt 1 || true
+fi
 
 # --- итог ------------------------------------------------------------------------------
+
+if [ "$UPDATER" = 1 ]; then
+    log "Версия $RELEASE_ID установлена"
+    exit 0
+fi
 
 IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") print $(i + 1)}')"
 echo
@@ -237,5 +338,5 @@ if [ -n "$ADMIN_PASSWORD" ]; then
     echo "  Пароль админки: $ADMIN_PASSWORD"
     echo "  (он же виден на экране в Настройки → Система, пока его не сменят)"
 else
-    echo "  Пароль админки не менялся. Сбросить: sudo $SRC_DIR/install.sh --reset-password"
+    echo "  Пароль админки не менялся. Сбросить: sudo $CURRENT/install.sh --reset-password"
 fi

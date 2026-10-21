@@ -19,7 +19,7 @@ while ! curl -fs -o /dev/null "${URL}api/session" && [ $i -lt 60 ]; do
     i=$((i + 1))
 done
 
-python3 /opt/wallhub/deploy/display-sync.py &
+python3 /opt/wallhub/current/deploy/display-sync.py &
 
 while true; do
     # После выключения питания Chromium считает, что упал, и предлагает

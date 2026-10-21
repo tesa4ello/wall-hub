@@ -1,0 +1,11 @@
+[Unit]
+Description=Wall-HUB nightly update check
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=wallhub-update@auto.service
+
+[Install]
+WantedBy=timers.target

@@ -8,6 +8,7 @@ import { Settings } from "/settings.js";
 const state = {
   config: null,
   revision: -1,
+  build: null,
   modulesKey: "",
   mounted: [],
 };
@@ -110,7 +111,11 @@ async function loadConfig() {
 
 async function pollRevision() {
   try {
-    const { revision } = await api.get("/revision");
+    const { revision, build } = await api.get("/revision");
+    // После обновления сервис отдаёт новую версию: перезагружаем страницу,
+    // чтобы подхватить новый фронтенд.
+    if (state.build === null) state.build = build;
+    else if (build !== state.build) return location.reload();
     if (revision !== state.revision) await loadConfig();
   } catch {
     // Сервис перезапускается: статусная строка покажет «нет связи».

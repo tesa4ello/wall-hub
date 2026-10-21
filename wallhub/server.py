@@ -11,6 +11,7 @@ import mimetypes
 import os
 import re
 import socket
+import subprocess
 import threading
 import time
 from http import HTTPStatus
@@ -18,7 +19,8 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from . import __version__, auth, status
+from . import BUILD, __version__, auth, status
+from .update import Updates
 from .system import CommandError
 
 log = logging.getLogger(__name__)
@@ -96,6 +98,7 @@ class App:
         self.web_root = os.path.realpath(web_root)
         self.admin_port = admin_port
         self.sessions = auth.Sessions()
+        self.updates = Updates(os.path.dirname(os.path.abspath(config.path)), system.dry_run)
         self.login_lock = threading.Lock()
         self.started = time.time()
         status.load_all()
@@ -280,7 +283,8 @@ def make_handler(app, trusted, port):
             return data
 
         def api_revision(self, **_):
-            return {"revision": app.config.revision}
+            # build: киоск перезагружает страницу, когда версия сменилась.
+            return {"revision": app.config.revision, "build": BUILD.get("commit", "")}
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
@@ -292,6 +296,7 @@ def make_handler(app, trusted, port):
         def api_info(self, **_):
             return {
                 "version": __version__,
+                "build": BUILD,
                 "hostname": app.system.hostname(),
                 "admin_url": app.admin_url(),
                 "uptime": time.time() - app.started,
@@ -369,6 +374,41 @@ def make_handler(app, trusted, port):
                 clean.append({"id": item["id"], "enabled": bool(item.get("enabled", True)), "options": options})
             app.config.set(("modules",), clean)
 
+        # Обновления
+
+        def api_update(self, **_):
+            return {
+                "settings": app.config.get("update"),
+                "token_set": app.updates.token_set(),
+                "status": app.updates.status(),
+                "build": BUILD,
+            }
+
+        def api_update_settings(self, body, **_):
+            patch = {}
+            if "channel" in body:
+                if body["channel"] not in ("main", "releases"):
+                    raise ApiError("Неизвестный канал обновлений")
+                patch["channel"] = body["channel"]
+            if "auto" in body:
+                patch["auto"] = bool(body["auto"])
+            app.config.update({"update": patch})
+
+        def api_update_token(self, body, **_):
+            token = str(body.get("token", "")).strip()
+            if token and not re.fullmatch(r"[A-Za-z0-9_]{20,255}", token):
+                raise ApiError("Это не похоже на токен GitHub")
+            app.updates.set_token(token)
+
+        def api_update_run(self, body, **_):
+            mode = body.get("mode")
+            if mode not in ("check", "install", "rollback"):
+                raise ApiError("Неизвестное действие")
+            try:
+                app.updates.start(mode)
+            except subprocess.SubprocessError as e:
+                raise ApiError(f"Не удалось запустить обновление: {e}", HTTPStatus.BAD_GATEWAY)
+
         def api_admin_statusbar(self, body, **_):
             items = body.get("items")
             if not isinstance(items, list) or any(i not in status.PROVIDERS for i in items):
@@ -399,6 +439,10 @@ def make_handler(app, trusted, port):
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
         ("POST", "/admin/modules"): (H.api_admin_modules, False),
         ("POST", "/admin/statusbar"): (H.api_admin_statusbar, False),
+        ("GET", "/update"): (H.api_update, False),
+        ("POST", "/update/settings"): (H.api_update_settings, False),
+        ("POST", "/update/token"): (H.api_update_token, False),
+        ("POST", "/update/run"): (H.api_update_run, False),
     }
     return Handler
 

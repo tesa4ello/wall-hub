@@ -7,11 +7,11 @@ Wants=NetworkManager.service
 Type=simple
 User=wallhub
 Group=wallhub
-WorkingDirectory=/opt/wallhub
+WorkingDirectory=/opt/wallhub/current
 Environment=PYTHONUNBUFFERED=1
 Environment=WALLHUB_CONFIG=/var/lib/wallhub/config.json
-Environment=WALLHUB_WEB=/opt/wallhub/web
-ExecStart=/opt/wallhub/venv/bin/python -m wallhub
+Environment=WALLHUB_WEB=/opt/wallhub/current/web
+ExecStart=/opt/wallhub/current/venv/bin/python -m wallhub
 Restart=always
 RestartSec=2
 
