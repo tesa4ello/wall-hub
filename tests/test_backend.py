@@ -325,6 +325,22 @@ class DesktopsTest(unittest.TestCase):
         with self.assertRaises(desktops.LayoutError):
             self.check([dict(clock, id="a", x=0, y=0, type="nope")])
 
+    def test_carousel_settings(self):
+        desks = [{"id": "d1", "widgets": [], "carousel": False}, {"id": "d2", "widgets": [], "interval": 60},
+                 {"id": "d3", "widgets": [], "carousel": True, "interval": 0}]
+        result = desktops.validate(desks, self.catalog, 16, 10)
+        self.assertIs(result[0]["carousel"], False)
+        self.assertEqual(result[1]["interval"], 60)
+        self.assertNotIn("carousel", result[2])
+        self.assertNotIn("interval", result[2])
+        with self.assertRaises(desktops.LayoutError):
+            desktops.validate([{"id": "d1", "widgets": [], "interval": 2}], self.catalog, 16, 10)
+        self.assertEqual(desktops.validate_carousel({"enabled": 1, "interval": 20, "resume": 0}),
+                         {"enabled": True, "interval": 20, "resume": 0})
+        for bad in ({"interval": 1}, {"resume": -1}, {"interval": True}, None):
+            with self.assertRaises(desktops.LayoutError):
+                desktops.validate_carousel(bad)
+
     def test_unknown_module_widget_is_kept(self):
         w = {"id": "a", "type": "gone/widget", "x": 0, "y": 0, "w": 3, "h": 2, "options": {"k": 1}}
         self.assertEqual(self.check([w])[0]["widgets"][0], w)

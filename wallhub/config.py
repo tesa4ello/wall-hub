@@ -68,7 +68,12 @@ DEFAULTS = {
     "module_settings": {},
     # Сетка экрана и поведение столов. home_after_min: через сколько минут
     # без касаний вернуться на первый стол (0 — не возвращаться).
-    "layout": {"cols": 16, "rows": 10, "home_after_min": 5},
+    # carousel: столы листаются сами по кругу раз в interval секунд (у стола
+    # может быть свой интервал), касание ставит паузу на resume минут.
+    "layout": {
+        "cols": 16, "rows": 10, "home_after_min": 5,
+        "carousel": {"enabled": False, "interval": 30, "resume": 2},
+    },
     # Рабочие столы: виджеты в клетках сетки (см. wallhub.desktops).
     "desktops": [
         {

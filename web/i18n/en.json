@@ -602,5 +602,15 @@
   "Панель перенесёт настройки к себе и проверит связь. Если связь пропадёт, всё вернётся как было.": "The panel will take over its settings and check the connection. If the connection drops, everything is restored.",
   "Подключитесь к сети Wi‑Fi, чтобы настроить её адрес": "Connect to a Wi‑Fi network to configure its address",
   "Сетевые адаптеры не найдены": "No network adapters found",
-  "Перезагружаю панель…": "Rebooting the panel…"
+  "Перезагружаю панель…": "Rebooting the panel…",
+  "Показывать в карусели": "Show in the carousel",
+  "Показывать этот стол, сек": "Show this desktop for, sec",
+  "Пусто — общий интервал ({n} с)": "Empty — common interval ({n} s)",
+  "Карусель: листать столы по очереди": "Carousel: cycle through desktops",
+  "Каждый стол показывать, сек": "Show each desktop for, sec",
+  "После касания продолжать через, мин": "Resume after a touch in, min",
+  "0 — сразу после касания": "0 — right after the touch",
+  "Интервал карусели: от {lo} до {hi} секунд": "Carousel interval: {lo} to {hi} seconds",
+  "Некорректные настройки карусели": "Invalid carousel settings",
+  "Пауза карусели после касания: от {lo} до {hi} минут": "Carousel pause after a touch: {lo} to {hi} minutes"
 }

@@ -75,6 +75,7 @@ const desks = {
     $("dots").hidden = config.desktops.length < 2;
     this.go(Math.min(this.index, config.desktops.length - 1), false);
     wallpaper.layout();
+    this.carouselNext();
   },
 
   get count() {
@@ -90,10 +91,50 @@ const desks = {
   },
 
   // Через layout.home_after_min минут без касаний возвращаемся на первый стол.
+  // С каруселью вместо этого через carousel.resume минут листаем дальше.
   touched() {
     clearTimeout(this.homeTimer);
+    if (this.carouselOn()) {
+      this.carouselNext(Math.max(state.config.layout.carousel.resume * 60, 1) * 1000);
+      return;
+    }
     const minutes = state.config ? state.config.layout.home_after_min : 0;
     if (minutes > 0 && this.index > 0) this.homeTimer = setTimeout(() => this.go(0), minutes * 60000);
+  },
+
+  // --- карусель: столы листаются сами по кругу ---------------------------------
+
+  carouselTimer: null,
+
+  // Столы, которые участвуют в карусели (по порядку).
+  carouselDesks() {
+    return state.config.desktops.map((d, i) => (d.carousel === false ? -1 : i)).filter((i) => i >= 0);
+  },
+
+  carouselOn() {
+    const car = state.config?.layout.carousel;
+    return Boolean(car?.enabled) && this.carouselDesks().length > 1;
+  },
+
+  // Сколько показывать текущий стол: свой интервал или общий.
+  carouselDelay() {
+    const desk = state.config.desktops[this.index];
+    return ((desk && desk.carousel !== false && desk.interval) || state.config.layout.carousel.interval) * 1000;
+  },
+
+  carouselNext(delay = this.carouselDelay()) {
+    clearTimeout(this.carouselTimer);
+    if (!this.carouselOn()) return;
+    this.carouselTimer = setTimeout(() => this.carouselStep(), delay);
+  },
+
+  carouselStep() {
+    // Пока открыты настройки или шторка, стол не меняем.
+    if ($("settings").hidden && !shade.open) {
+      const order = this.carouselDesks();
+      this.go(order.find((i) => i > this.index) ?? order[0]);
+    }
+    this.carouselNext();
   },
 };
 

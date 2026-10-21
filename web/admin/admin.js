@@ -400,10 +400,11 @@ function mountEditor() {
     config: state.config,
     screen: state.info?.display?.view,
     catalog: state.catalog,
-    save: async (desktops, homeAfterMin) => {
-      const res = await guarded(() => api.post("/admin/desktops", { desktops, home_after_min: homeAfterMin }));
+    save: async (desktops, { homeAfterMin, carousel }) => {
+      const res = await guarded(() => api.post("/admin/desktops", { desktops, home_after_min: homeAfterMin, carousel }));
       state.config.desktops = res.desktops;
       state.config.layout.home_after_min = homeAfterMin;
+      state.config.layout.carousel = res.carousel;
       return res.desktops;
     },
     toast,
