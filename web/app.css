@@ -146,11 +146,14 @@ body.kiosk {
   border-radius: 0 0 22px 22px;
   background: var(--surface);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-  transform: translateY(-110%);
+  /* Закрытая шторка уезжает за край вместе с тенью: иначе тень выглядывает
+     сверху, и касания у края экрана достаются шторке, а не полосе свайпа. */
+  transform: translateY(calc(-100% - 60px));
   transition: transform 0.25s ease;
   touch-action: none;
+  pointer-events: none;
 }
-.shade.open { transform: translateY(0); }
+.shade.open { transform: translateY(0); pointer-events: auto; }
 .shade-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .tile {
   display: flex;
