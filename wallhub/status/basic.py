@@ -1,7 +1,6 @@
-"""Базовые провайдеры: адрес, Wi‑Fi, нагрузка, память, температура, трафик."""
+"""Базовые провайдеры: Wi‑Fi, нагрузка, память, температура, трафик."""
 
 import glob
-import socket
 import subprocess
 import time
 
@@ -22,20 +21,6 @@ def human_rate(bytes_per_sec):
         if value < 1000 or unit == "Гбит/с":
             return f"{value:.0f} {unit}" if value >= 10 or unit == "бит/с" else f"{value:.1f} {unit}"
         value /= 1000
-
-
-@provider("address", "IP-адрес")
-def address():
-    # connect() на UDP-сокете не шлёт пакетов, но выбирает исходящий адрес.
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.connect(("1.1.1.1", 53))
-        ip = sock.getsockname()[0]
-    except OSError:
-        return {"icon": "net", "text": "нет сети", "level": "warn", "title": "Нет сетевого подключения"}
-    finally:
-        sock.close()
-    return {"icon": "net", "text": ip, "title": f"{socket.gethostname()} · {ip}"}
 
 
 _wifi_cache = {"at": 0.0, "ssid": None}
