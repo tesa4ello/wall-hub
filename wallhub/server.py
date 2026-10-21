@@ -667,7 +667,7 @@ def make_handler(app, trusted, port):
                 "lat": app.config.get("ui", "latitude"),
                 "lon": app.config.get("ui", "longitude"),
                 "yandex_key_set": bool(app.config.get("location", "yandex_key")),
-                "last": app.locator.last,
+                "last": app.locator.status(),
             }
 
         def api_location_detect(self, body, **_):

@@ -655,5 +655,10 @@
   "Выключение": "Power off",
   "Выключено": "Off",
   "Яркость": "Brightness",
-  "сейчас": "now"
+  "сейчас": "now",
+  "Источник погоды не принял ключ": "The weather source rejected the key",
+  "Источник погоды временно ограничил запросы": "The weather source is limiting requests for now",
+  "Сервис погоды временно не отвечает": "The weather service is not responding right now",
+  "Нет связи с сервисом погоды": "No connection to the weather service",
+  "Сервис погоды прислал непонятный ответ": "The weather service sent an unreadable response"
 }

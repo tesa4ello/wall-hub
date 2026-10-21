@@ -41,7 +41,19 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=
 
 
 class LocationError(Exception):
-    pass
+    """Текст — исходная русская строка, переводится при каждом показе:
+    ошибка в «last» должна следовать за сменой языка."""
+
+    def __init__(self, text, **params):
+        super().__init__(text)
+        self.text = text
+        self.params = {k: str(v) for k, v in params.items()}
+
+    def __str__(self):
+        return tr(self.text, **self.params)
+
+    def raw(self):
+        return {"text": self.text, "params": self.params}
 
 
 def _request_json(url, body=None, timeout=10):
@@ -103,11 +115,11 @@ class Locator:
             if found:
                 return dict(found, source="ip")
             errors.append(f"{name}: no data")
-        raise LocationError(tr("Не удалось определить место по IP: {error}", error="; ".join(errors)))
+        raise LocationError("Не удалось определить место по IP: {error}", error="; ".join(errors))
 
     def by_yandex(self, key, lang):
         if not key:
-            raise LocationError(tr("Не задан ключ Яндекс Локатора"))
+            raise LocationError("Не задан ключ Яндекс Локатора")
         try:
             points = self.system.wifi_bssids()
         except CommandError as e:
@@ -117,9 +129,9 @@ class Locator:
         try:
             found = parse_yandex(self._request(YANDEX_LOCATOR_URL.format(key=key), body))
         except Exception as e:
-            raise LocationError(tr("Яндекс Локатор не ответил: {error}", error=e))
+            raise LocationError("Яндекс Локатор не ответил: {error}", error=e)
         if not found:
-            raise LocationError(tr("Яндекс Локатор не нашёл место"))
+            raise LocationError("Яндекс Локатор не нашёл место")
         found["name"] = self.place_name(found["lat"], found["lon"], lang)
         return dict(found, source="yandex")
 
@@ -148,13 +160,13 @@ class Locator:
                         found = self.by_yandex(self.config.get("location", "yandex_key"), lang)
                     except LocationError as e:
                         log.warning("yandex locator: %s; falling back to IP", e)
-                        found = dict(self.by_ip(lang), fallback=str(e))
+                        found = dict(self.by_ip(lang), fallback=e.raw())
                 elif mode == "ip":
                     found = self.by_ip(lang)
                 else:
-                    raise LocationError(tr("Местоположение задано вручную"))
+                    raise LocationError("Местоположение задано вручную")
             except LocationError as e:
-                self.last = {"at": time.time(), "source": None, "error": str(e), "accuracy": None}
+                self.last = {"at": time.time(), "source": None, "error": e.raw(), "accuracy": None}
                 raise
             self.last = {"at": time.time(), "source": found["source"], "error": found.get("fallback"),
                          "accuracy": found.get("accuracy")}
@@ -166,6 +178,13 @@ class Locator:
             if patch:
                 self.config.update({"ui": patch})
             return dict(found, changed=bool(patch))
+
+    def status(self):
+        """Последнее определение места, ошибка — на текущем языке."""
+        last = dict(self.last)
+        if last.get("error"):
+            last["error"] = tr(last["error"]["text"], **last["error"]["params"])
+        return last
 
     # --- фоновое уточнение --------------------------------------------------
 
