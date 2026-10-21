@@ -1,0 +1,13 @@
+// Сервис wallhub управляет Wi‑Fi, питанием и часовым поясом без root.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "wallhub") {
+        return;
+    }
+    var id = action.id;
+    if (id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
+        id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+        id.indexOf("org.freedesktop.login1.power-off") === 0 ||
+        id === "org.freedesktop.timedate1.set-timezone") {
+        return polkit.Result.YES;
+    }
+});

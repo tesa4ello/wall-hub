@@ -1,0 +1,26 @@
+[Unit]
+Description=Wall-HUB backend
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=wallhub
+Group=wallhub
+WorkingDirectory=/opt/wallhub
+Environment=PYTHONUNBUFFERED=1
+Environment=WALLHUB_CONFIG=/var/lib/wallhub/config.json
+Environment=WALLHUB_WEB=/opt/wallhub/web
+ExecStart=/opt/wallhub/venv/bin/python -m wallhub
+Restart=always
+RestartSec=2
+
+StateDirectory=wallhub
+StateDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

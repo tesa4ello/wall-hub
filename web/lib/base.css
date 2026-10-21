@@ -1,0 +1,224 @@
+/* Общие стили киоска и админки: цвета тем, кнопки, переключатели, окна. */
+
+:root,
+[data-theme="dark"] {
+  --bg: #0c0e11;
+  --surface: #16191e;
+  --surface-2: #1f232a;
+  --surface-3: #2a2f37;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e8ecf1;
+  --muted: #8a93a1;
+  --accent: #4c9bff;
+  --accent-text: #fff;
+  --ok: #3fb96b;
+  --warn: #e0a23a;
+  --crit: #ea5a50;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #eef0f3;
+  --surface: #ffffff;
+  --surface-2: #e7eaee;
+  --surface-3: #d9dde3;
+  --border: rgba(0, 0, 0, 0.08);
+  --text: #15181d;
+  --muted: #5b6471;
+  --accent: #1b6ee0;
+  --accent-text: #fff;
+  --ok: #23924f;
+  --warn: #b97a10;
+  --crit: #cf3a31;
+  --shadow: 0 12px 40px rgba(20, 30, 50, 0.18);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", "Noto Sans", "DejaVu Sans", system-ui, sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.4s, color 0.4s;
+}
+
+button, input, select { font: inherit; color: inherit; }
+
+.icon { width: 22px; height: 22px; flex: none; }
+
+/* --- кнопки ----------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:active { background: var(--surface-3); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-text); }
+.btn-primary:active { filter: brightness(0.9); background: var(--accent); }
+.btn-danger { background: var(--crit); border-color: transparent; color: #fff; }
+.btn-danger:active { filter: brightness(0.9); background: var(--crit); }
+
+/* --- переключатель ------------------------------------------------------ */
+
+.switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  flex: none;
+  border: none;
+  border-radius: 15px;
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s;
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(22px); }
+
+/* --- сегментированный выбор --------------------------------------------- */
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+
+/* --- модальное окно ----------------------------------------------------- */
+
+.dlg-backdrop, .kb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+.dlg {
+  width: min(440px, calc(100% - 32px));
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.dlg-title { font-size: 20px; font-weight: 600; }
+.dlg-text { margin-top: 8px; color: var(--muted); line-height: 1.45; }
+.dlg-text:empty { display: none; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+/* --- уведомление ---------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 60;
+  max-width: calc(100% - 32px);
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translate(-50%, 20px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast[data-kind="error"] { background: var(--crit); color: #fff; }
+
+/* --- экранная клавиатура ------------------------------------------------- */
+
+.kb-backdrop { align-items: flex-end; outline: none; }
+.kb {
+  width: 100%;
+  padding: 12px 10px 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.kb-head { display: flex; align-items: center; gap: 10px; margin: 0 4px 10px; }
+.kb-title { flex: none; max-width: 30%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-field {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 18px;
+  overflow: hidden;
+  white-space: pre;
+}
+.kb-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 1px; vertical-align: text-bottom; background: var(--accent); animation: kb-blink 1s steps(1) infinite; }
+@keyframes kb-blink { 50% { opacity: 0; } }
+.kb-row { display: flex; gap: 6px; margin-top: 6px; }
+.kb-key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 50px;
+  border: none;
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kb-key:active { background: var(--surface-3); }
+.kb-key .icon { width: 24px; height: 24px; }
+.kb-wide { flex-grow: 1.6; font-size: 16px; }
+.kb-space { flex-grow: 5; font-size: 16px; color: var(--muted); }
+.kb-muted { color: var(--muted); }
+.kb-on { background: var(--accent); color: var(--accent-text); }
+.kb-primary { background: var(--accent); color: var(--accent-text); }
+.kb-primary:disabled { opacity: 0.45; }
+.kb-icon { width: 44px; height: 44px; border: none; border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+.kb-icon.kb-on { background: var(--accent); color: var(--accent-text); }
+
+/* --- индикатор уровня сигнала -------------------------------------------- */
+
+.bars { width: 22px; height: 22px; flex: none; }
+.bars .on { fill: currentColor; }
+.bars .off { fill: currentColor; opacity: 0.22; }

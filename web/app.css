@@ -1,0 +1,174 @@
+/* Киоск: экран 1024×600, сенсорное управление. */
+
+body.kiosk {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: none;
+  touch-action: manipulation;
+}
+
+/* --- статусная строка ---------------------------------------------------- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 6px 0 16px;
+  flex: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.status-items { display: flex; align-items: center; gap: 20px; flex: 1; min-width: 0; overflow: hidden; }
+.status-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.status-item .icon { width: 17px; height: 17px; opacity: 0.85; }
+.status-item[data-level="warn"] { color: var(--warn); }
+.status-item[data-level="crit"] { color: var(--crit); }
+.status-offline { color: var(--crit); white-space: nowrap; }
+.status-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+}
+.status-btn:active { background: var(--surface-2); }
+
+/* --- модули -------------------------------------------------------------- */
+
+.modules {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.module { position: relative; min-width: 0; min-height: 0; border-radius: 20px; overflow: hidden; }
+.module-error { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); }
+
+/* --- затемнение ---------------------------------------------------------- */
+
+.dim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+.dim.on { opacity: var(--dim, 0.8); }
+
+/* --- настройки ----------------------------------------------------------- */
+
+.settings {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--bg);
+}
+.settings[hidden] { display: none; }
+
+.settings-nav {
+  width: 230px;
+  flex: none;
+  padding: 16px 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.settings-heading { padding: 6px 14px 16px; font-size: 22px; font-weight: 650; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  font-size: 17px;
+  text-align: left;
+}
+.nav-item.active { background: var(--accent); color: var(--accent-text); }
+
+.settings-body { position: relative; flex: 1; min-width: 0; overflow-y: auto; }
+.settings-content { padding: 22px 28px 28px; max-width: 760px; }
+.settings-content h2 { margin: 6px 0 18px; font-size: 26px; font-weight: 650; }
+.settings-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card { margin-bottom: 16px; border-radius: 16px; background: var(--surface); overflow: hidden; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px 18px;
+}
+.row + .row { border-top: 1px solid var(--border); }
+.row-label { display: flex; flex-direction: column; font-size: 17px; }
+.row-label > .icon { display: none; }
+.row-hint { margin-top: 3px; color: var(--muted); font-size: 13px; }
+.row-value { color: var(--muted); text-align: right; }
+.row-value.mono { font-family: "DejaVu Sans Mono", monospace; color: var(--text); }
+.row-value.big { font-size: 22px; letter-spacing: 0.06em; }
+.row-disabled { opacity: 0.4; pointer-events: none; }
+
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper .btn { width: 48px; padding: 0; font-size: 22px; }
+.stepper-value { min-width: 64px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.segmented .icon { width: 18px; height: 18px; }
+
+.list-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 4px 10px; color: var(--muted); }
+.list-actions { display: flex; gap: 8px; }
+.btn-small { min-height: 38px; padding: 0 12px; font-size: 14px; }
+.btn-small .icon { width: 18px; height: 18px; }
+
+.list .net {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 58px;
+  padding: 0 18px;
+  border: none;
+  background: none;
+  text-align: left;
+}
+.list .net + .net { border-top: 1px solid var(--border); }
+.list .net:active { background: var(--surface-2); }
+.net-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+.net-meta { color: var(--muted); font-size: 14px; }
+.net-active .net-meta { color: var(--accent); }
+.net-active .bars { color: var(--accent); }
+.net-lock { width: 17px; height: 17px; color: var(--muted); }
+
+.empty { padding: 30px; border-radius: 16px; background: var(--surface); color: var(--muted); text-align: center; }
+.busy { margin: 0 0 12px; padding: 14px 18px; border-radius: 12px; background: var(--surface-2); color: var(--accent); }
+
+.power { display: flex; gap: 12px; margin-top: 8px; }
+.power-btn { flex: 1; min-height: 60px; font-size: 17px; }

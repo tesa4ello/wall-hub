@@ -1,0 +1,110 @@
+/* Сетевая админка: обычный браузер, мышь или телефон. */
+
+body { font-size: 15px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.error { color: var(--crit); min-height: 1.2em; }
+.brand { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+
+input, select {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input:disabled, select:disabled { opacity: 0.45; }
+
+/* --- вход --- */
+
+.login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(360px, 100%);
+  padding: 28px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.login-card p { margin: 0; font-size: 14px; line-height: 1.4; }
+
+/* --- каркас --- */
+
+.layout { display: flex; min-height: 100vh; }
+.layout[hidden], .login[hidden] { display: none; }
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 220px;
+  flex: none;
+  padding: 22px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.sidebar .brand { padding: 0 12px; }
+.tabs { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.tab:hover { background: var(--surface-2); }
+.tab.active { background: var(--accent); color: var(--accent-text); }
+.tab .icon { width: 19px; height: 19px; }
+
+.content { flex: 1; min-width: 0; max-width: 820px; padding: 24px 32px 48px; }
+.content h1 { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 12px; font-size: 22px; font-weight: 650; }
+.content h1:first-child { margin-top: 0; }
+
+.panel { margin-bottom: 14px; border-radius: 14px; background: var(--surface); overflow: hidden; }
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 18px;
+}
+.field + .field { border-top: 1px solid var(--border); }
+.field > span { display: flex; flex-direction: column; }
+.field small { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.field input[type="number"] { width: 100px; }
+
+.list .item + .item { border-top: 1px solid var(--border); }
+.item { padding: 12px 18px; }
+.item-main { display: flex; align-items: center; gap: 14px; }
+.item-title { font-weight: 550; }
+.item-main > div:nth-child(2), .grow { flex: 1; min-width: 0; }
+.item-options { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0 0 66px; }
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.check input { min-height: 0; width: 17px; height: 17px; }
+.order { display: flex; gap: 6px; }
+.btn-small { min-height: 34px; padding: 0 12px; font-size: 14px; border-radius: 9px; }
+.btn-small .icon { width: 17px; height: 17px; }
+.icon.tiny { width: 14px; height: 14px; vertical-align: -2px; color: var(--muted); }
+.pad { padding: 18px; }
+
+.inline-form { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 18px; }
+.inline-form input { flex: 1 1 180px; }
+.row-buttons { display: flex; gap: 10px; padding: 14px 18px; }
+
+@media (max-width: 720px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
+  .tabs { flex-direction: row; overflow-x: auto; order: 3; flex-basis: 100%; }
+  .tab span { white-space: nowrap; }
+  .logout { margin-left: auto; }
+  .content { padding: 18px 16px 40px; }
+  .item-options { margin-left: 0; }
+}
