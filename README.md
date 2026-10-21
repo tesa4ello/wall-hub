@@ -68,6 +68,20 @@ cut.
   `deploy/display-sync.py` picks the setting up. The first touch after dimming
   or screen off only wakes the screen and doesn't press buttons.
 
+### Background and glass tiles
+
+The background image is uploaded in the admin panel (Display → Background and
+tiles). The browser crops it to 1024×600 and also renders a blurred copy, so
+the panel never decodes a full-size photo. Files live in
+`/var/lib/wallhub/backgrounds`. The dark theme can have its own background.
+
+Tiles over the background come in four styles: **Glass (light on CPU)** shows
+the matching piece of the pre-blurred copy (looks like glass, costs nothing to
+draw, the default), **Glass** uses a real `backdrop-filter` blur (heavier on the
+Orange Pi, especially without GPU compositing), **Frosted** is translucent
+without blur, **Solid** is opaque. Any widget can get or drop its tile with
+"Tile under the widget" in the desktop editor.
+
 ### Updates
 
 The panel updates from GitHub without reinstalling the system. There are two

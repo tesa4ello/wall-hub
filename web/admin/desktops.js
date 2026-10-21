@@ -182,7 +182,7 @@ export class DesktopEditor {
         <label class="prop"><span>${t("Ширина")}</span><input type="number" min="${lim.minW}" max="${lim.maxW}" data-size="w" value="${w.w}"></label>
         <label class="prop"><span>${t("Высота")}</span><input type="number" min="${lim.minH}" max="${lim.maxH}" data-size="h" value="${w.h}"></label>
       </div>
-      <label class="check prop-check"><input type="checkbox" data-card ${w.card ?? meta.card ? "checked" : ""}> Плитка под виджетом</label>
+      <label class="check prop-check"><input type="checkbox" data-card ${w.card ?? meta.card ? "checked" : ""}> ${t("Плитка под виджетом")}</label>
       ${fields}
       <button class="btn btn-small btn-danger" data-remove>${icon("trash")} ${t("Убрать со стола")}</button>`;
   }

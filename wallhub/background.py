@@ -12,6 +12,8 @@ import re
 import secrets
 import threading
 
+from .i18n import tr
+
 # Готовая картинка 1024×600 весит сотни килобайт; запас на PNG.
 MAX_IMAGE = 6 * 1024 * 1024
 MAX_COUNT = 30
@@ -72,12 +74,12 @@ class Backgrounds:
     def add(self, image, blur):
         kinds = sniff(image), sniff(blur)
         if None in kinds:
-            raise BackgroundError("Это не картинка JPEG, PNG или WebP")
+            raise BackgroundError(tr("Это не картинка JPEG, PNG или WebP"))
         if len(image) > MAX_IMAGE or len(blur) > MAX_IMAGE:
-            raise BackgroundError("Слишком большая картинка")
+            raise BackgroundError(tr("Слишком большая картинка"))
         with self._lock:
             if len(self.list()) >= MAX_COUNT:
-                raise BackgroundError(f"Можно хранить не больше {MAX_COUNT} фонов, удалите лишние")
+                raise BackgroundError(tr("Можно хранить не больше {n} фонов, удалите лишние", n=MAX_COUNT))
             os.makedirs(self.path, exist_ok=True)
             bg_id = secrets.token_hex(6)
             # Сначала размытая копия: фон появляется в списке по основному файлу.
@@ -90,7 +92,7 @@ class Backgrounds:
 
     def delete(self, bg_id):
         if not ID_RE.match(str(bg_id)):
-            raise BackgroundError("Нет такого фона")
+            raise BackgroundError(tr("Нет такого фона"))
         with self._lock:
             for name in self._files():
                 m = FILE_RE.match(name)

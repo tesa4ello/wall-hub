@@ -184,11 +184,11 @@ class App:
 def decode_image(value):
     """Картинка из data:-URL или голого base64."""
     if not isinstance(value, str) or not value:
-        raise BackgroundError("Нет картинки")
+        raise BackgroundError(tr("Нет картинки"))
     try:
         return base64.b64decode(value.partition(",")[2] if value.startswith("data:") else value, validate=True)
     except (binascii.Error, ValueError):
-        raise BackgroundError("Картинка повреждена")
+        raise BackgroundError(tr("Картинка повреждена"))
 
 
 def check_new_password(body):
@@ -401,7 +401,7 @@ def make_handler(app, trusted, port):
             patch = validate_ui(body.get("ui", {}))
             for key in ("background", "background_dark"):
                 if patch.get(key) not in (None, "", "same") and not app.backgrounds.exists(patch[key]):
-                    raise ApiError("Нет такого фона")
+                    raise ApiError(tr("Нет такого фона"))
             return {"revision": app.config.update({"ui": patch})}
 
         def api_status(self, **_):
