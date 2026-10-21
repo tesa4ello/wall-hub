@@ -35,7 +35,7 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PACKAGES=(
     # бэкенд
-    python3 python3-venv python3-yaml curl ca-certificates
+    python3 python3-venv python3-yaml curl ca-certificates iputils-ping
     # сеть и время
     network-manager polkitd systemd-timesyncd
     # графика: минимальный X11 + openbox + chromium
@@ -271,6 +271,7 @@ install -m 0644 "$SRC_DIR/deploy/wallhub.service" /etc/systemd/system/wallhub.se
 install -m 0644 "$SRC_DIR/deploy/wallhub-update@.service" /etc/systemd/system/wallhub-update@.service
 install -m 0644 "$SRC_DIR/deploy/wallhub-update-auto.timer" /etc/systemd/system/wallhub-update-auto.timer
 install -m 0644 "$SRC_DIR/deploy/wallhub-vnc.service" /etc/systemd/system/wallhub-vnc.service
+install -m 0644 "$SRC_DIR/deploy/wallhub-net-ethernet.service" /etc/systemd/system/wallhub-net-ethernet.service
 install -d /etc/polkit-1/rules.d
 install -m 0644 "$SRC_DIR/deploy/50-wallhub.rules" /etc/polkit-1/rules.d/50-wallhub.rules
 systemctl restart polkit 2>/dev/null || true

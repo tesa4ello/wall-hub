@@ -26,6 +26,7 @@ from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
 from .backends import Backends, ModuleError
+from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .sshkeys import SshKeyError, SshKeys
 from .modules import Registry
 from .store import Store, StoreError
@@ -177,6 +178,7 @@ class App:
         self.sessions = auth.Sessions(os.path.join(state_dir, "sessions.json"))
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
+        self.netconfig = NetConfig(system, state_dir)
         self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"), os.path.join(self.web_root, "backgrounds"))
         self.login_lock = threading.Lock()
         # Тема, которую сейчас показывает экран (сообщает сам киоск), чтобы
@@ -745,6 +747,21 @@ def make_handler(app, trusted, port):
         def api_wifi_forget(self, body, **_):
             app.system.wifi_forget(str(body.get("ssid", "")))
 
+        # Интерфейсы: Ethernet и настройка IPv4 (DHCP или вручную).
+
+        def api_network_devices(self, **_):
+            return {"devices": app.netconfig.devices(), "migrate": app.netconfig.migrate_status()}
+
+        def api_network_ipv4(self, body, **_):
+            try:
+                settings = parse_ipv4(body.get("method"), body.get("address", ""), body.get("gateway", ""), body.get("dns", []))
+                app.netconfig.set_ipv4(str(body.get("device", "")), settings)
+            except NetConfigError as e:
+                raise ApiError(str(e))
+
+        def api_network_manage(self, body, **_):
+            app.netconfig.manage(str(body.get("device", "")))
+
         def api_wifi_radio(self, body, **_):
             enabled = bool(body.get("enabled"))
             app.system.wifi_radio(enabled)
@@ -963,6 +980,9 @@ def make_handler(app, trusted, port):
         ("POST", "/wifi/disconnect"): (H.api_wifi_disconnect, False),
         ("POST", "/wifi/forget"): (H.api_wifi_forget, False),
         ("POST", "/wifi/radio"): (H.api_wifi_radio, False),
+        ("GET", "/network/devices"): (H.api_network_devices, False),
+        ("POST", "/network/ipv4"): (H.api_network_ipv4, False),
+        ("POST", "/network/manage"): (H.api_network_manage, False),
         ("POST", "/setup/wifi-done"): (H.api_setup_wifi_done, False),
         ("POST", "/power"): (H.api_power, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),

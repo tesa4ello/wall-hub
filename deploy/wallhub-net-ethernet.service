@@ -1,0 +1,10 @@
+# Передаёт Ethernet из netplan в NetworkManager с откатом
+# (кнопка «Управлять из панели» в админке, см. netplan-release-ethernet.py).
+[Unit]
+Description=Wall-HUB: Ethernet под управление панели
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/wallhub/current/deploy/netplan-release-ethernet.py
+TimeoutStartSec=300

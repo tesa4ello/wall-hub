@@ -12,6 +12,7 @@ import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
 import { ScreenView } from "/admin/screen.js";
 import { SshKeysPanel } from "/admin/sshkeys.js";
+import { NetworkPanel } from "/admin/network.js";
 import { WeatherPanel } from "/admin/weather.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,7 +27,7 @@ const TABS = [
   { id: "screen", title: "Трансляция", icon: "eye", group: "Панель", sub: "Что сейчас на экране панели" },
   { id: "modules", title: "Модули", icon: "plus", group: "Расширения", sub: "Дополнительные виджеты из каталогов" },
   { id: "weather", title: "Погода", icon: "sun", group: "Расширения", sub: "Источники прогноза и место для виджетов погоды" },
-  { id: "wifi", title: "Wi‑Fi", icon: "wifi", group: "Устройство", sub: "Беспроводная сеть панели" },
+  { id: "wifi", title: "Сеть", icon: "wifi", group: "Устройство", sub: "Wi‑Fi, Ethernet и IP-адреса" },
   { id: "ssh", title: "SSH-ключи", icon: "key", group: "Устройство", sub: "Ключи, с которыми панель подключается к серверам" },
   { id: "updates", title: "Обновления", icon: "refresh", group: "Устройство", sub: "Версия панели и автоматические обновления" },
   { id: "system", title: "Система", icon: "info", group: "Устройство", sub: "Часовой пояс, пароль и питание" },
@@ -153,7 +154,10 @@ function show(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   // На телефоне вкладки листаются по горизонтали: выбранная должна быть видна.
   document.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  if (tab === "wifi") loadWifi(false);
+  if (tab === "wifi") {
+    loadWifi(false);
+    network.load();
+  } else network.stop();
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
   if (tab === "modules") store.load().catch(() => {});
@@ -175,7 +179,7 @@ function render() {
   // Подзаголовок страницы под первым заголовком.
   const tab = TABS.find((x) => x.id === state.tab);
   const head = $("content").firstElementChild;
-  if (tab && tab.sub && head && head.tagName === "H1") head.insertAdjacentHTML("afterend", `<p class="page-sub">${esc(t(tab.sub))}</p>`);
+  if (tab && tab.sub && head && head.tagName === "H1" && !head.nextElementSibling?.classList.contains("page-sub")) head.insertAdjacentHTML("afterend", `<p class="page-sub">${esc(t(tab.sub))}</p>`);
   if (state.tab === "desktops") mountEditor();
   if (state.tab === "screen") screenView.mount();
   if (state.tab === "modules") store.mount();
@@ -269,6 +273,7 @@ const screenView = new ScreenView();
 
 const weather = new WeatherPanel({ guarded, toast, render: () => state.tab === "weather" && render() });
 
+const network = new NetworkPanel({ guarded, toast, confirm: confirmDialog, render: () => state.tab === "wifi" && render(), active: () => state.tab === "wifi" });
 const sshKeys = new SshKeysPanel({ guarded, toast, confirm: confirmDialog, render: () => state.tab === "ssh" && render() });
 
 const store = new StorePanel({
@@ -425,7 +430,7 @@ function renderWifi() {
         <button class="btn" type="submit">${t("Подключиться")}</button>
       </form>`;
   }
-  return `<h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Искать сети")}</button></h1>${body}`;
+  return `<h1>${t("Сеть")}</h1><h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Искать сети")}</button></h1>${body}${network.renderWifiIpv4()}${network.renderEthernet()}`;
 }
 
 async function wifiConnect(body) {
@@ -553,6 +558,7 @@ $("content").addEventListener("change", async (e) => {
   if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onChange(e).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onChange(e).catch(() => true))) return;
+  if (state.tab === "wifi" && (await network.onChange(e).catch(() => true))) return;
   if (e.target.id === "screen-control") return screenView.setControl(e.target.checked);
   if (el.dataset.ui) {
     let value = el.type === "checkbox" ? el.checked : el.value;
@@ -586,6 +592,7 @@ $("content").addEventListener("submit", async (e) => {
   if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "ssh" && (await sshKeys.onSubmit(e, data).catch(() => true))) return;
+  if (state.tab === "wifi" && (await network.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
   } else if (e.target.id === "place-form") {
@@ -625,6 +632,7 @@ $("content").addEventListener("click", async (e) => {
   if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onClick(e).catch(() => true))) return;
   if (state.tab === "ssh" && (await sshKeys.onClick(e).catch(() => true))) return;
+  if (state.tab === "wifi" && (await network.onClick(e).catch(() => true))) return;
   if ("screenReconnect" in b.dataset) return screenView.mount();
   const d = b.dataset;
   try {

@@ -144,6 +144,19 @@ connection for 10 minutes, the service turns it back on: otherwise the panel
 would lose its admin panel, and NetworkManager remembers the radio being off
 even after a reboot.
 
+The "Network" section of the admin panel covers both Wi‑Fi and Ethernet. For
+the connected Wi‑Fi network and for the cable you can choose DHCP or set the
+address with mask, gateway and DNS by hand. The panel applies the change in
+the background, waits up to 25 seconds for an address and a reply from the
+gateway, and restores the previous settings if there is no connection. If
+Ethernet is still configured by netplan (systemd-networkd), the "Manage from
+the panel" button starts `wallhub-net-ethernet.service` (as root): it moves
+the cable settings into a NetworkManager profile, moves the netplan files to
+`/etc/netplan/wallhub-disabled/` and checks the connection for 45 seconds. If
+the link does not come up, everything is restored, so this is safe even over
+SSH through the cable. Netplan files that contain more than Ethernet are not
+moved automatically.
+
 ### Desktops and widgets
 
 The screen consists of one or more desktops. Swipe left and right to switch
