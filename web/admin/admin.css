@@ -256,6 +256,7 @@ input[type="time"] { font-variant-numeric: tabular-nums; }
 .field > span b, .field b { font-weight: 600; }
 .field small { margin-top: 3px; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.35; }
 .field > :not(span) { margin-left: auto; }
+.field-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .field select { min-width: 180px; max-width: 100%; }
 .field input[type="number"] { width: 110px; text-align: right; }
 .field input[type="time"] { width: 130px; }

@@ -165,7 +165,7 @@ Widgets come from modules. A module is a folder `web/modules/<module>/`:
   a backing card), a settings schema (`bool`, `text`, `number`, `select`,
   `providers`) and translations (`i18n`);
 - `module.js`: exports `widgets = {id: mount}`, where
-  `mount(el, {options, api})` returns `{destroy()}`;
+  `mount(el, {options, api, sound})` returns `{destroy()}`; `sound.play(name?)` plays a notification sound on the panel (respecting the sound settings and quiet hours; silent in the admin preview);
 - `module.css`: styles. Prefer `cqw`/`cqh` units: a widget is a container, so
   its content fits any size.
 
@@ -200,6 +200,16 @@ There is no gear icon; the interface is touch only:
   Wi‑Fi, theme, "Settings" and the new version notice;
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
+
+### Sound
+
+The panel can play notification sounds; the kiosk synthesizes them itself
+(`web/lib/sound.js`, Web Audio, no files). Settings are in the admin under
+"Display → Sound": on/off, volume, the sound, quiet hours and events. For now
+updates make a sound: a new version is out and an update has finished (a failed
+one uses a different signal). "Test" plays the sound on the panel even when
+sound is off. Modules play sounds via `sound.play()` in the widget context.
+Audio goes to the default ALSA device; the kiosk user is in the audio group.
 
 ### Screen mirror
 

@@ -173,8 +173,8 @@ if ! id "$KIOSK_USER" >/dev/null 2>&1; then
     useradd --create-home --shell /bin/bash "$KIOSK_USER"
     passwd -l "$KIOSK_USER" >/dev/null
 fi
-# Доступ к видео и устройствам ввода для Xorg без root.
-usermod -aG video,input,render,tty "$KIOSK_USER" 2>/dev/null || usermod -aG video,input,tty "$KIOSK_USER"
+# Доступ к видео, звуку и устройствам ввода для Xorg и Chromium без root.
+usermod -aG video,input,render,tty,audio "$KIOSK_USER" 2>/dev/null || usermod -aG video,input,tty,audio "$KIOSK_USER"
 
 # --- приложение -------------------------------------------------------------------
 
