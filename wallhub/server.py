@@ -76,6 +76,7 @@ def validate_ui(patch):
         "background": lambda v: v == "" or (isinstance(v, str) and BG_ID_RE.match(v)),
         "background_dark": lambda v: v in ("", "same") or (isinstance(v, str) and BG_ID_RE.match(v)),
         "bg_dim": lambda v: _int(v) and 0 <= v <= 80,
+        "tile_transparency": lambda v: _int(v) and 0 <= v <= 90,
         "tiles": lambda v: v in ("baked", "blur", "frosted", "solid"),
     }
     for key, value in patch.items():
