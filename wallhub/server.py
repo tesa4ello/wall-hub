@@ -720,20 +720,24 @@ def make_handler(app, trusted, port):
             except StoreError as e:
                 raise ApiError(tr(e.message, **e.params), HTTPStatus.BAD_GATEWAY)
 
+        def store_listing(self):
+            # token_set: вкладка «Модули» показывает, сохранён ли токен GitHub.
+            return app.store.listing() | {"token_set": app.updates.token_set()}
+
         def api_store(self, **_):
-            return app.store.listing()
+            return self.store_listing()
 
         def api_store_refresh(self, **_):
             app.store.refresh()
-            return app.store.listing()
+            return self.store_listing()
 
         def api_store_install(self, body, **_):
             self.store_call(app.store.install, str(body.get("id", "")))
-            return app.store.listing()
+            return self.store_listing()
 
         def api_store_remove(self, body, **_):
             self.store_call(app.store.remove, str(body.get("id", "")))
-            return app.store.listing()
+            return self.store_listing()
 
         def api_store_catalogs(self, body, **_):
             action, cat_id = body.get("action"), str(body.get("id", ""))
@@ -748,7 +752,7 @@ def make_handler(app, trusted, port):
             else:
                 raise ApiError(tr("Неизвестное действие"))
             app.store.refresh()
-            return app.store.listing()
+            return self.store_listing()
 
         def api_update_run(self, body, **_):
             mode = body.get("mode")

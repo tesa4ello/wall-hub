@@ -46,7 +46,15 @@ export class StorePanel {
         <input name="branch" placeholder="main" class="narrow" autocomplete="off">
         <button class="btn btn-primary" type="submit">${t("Подключить")}</button>
       </form>
-      <p class="muted small panel-inset">${t("Подключая каталог, вы доверяете всем его модулям: их код работает на панели. Для приватных репозиториев используется токен GitHub из вкладки «Обновления».")}</p>`;
+      <p class="muted small panel-inset">${t("Подключая каталог, вы доверяете всем его модулям: их код работает на панели.")}</p>
+      <h1>${t("Доступ к GitHub")}</h1>
+      <form class="panel inline-form" id="store-token-form">
+        <input name="token" type="password" autocomplete="off"
+          placeholder="${t(d.token_set ? "Токен сохранён · вставьте новый, чтобы заменить" : "Токен для приватного репозитория")}">
+        <button class="btn btn-primary" type="submit" ${this.busy ? "disabled" : ""}>${t("Сохранить")}</button>
+        ${d.token_set ? `<button class="btn" type="button" data-store-token-clear>${t("Удалить")}</button>` : ""}
+      </form>
+      <p class="muted small panel-inset">${t("Один токен на панель: им же скачиваются обновления. Для приватных каталогов токену нужен доступ на чтение к каждому репозиторию (у fine-grained токена — Contents: Read-only).")}</p>`;
   }
 
   renderModule(m, names) {
@@ -135,6 +143,10 @@ export class StorePanel {
         await this.load("/store/remove", { id: m.id });
         await this.ctx.changed();
       });
+    } else if ("storeTokenClear" in d) {
+      const ok = await this.ctx.confirm({ title: t("Удалить токен GitHub?"), ok: t("Удалить"), danger: true });
+      if (!ok) return true;
+      await this.saveToken("");
     } else if (d.catalog) {
       if (d.catalog === "remove") {
         const c = this.data.catalogs.find((x) => x.id === d.id);
@@ -158,7 +170,22 @@ export class StorePanel {
     return true;
   }
 
+  // Токен общий с обновлениями. После смены сразу перечитываем каталоги.
+  async saveToken(token) {
+    await this.run("refresh", async () => {
+      await this.ctx.guarded(() => api.post("/update/token", { token }));
+      await this.load("/store/refresh", {});
+    });
+  }
+
   async onSubmit(e, data) {
+    if (e.target.id === "store-token-form") {
+      if (!data.token.trim()) return true;
+      await this.saveToken(data.token.trim());
+      e.target.reset?.();
+      this.ctx.toast(t("Токен сохранён"));
+      return true;
+    }
     if (e.target.id !== "catalog-form") return false;
     if (!data.url.trim()) return true;
     await this.run("refresh", () => this.load("/store/catalogs", { action: "add", url: data.url.trim(), branch: data.branch.trim() || "main" }));

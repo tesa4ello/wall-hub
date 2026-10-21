@@ -183,8 +183,9 @@ deleting a module also removes its widgets from the desktops. A catalog is any
 GitHub repository with the same layout (`modules/<id>/` plus `catalog.json`);
 more catalogs are connected on the same tab, and if two catalogs have a module
 with the same id, the one higher in the list wins. Connecting a catalog means
-trusting its code. Private catalogs use the GitHub token from the "Updates"
-tab. Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
+trusting its code. Private catalogs need a GitHub token with read access to
+their repositories; it is the same token as for updates and can be set on the
+"Modules" or "Updates" tab. Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
 `previous` point to versions); the service installs them itself, without root.
 Modules with a server part are not supported yet. Each `module.json` has `id`, `version` and
 `core`, the major version of the core module API (`CORE_API` in
