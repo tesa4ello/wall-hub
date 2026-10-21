@@ -308,5 +308,7 @@
   "Версия %s установлена": "Version %s installed",
   "Экран:   http://localhost:8080/ (откроется на tty1)": "Screen:  http://localhost:8080/ (opens on tty1)",
   "Админка: %s": "Admin:   %s",
-  "Пароль админки задаётся при первом входе. Сбросить: %s": "The admin password is set on first sign-in. To reset: %s"
+  "Пароль админки задаётся при первом входе. Сбросить: %s": "The admin password is set on first sign-in. To reset: %s",
+  "Выключить Wi‑Fi?": "Turn Wi‑Fi off?",
+  "Другой сети нет: админка станет недоступна. Если связи так и не будет, Wi‑Fi включится сам через 10 минут.": "There is no other network: the admin panel will become unreachable. If there is still no connection, Wi‑Fi will turn itself back on in 10 minutes."
 }

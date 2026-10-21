@@ -5,7 +5,7 @@
 import { api } from "/lib/api.js";
 import { language, languages, locale, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon, signalBars } from "/lib/icons.js";
-import { confirmDialog, toast } from "/lib/dialog.js";
+import { confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { loadCatalog } from "/lib/widgets.js";
 import { DesktopEditor } from "/admin/desktops.js";
 
@@ -446,6 +446,7 @@ $("content").addEventListener("click", async (e) => {
     if ("wifiRescan" in d) {
       await loadWifi(true);
     } else if ("wifiRadio" in d) {
+      if (state.wifi.radio && !(await confirmWifiOff(state.wifi))) return;
       await guarded(() => api.post("/wifi/radio", { enabled: !state.wifi.radio }));
       await loadWifi(false);
     } else if ("wifiDisconnect" in d) {

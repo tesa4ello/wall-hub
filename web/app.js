@@ -4,6 +4,7 @@
 import { api } from "/lib/api.js";
 import { language, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
+import { confirmWifiOff } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
 import { destroyAll, loadCatalog, renderDesktop } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
@@ -106,7 +107,8 @@ const LONG_PRESS_MS = 2000;
     if (!start) return;
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearTimeout(longTimer);
+    // Палец на сенсоре немного «плывёт»: долгое нажатие сбивает только заметный сдвиг.
+    if (Math.abs(dx) > 24 || Math.abs(dy) > 24) clearTimeout(longTimer);
     if (!start.swiping && Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) && desks.count > 1) start.swiping = true;
     if (start.swiping) {
       const track = $("desk-track");
@@ -115,7 +117,9 @@ const LONG_PRESS_MS = 2000;
     }
   });
   const end = (e) => {
-    clearTimeout(longTimer);
+    // pointercancel браузер шлёт и посреди долгого нажатия (жесты сенсора),
+    // поэтому таймер снимаем только при настоящем отпускании.
+    if (e.type === "pointerup") clearTimeout(longTimer);
     if (start && start.swiping) {
       const dx = e.clientX - start.x;
       const threshold = window.innerWidth * 0.15;
@@ -171,6 +175,7 @@ const shade = {
 
   async show() {
     this.open = true;
+    this.openedAt = Date.now();
     this.render();
     $("shade-backdrop").hidden = false;
     requestAnimationFrame(() => {
@@ -204,6 +209,7 @@ const shade = {
       await loadConfig();
       this.render();
     } else if (name === "wifi" && this.wifi) {
+      if (this.wifi.radio && !(await confirmWifiOff(this.wifi))) return;
       await api.post("/wifi/radio", { enabled: !this.wifi.radio });
       this.wifi = await api.get("/wifi");
       this.render();
@@ -239,7 +245,8 @@ const shade = {
     const wasOpen = drag.fromOpen;
     drag = null;
     if (!wasOpen) {
-      if (dy > 50) shade.show();
+      // Свайп вниз или просто касание верхнего края.
+      if (dy > 50 || Math.abs(dy) < 8) shade.show();
       else shadeEl.style.transform = "";
     } else if (dy < -40) {
       shade.hide();
@@ -247,11 +254,21 @@ const shade = {
       shadeEl.style.transform = "";
     }
   });
+  // Жест прервал браузер: возвращаем шторку на место.
+  window.addEventListener("pointercancel", () => {
+    if (!drag) return;
+    drag = null;
+    shadeEl.style.transition = "";
+    shadeEl.style.transform = "";
+  });
   shadeEl.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shade]");
     if (b && !b.disabled) shade.action(b.dataset.shade).catch((err) => console.error(err));
   });
-  $("shade-backdrop").addEventListener("click", () => shade.hide());
+  // Касание, открывшее шторку, тут же даёт click по подложке: его пропускаем.
+  $("shade-backdrop").addEventListener("click", () => {
+    if (Date.now() - shade.openedAt > 400) shade.hide();
+  });
 }
 
 // --- настройки и их изменения из админки ------------------------------------
