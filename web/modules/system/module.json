@@ -7,7 +7,7 @@
       "title": "Статусная строка",
       "description": "Wi‑Fi, загрузка, память, температура, трафик",
       "icon": "traffic",
-      "card": false,
+      "card": true,
       "size": {"default": [16, 1], "min": [3, 1], "max": [16, 2]},
       "options": [
         {"key": "items", "type": "providers", "title": "Пункты", "default": ["wifi", "load", "memory", "temp", "traffic"]},

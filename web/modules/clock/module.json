@@ -7,7 +7,7 @@
       "title": "Часы",
       "description": "Крупные часы с датой и днём недели",
       "icon": "clock",
-      "card": false,
+      "card": true,
       "size": {"default": [8, 5], "min": [3, 2], "max": [16, 10]},
       "options": [
         {"key": "seconds", "type": "bool", "title": "Показывать секунды", "default": true},
