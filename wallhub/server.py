@@ -27,6 +27,7 @@ from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
 from . import display
 from .backends import Backends, ModuleError
+from .notifications import Notifications, Tiles
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .modules import Registry
 from .store import Store, StoreError
@@ -52,6 +53,8 @@ LONG_POLL_BUSY = 2
 UPDATE_START_GRACE = 30
 # Звуки уведомлений, их синтезирует киоск (web/lib/sound.js).
 SOUNDS = ("chime", "bell", "soft", "beep")
+# Источник уведомлений: "system" или id модуля.
+SOURCE_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 # Загрузка фона: две картинки в base64 внутри JSON.
 MAX_UPLOAD = 16 * 1024 * 1024
 
@@ -101,6 +104,11 @@ def validate_ui(patch):
         "sound_quiet_from": lambda v: isinstance(v, str) and TIME_RE.match(v),
         "sound_quiet_to": lambda v: isinstance(v, str) and TIME_RE.match(v),
         "sound_update": lambda v: isinstance(v, bool),
+        "sound_sources": lambda v: isinstance(v, dict) and len(v) <= 64 and all(
+            isinstance(k, str) and SOURCE_RE.match(k) and val in SOUNDS + ("off",) for k, val in v.items()),
+        "dnd": lambda v: isinstance(v, bool),
+        "brightness": lambda v: _int(v) and 10 <= v <= 100,
+        "panel_name": lambda v: isinstance(v, str) and len(v.strip()) <= 40,
     }
     for key, value in patch.items():
         check = rules.get(key)
@@ -200,8 +208,14 @@ class App:
         # номер растёт с каждой просьбой, киоск играет, когда номер сменился.
         self.sound = {"seq": 0, "name": ""}
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
+        # Смахнутые уведомления ядра (ключи вида update:<коммит>).
+        self.dismissed = set()
+        # Уведомления и плитки шторки (wallhub/notifications.py).
+        self.notifications = Notifications(os.path.join(state_dir, "notifications.json"), notify=config.notify)
+        self.tiles = Tiles(notify=config.notify)
         # Серверные части модулей: запускаются здесь и при каждой смене модулей.
-        self.backends = Backends(config, os.path.join(state_dir, "module-data"))
+        self.backends = Backends(config, os.path.join(state_dir, "module-data"),
+                                 notifications=self.notifications, tiles=self.tiles)
         self.backends.sync(self.modules.loaded())
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
@@ -236,17 +250,79 @@ class App:
     def widget_catalog(self):
         return desktops.load_catalog(self.modules.loaded())
 
-    def admin_url(self):
+    def notes_rev(self):
+        # Оба счётчика только растут, поэтому сумма меняется при любом изменении.
+        return self.notifications.rev + self.tiles.rev
+
+    @staticmethod
+    def local_ip():
+        """Адрес панели в локальной сети (через какой интерфейс идёт наружу)."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.connect(("1.1.1.1", 53))
-            ip = sock.getsockname()[0]
+            return sock.getsockname()[0]
         except OSError:
-            ip = socket.gethostname()
+            return ""
         finally:
             sock.close()
+
+    def admin_url(self):
+        ip = self.local_ip() or socket.gethostname()
         port = "" if self.admin_port == 80 else f":{self.admin_port}"
         return f"http://{ip}{port}/"
+
+    # --- шторка ---------------------------------------------------------------------
+
+    @staticmethod
+    def translate(text, params):
+        """Перевод уведомления; подстановки от модуля могут не совпасть с текстом."""
+        try:
+            return tr(text, **params)
+        except (KeyError, IndexError, ValueError):
+            return tr(text)
+
+    def system_notes(self):
+        """Уведомления ядра, которые следуют из состояния: новая версия панели,
+        обновления модулей. Смахнутое не возвращается, пока не сменится повод."""
+        notes = []
+        status = self.updates.status()
+        latest = status.get("latest") or {}
+        if self.updates.available(BUILD.get("commit", "")) and f"update:{latest.get('commit')}" not in self.dismissed:
+            version = latest.get("version") or latest.get("commit", "")[:7]
+            notes.append({"id": "update", "key": f"update:{latest.get('commit')}", "source": "system", "level": "info",
+                          "icon": "refresh", "title": tr("Доступна версия {version}", version=version), "text": "",
+                          "time": status.get("checked_at"), "sound": True,
+                          "action": {"kind": "update", "label": tr("Установить")}})
+        mods = self.module_updates.status()
+        available = mods.get("available") or []
+        key = "modules:" + ",".join(f"{m['id']}@{m['version']}" for m in available)
+        if available and key not in self.dismissed:
+            notes.append({"id": "modules", "key": key, "source": "system", "level": "info", "icon": "grid",
+                          "title": tr("Обновления модулей: {n}", n=len(available)),
+                          "text": ", ".join(tr(m["title"]) for m in available), "time": mods.get("checked_at"),
+                          "sound": False, "action": None})
+        return notes
+
+    def shade(self):
+        ui = self.config.get("ui")
+        try:
+            wifi = self.system.wifi_state(brief=True)
+        except Exception:  # noqa: BLE001 — шторка должна открыться и без nmcli
+            wifi = {"available": False, "radio": False, "connection": None, "signal": None}
+        notes = [{k: v for k, v in n.items() if k != "key"} for n in self.system_notes()]
+        return {
+            "status": {"name": ui.get("panel_name", "").strip() or self.system.hostname(), "ip": self.local_ip(),
+                       "ssid": wifi.get("connection"), "signal": wifi.get("signal"), "version": __version__},
+            "toggles": {"wifi": {"available": wifi.get("available", False), "on": wifi.get("radio", False),
+                                 "ssid": wifi.get("connection"),
+                                 # Нужно экрану, чтобы предупредить перед выключением Wi‑Fi.
+                                 "other_connection": self.system.other_connection()},
+                        "dnd": ui.get("dnd", False), "theme": {"mode": ui["theme_mode"], "theme": ui["theme"]}},
+            "brightness": ui.get("brightness", 100),
+            "volume": ui.get("sound_volume", 60),
+            "notifications": notes + self.notifications.listing(self.translate),
+            "module_tiles": self.tiles.listing(self.translate),
+        }
 
 
 def decode_image(value):
@@ -547,8 +623,10 @@ def make_handler(app, trusted, port):
                 busy = (app.updates.status().get("state") == "installing"
                         or (started is not None and time.monotonic() - started < UPDATE_START_GRACE))
                 sound = app.sound["seq"]
+                notes = app.notes_rev()
                 app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen
-                                or app.update_started != started or app.sound["seq"] != sound,
+                                or app.update_started != started or app.sound["seq"] != sound
+                                or app.notes_rev() != notes,
                                 LONG_POLL_BUSY if busy else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
@@ -564,6 +642,9 @@ def make_handler(app, trusted, port):
                 "version": __version__,
                 # sound: последняя просьба сыграть звук на панели.
                 "sound": app.sound,
+                # notes: номер последнего уведомления (новое — всплывашка и звук)
+                # и счётчик изменений уведомлений и плиток (перечитать шторку).
+                "notes": {"seq": app.notifications.seq, "rev": app.notes_rev()},
             }
 
         def api_settings(self, body, **_):
@@ -977,6 +1058,59 @@ def make_handler(app, trusted, port):
             app.store.refresh()
             return self.store_listing()
 
+        # Шторка и уведомления
+
+        def api_shade(self, **_):
+            return app.shade()
+
+        def api_shade_set(self, body, **_):
+            keys = {"dnd": "dnd", "brightness": "brightness", "volume": "sound_volume"}
+            patch = validate_ui({keys[k]: v for k, v in body.items() if k in keys})
+            app.config.update({"ui": patch})
+            return app.shade()
+
+        def api_notify(self, body, **_):
+            # От виджета модуля (notify() в mount): текст уже переведён модулем.
+            module = str(body.get("module", ""))
+            if not SOURCE_RE.match(module) or module not in app.modules.loaded():
+                raise ApiError(tr("Нет такого модуля"))
+            try:
+                item = app.notifications.add(module, body.get("title"), body.get("text", ""),
+                                             level=body.get("level", "info"), icon=body.get("icon"),
+                                             action=body.get("action"), key=body.get("key"),
+                                             sound=body.get("sound", True) is not False)
+            except ValueError:
+                raise ApiError(tr("Некорректное уведомление"))
+            return {"id": item["id"]}
+
+        def api_notify_dismiss(self, body, **_):
+            if body.get("all"):
+                app.dismissed.update(n["key"] for n in app.system_notes())
+                app.notifications.dismiss(None)
+                return
+            note_id = body.get("id")
+            system = {n["id"]: n["key"] for n in app.system_notes()}
+            if note_id in system:
+                app.dismissed.add(system[note_id])
+                app.config.notify()
+            elif isinstance(note_id, int) and not isinstance(note_id, bool):
+                app.notifications.dismiss(note_id)
+            else:
+                raise ApiError(tr("Нет такого уведомления"))
+
+        def api_notify_action(self, body, **_):
+            note_id = body.get("id")
+            note = next((n for n in app.system_notes() if n["id"] == note_id), None)
+            if note is None and isinstance(note_id, int):
+                note = app.notifications.get(note_id)
+            if note is None or not note.get("action"):
+                raise ApiError(tr("Нет такого уведомления"))
+            action = note["action"]
+            if action["kind"] == "update":
+                self.api_update_run({"mode": "install"})
+            # Остальное (open, module) выполняет экран: отдаём, что делать.
+            return {"kind": action["kind"], "target": action.get("target"), "source": note["source"]}
+
         def api_update_run(self, body, **_):
             mode = body.get("mode")
             if mode not in ("check", "install", "rollback"):
@@ -1019,6 +1153,11 @@ def make_handler(app, trusted, port):
         ("POST", "/display/report"): (H.api_display_report, False),
         ("POST", "/setup/wifi-done"): (H.api_setup_wifi_done, False),
         ("POST", "/power"): (H.api_power, False),
+        ("GET", "/shade"): (H.api_shade, False),
+        ("POST", "/shade"): (H.api_shade_set, False),
+        ("POST", "/notifications"): (H.api_notify, False),
+        ("POST", "/notifications/dismiss"): (H.api_notify_dismiss, False),
+        ("POST", "/notifications/action"): (H.api_notify_action, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),
         ("GET", "/location"): (H.api_location, False),
         ("POST", "/location/detect"): (H.api_location_detect, False),

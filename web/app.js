@@ -4,11 +4,11 @@
 import { api } from "/lib/api.js";
 import { language, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
-import { confirmWifiOff } from "/lib/dialog.js";
+import { confirmWifiOff, toast } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
 import { Wallpaper } from "/lib/wallpaper.js";
 import * as sound from "/lib/sound.js";
-import { destroyAll, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
+import { destroyAll, enableNotify, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 
 const state = {
@@ -21,6 +21,7 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // --- тема -----------------------------------------------------------------
 
@@ -41,7 +42,8 @@ function applyTheme() {
   }
   wallpaper.apply(ui, theme).catch((e) => console.error("wallpaper", e));
   // Ночью экран постоянно приглушён, чтобы не светил в глаза.
-  const night = isNight(ui, now) ? ui.night_dim : 0;
+  // Яркость из шторки и ночное приглушение: берём более тёмное.
+  const night = Math.max(isNight(ui, now) ? ui.night_dim : 0, 100 - (ui.brightness ?? 100));
   $("night").style.opacity = night / 100;
   dimmer.setFloor(night);
 }
@@ -195,6 +197,11 @@ const THEMES = [
 const shade = {
   open: false,
   wifi: null,
+  // Последний ответ GET /api/shade: статус, переключатели, уведомления, плитки модулей.
+  data: null,
+  // Номер последнего уведомления, о котором уже сообщили (всплывашка, звук).
+  noteSeq: null,
+  notesRev: null,
 
   themeIndex() {
     const ui = state.config.ui;
@@ -216,23 +223,77 @@ const shade = {
         <button class="tile" data-shade="theme">${icon(ui.theme_mode === "sun" ? "sun" : theme[1])}<span class="tile-title">${t("Тема")}</span><span class="tile-sub">${themeLabel}</span></button>
         <button class="tile" data-shade="settings">${icon("gear")}<span class="tile-title">${t("Настройки")}</span><span class="tile-sub">${t("Все параметры")}</span></button>
       </div>
-      ${state.updateAvailable ? `
-      <button class="shade-update" data-shade="update">${icon("refresh")}<span>${t("Доступна новая версия")}</span><b>${t("Подробнее")}</b></button>` : ""}
-      ${state.moduleUpdates ? `
-      <div class="shade-update">${icon("refresh")}<span>${t("Обновления модулей: {n}", { n: state.moduleUpdates })}</span><b>${t("В админке")}</b></div>` : ""}
+      ${this.renderNotes()}
       <div class="shade-handle"></div>`;
     // Имя сети вставляем через textContent: оно приходит извне.
     $("shade").querySelector('[data-shade="wifi"] .tile-sub').textContent = wifiSub;
   },
 
-  // Состояние Wi‑Fi держим свежим в фоне, чтобы шторка открывалась сразу
-  // с готовыми данными. Без списка сетей: он может запустить сканирование.
+  // Список уведомлений: от ядра (новая версия) и от модулей.
+  renderNotes() {
+    const notes = this.data?.notifications || [];
+    if (!notes.length) return "";
+    return `<div class="shade-notes">
+      <div class="shade-notes-head"><span>${t("Уведомления")} · ${notes.length}</span><button data-shade="clear">${t("Очистить")}</button></div>
+      ${notes.map((n) => `<div class="shade-note level-${n.level}">
+        <div class="shade-note-body"><b>${esc(n.title)}</b>${n.text ? `<span>${esc(n.text)}</span>` : ""}
+          ${n.action ? `<button class="shade-note-action" data-shade="action" data-id="${n.id}">${esc(n.action.label)}</button>` : ""}</div>
+        <button class="shade-note-close" data-shade="dismiss" data-id="${n.id}" aria-label="${t("Убрать")}">${icon("close")}</button>
+      </div>`).join("")}
+    </div>`;
+  },
+
+  // Состояние шторки держим свежим в фоне, чтобы она открывалась сразу
+  // с готовыми данными (Wi‑Fi без списка сетей: он запускает сканирование).
   async refresh() {
     try {
-      this.wifi = await api.get("/wifi?brief=1");
+      this.data = await api.get("/shade");
+      const w = this.data.toggles.wifi;
+      this.wifi = { available: w.available, radio: w.on, connection: w.ssid, other_connection: w.other_connection };
     } catch {
       // Оставляем прошлое состояние, обновим на следующем шаге.
     }
+    if (this.open) this.render();
+  },
+
+  // Из долгого опроса: появились уведомления или изменился список.
+  async onNotes({ seq, rev }) {
+    const first = this.noteSeq === null;
+    if (rev !== this.notesRev || first) {
+      this.notesRev = rev;
+      await this.refresh();
+    }
+    if (first) {
+      this.noteSeq = seq;
+      return;
+    }
+    if (seq <= this.noteSeq) return;
+    const fresh = (this.data?.notifications || []).filter((n) => typeof n.id === "number" && n.id > this.noteSeq);
+    this.noteSeq = seq;
+    // «Не беспокоить»: копим в шторке молча.
+    if (state.config?.ui.dnd) return;
+    for (const n of fresh.reverse()) {
+      toast(n.text ? `${n.title} · ${n.text}` : n.title, n.level === "crit" ? "error" : undefined);
+      if (n.sound) sound.play(null, { source: n.source });
+    }
+  },
+
+  async dismiss(id) {
+    await api.post("/notifications/dismiss", id === "all" ? { all: true } : { id: /^\d+$/.test(id) ? Number(id) : id });
+    await this.refresh();
+  },
+
+  async runAction(id) {
+    const res = await api.post("/notifications/action", { id: /^\d+$/.test(id) ? Number(id) : id });
+    if (res.kind === "update") this.hide();
+    await this.refresh();
+    return res;
+  },
+
+  // Яркость, громкость, «Не беспокоить»: {brightness?, volume?, dnd?}.
+  async set(patch) {
+    this.data = await api.post("/shade", patch);
+    await loadConfig();
     if (this.open) this.render();
   },
 
@@ -262,7 +323,7 @@ const shade = {
     setTimeout(() => { if (!this.open) $("shade-backdrop").hidden = true; }, 300);
   },
 
-  async action(name) {
+  async action(name, el) {
     if (name === "settings" || name === "update") {
       this.hide();
       settings.open(name === "update" ? "system" : undefined);
@@ -274,6 +335,14 @@ const shade = {
       await api.post("/settings", { ui: next });
       await loadConfig();
       this.render();
+    } else if (name === "dismiss" || name === "action" || name === "clear") {
+      if (name === "action") await this.runAction(el.dataset.id);
+      else await this.dismiss(name === "clear" ? "all" : el.dataset.id);
+    } else if (name === "dnd") {
+      await this.set({ dnd: !state.config.ui.dnd });
+    } else if (name === "blank") {
+      this.hide();
+      dimmer.blank();
     } else if (name === "wifi" && this.wifi) {
       if (this.wifi.radio && !(await confirmWifiOff(this.wifi))) return;
       const enabled = !this.wifi.radio;
@@ -331,7 +400,7 @@ const shade = {
   });
   shadeEl.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shade]");
-    if (b && !b.disabled) shade.action(b.dataset.shade).catch((err) => { console.error(err); shade.refresh(); });
+    if (b && !b.disabled) shade.action(b.dataset.shade, b).catch((err) => { console.error(err); shade.refresh(); });
   });
   // Касание, открывшее шторку, тут же даёт click по подложке: его пропускаем.
   $("shade-backdrop").addEventListener("click", () => {
@@ -366,8 +435,9 @@ async function pollRevision() {
   const theme = document.documentElement.dataset.theme;
   const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates } = await api.get(`/revision?theme=${theme}${wait}`);
+    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates, notes } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
+    if (notes) shade.onNotes(notes);
     updateBanner.show(progress, version);
     notifySounds(update, progress, soundReq, moduleUpdates);
     state.updateAvailable = Boolean(update);
@@ -392,7 +462,8 @@ async function pollRevision() {
 
 // --- звуковые уведомления -------------------------------------------------------
 
-setSound({ play: (name) => sound.play(name) });
+setSound({ play: (name, opts) => sound.play(name, opts) });
+enableNotify();
 
 let soundSeq = null;
 function notifySounds(update, progress, req, moduleUpdates) {
@@ -404,9 +475,9 @@ function notifySounds(update, progress, req, moduleUpdates) {
   const ui = state.config?.ui;
   if (!ui?.sound_update) return;
   // Вышла новая версия: только при смене «нет» → «есть», не при загрузке.
-  if (update && state.updateAvailable === false) sound.play();
+  if (update && state.updateAvailable === false) sound.play(null, { source: "system" });
   // Появились обновления модулей (автоустановка выключена).
-  if (moduleUpdates && state.moduleUpdates === 0) sound.play();
+  if (moduleUpdates && state.moduleUpdates === 0) sound.play(null, { source: "system" });
   // Обновление закончилось. После установки страница перезагружается,
   // поэтому сыгранное помним в localStorage, чтобы не повторять.
   if (progress && progress.state !== "installing" && progress.finished_at) {
@@ -414,7 +485,7 @@ function notifySounds(update, progress, req, moduleUpdates) {
     try { played = localStorage.getItem("wallhub-update-sound"); } catch {}
     if (played !== progress.finished_at) {
       try { localStorage.setItem("wallhub-update-sound", progress.finished_at); } catch {}
-      sound.play(progress.result === "failed" ? "beep" : undefined);
+      sound.play(progress.result === "failed" ? "beep" : null, { source: "system" });
     }
   }
 }
@@ -553,6 +624,14 @@ const dimmer = {
     el.style.setProperty("--dim", percent / 100);
     el.hidden = false;
     requestAnimationFrame(() => el.classList.add("on"));
+  },
+
+  // «Погасить» из шторки: чёрный экран до первого касания.
+  blank() {
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    // Касание, которым нажали кнопку, ещё не закончилось: ждём его конца.
+    setTimeout(() => this.dim(100), 300);
   },
 
   wake() {

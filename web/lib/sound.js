@@ -34,10 +34,18 @@ export function isQuiet(now = new Date()) {
   return from < to ? cur >= from && cur < to : cur >= from || cur < to;
 }
 
-// Играет звук name (по умолчанию выбранный в настройках).
-// force — игнорировать выключатель и тихие часы (проверка из админки).
-export function play(name, { force = false } = {}) {
-  if (!force && (!settings.sound_enabled || isQuiet())) return false;
+// Звук источника уведомлений ("system" или id модуля): свой из
+// ui.sound_sources, иначе общий. "off" — источник молчит.
+export function soundFor(source) {
+  return (source && settings.sound_sources?.[source]) || settings.sound_name;
+}
+
+// Играет звук name (по умолчанию звук источника source или общий).
+// force — игнорировать выключатель, «Не беспокоить» и тихие часы (проверка из админки).
+export function play(name, { force = false, source = null } = {}) {
+  name ||= soundFor(source);
+  if (name === "off" && !force) return false;
+  if (!force && (!settings.sound_enabled || settings.dnd || isQuiet())) return false;
   const volume = (settings.sound_volume ?? 60) / 100;
   if (volume <= 0) return false;
   const notes = NOTES[name] || NOTES[settings.sound_name] || NOTES.chime;
