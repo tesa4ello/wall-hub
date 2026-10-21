@@ -9,7 +9,7 @@ from wallhub.config import Config
 from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
 from wallhub.system import split_terse
-from wallhub.update import normalize_settings
+from wallhub.update import Updates, normalize_settings
 
 
 class ConfigTest(unittest.TestCase):
@@ -94,6 +94,31 @@ class UpdateSettingsTest(unittest.TestCase):
         for old in ("main", "releases", None):
             self.assertEqual(normalize_settings({"channel": old})["channel"], "stable")
         self.assertEqual(normalize_settings({"channel": "dev"})["channel"], "dev")
+
+
+class UpdateProgressTest(unittest.TestCase):
+    def progress(self, **status):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "update.json"), "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            return Updates(d).progress()
+
+    def ago(self, seconds):
+        import datetime
+        return (datetime.datetime.now().astimezone() - datetime.timedelta(seconds=seconds)).isoformat()
+
+    def test_running_install_is_shown(self):
+        p = self.progress(state="installing", job="install", phase="install", message="Устанавливаю…")
+        self.assertEqual(p["phase"], "install")
+
+    def test_result_is_shown_for_a_while(self):
+        self.assertIsNotNone(self.progress(state="idle", job="install", result="ok", finished_at=self.ago(10)))
+        self.assertIsNone(self.progress(state="idle", job="install", result="ok", finished_at=self.ago(120)))
+        self.assertIsNotNone(self.progress(state="idle", job="install", result="failed", finished_at=self.ago(120)))
+
+    def test_check_result_is_not_shown(self):
+        self.assertIsNone(self.progress(state="idle", job="check", result="failed", finished_at=self.ago(5)))
+        self.assertIsNone(self.progress(state="idle"))
 
 
 WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")

@@ -395,6 +395,9 @@ def make_handler(app, trusted, port):
                 "revision": app.config.revision,
                 "build": BUILD.get("commit", ""),
                 "update": app.updates.available(BUILD.get("commit", "")),
+                # progress: ход обновления, панель показывает его поверх столов.
+                "progress": app.updates.progress(),
+                "version": __version__,
             }
 
         def api_settings(self, body, **_):

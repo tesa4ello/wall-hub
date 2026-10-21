@@ -272,20 +272,24 @@ def switch_to(target):
 
 def install(cfg, version):
     previous = os.readlink(CURRENT) if os.path.islink(CURRENT) else None
-    write_status(state="installing", message="Скачиваю {ref} {commit}…",
-                 message_args={"ref": version["ref"], "commit": version["commit"][:7]}, started_at=now())
+    # phase: этап для экрана панели (download → install → verify, при сбое rollback).
+    write_status(state="installing", job="install", phase="download", message="Скачиваю {ref} {commit}…",
+                 message_args={"ref": version["ref"], "commit": version["commit"][:7]},
+                 target=version.get("version") or "", result=None, started_at=now())
     log(f"install {version['ref']} {version['commit']}")
     release = download(cfg, version)
 
-    write_status(message="Устанавливаю…")
+    write_status(phase="install", message="Устанавливаю…")
     with open(LOG, "a", encoding="utf-8") as out:
         result = subprocess.run(
             ["bash", os.path.join(release, "install.sh"), "--updater"],
             stdout=out, stderr=subprocess.STDOUT, timeout=25 * 60,
         )
+    if result.returncode == 0:
+        write_status(phase="verify", message="Проверяю, что сервис запустился…")
     if result.returncode == 0 and healthy(version["commit"]):
         log("ok")
-        write_status(state="idle", result="ok", message="Обновлено", finished_at=now(),
+        write_status(state="idle", phase=None, result="ok", message="Обновлено", finished_at=now(),
                      current=read_version(CURRENT), available=False)
         return
 
@@ -295,8 +299,9 @@ def install(cfg, version):
         message, args = "Не удалось обновиться (сервис не запустился), вернул прошлую версию. Подробности в update.log", {}
     log(f"failed: {message.format(**args)}, rollback to {previous}")
     if previous:
+        write_status(phase="rollback", message="Возвращаю прошлую версию…")
         switch_to(previous)
-    write_status(state="idle", result="failed", finished_at=now(), current=read_version(CURRENT),
+    write_status(state="idle", phase=None, result="failed", finished_at=now(), current=read_version(CURRENT),
                  message=message, message_args=args)
 
 
@@ -305,16 +310,18 @@ def rollback():
         raise UpdateError("Прошлой версии нет")
     previous = os.readlink(PREVIOUS)
     current = os.readlink(CURRENT)
+    write_status(state="installing", job="rollback", phase="rollback", message="Возвращаю прошлую версию…",
+                 target="", result=None, started_at=now())
     switch_to(previous)
     os.remove(PREVIOUS)
     os.symlink(current, PREVIOUS)
     log(f"rollback to {previous}")
-    write_status(state="idle", result="ok", message="Возвращена прошлая версия", finished_at=now(),
+    write_status(state="idle", phase=None, result="ok", message="Возвращена прошлая версия", finished_at=now(),
                  current=read_version(CURRENT))
 
 
 def check(cfg):
-    write_status(state="checking", message="Проверяю обновления…")
+    write_status(state="checking", job="check", message="Проверяю обновления…")
     version = latest(cfg)
     current = read_version(CURRENT)
     available = version["commit"] != current.get("commit")
@@ -355,11 +362,12 @@ def main():
             install(cfg, version)
     except UpdateError as e:
         log(f"error: {e}")
-        write_status(state="idle", result="failed", message=e.message, message_args=e.params, finished_at=now())
+        write_status(state="idle", phase=None, result="failed", message=e.message, message_args=e.params,
+                     finished_at=now())
         return 1
     except Exception as e:
         log(f"error: {e!r}")
-        write_status(state="idle", result="failed", message="Ошибка обновления: {error}",
+        write_status(state="idle", phase=None, result="failed", message="Ошибка обновления: {error}",
                      message_args={"error": str(e)}, finished_at=now())
         raise
     return 0
