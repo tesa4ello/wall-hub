@@ -307,6 +307,17 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(StoreError):
             self.store.set_token("main", "a b")
 
+    def test_catalog_token_path_escape(self):
+        # Пустой токен с чужим id не должен удалять файлы вне tokens_dir.
+        os.makedirs(self.store.tokens_dir, exist_ok=True)
+        victim = os.path.join(os.path.dirname(self.store.tokens_dir), "victim.json")
+        with open(victim, "w") as f:
+            f.write("{}")
+        for bad in ("../victim.json", "/etc/passwd", "c1/../../victim.json", ""):
+            with self.assertRaises(StoreError):
+                self.store.set_token(bad, "")
+        self.assertTrue(os.path.exists(victim))
+
     def test_catalog_branch(self):
         self.store.set_catalog("main", branch="dev")
         self.assertEqual(self.store.catalogs()[0]["branch"], "dev")
@@ -638,6 +649,25 @@ class WeatherTest(unittest.TestCase):
         with self.assertRaises(self.weather.WeatherError):
             self.w.forecast(10, 10)
 
+    def test_error_is_readable(self):
+        import urllib.error
+        from wallhub import i18n
+        self.fail = True
+        with self.assertRaises(self.weather.WeatherError) as cm:
+            self.w.forecast(10, 10)
+        self.assertEqual(str(cm.exception), "Нет связи с сервисом погоды")
+        # Ошибка в кэше переводится заново после смены языка.
+        i18n.load(WEB)
+        i18n.set_language("en")
+        try:
+            with self.assertRaises(self.weather.WeatherError) as cm:
+                self.w.forecast(10, 10)
+            self.assertNotIn("Нет", str(cm.exception))
+        finally:
+            i18n.set_language("ru")
+        err = urllib.error.HTTPError("u", 401, "no", {}, None)
+        self.assertEqual(self.weather.reason(self.weather.WeatherError("x", [OSError(), err])), self.weather.REASON_KEY)
+
     def test_search(self):
         results = self.w.search("Мос")
         self.assertEqual(results[0]["name"], "Москва")
@@ -673,6 +703,21 @@ class LocationTest(unittest.TestCase):
             ui = config.get("ui")
             self.assertEqual((ui["latitude"], ui["location_name"]), (59.9386, "Санкт-Петербург"))
             self.assertFalse(loc.locate("ip")["changed"])
+
+    def test_location_error_follows_language(self):
+        from wallhub import i18n, location
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            loc = location.Locator(config, None, request=lambda url, body=None: {})
+            with self.assertRaises(location.LocationError):
+                loc.locate("ip")
+            self.assertTrue(loc.status()["error"].startswith("Не удалось определить место"))
+            i18n.load(WEB)
+            i18n.set_language("en")
+            try:
+                self.assertTrue(loc.status()["error"].startswith("Could not"))
+            finally:
+                i18n.set_language("ru")
 
     def test_manual_coordinates_kept_on_upgrade(self):
         with tempfile.TemporaryDirectory() as tmp:

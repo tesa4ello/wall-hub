@@ -27,6 +27,7 @@ from .modules import ID_RE, compatible, read
 log = logging.getLogger(__name__)
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}/[A-Za-z0-9_.-]{1,100}$")
+CAT_ID_RE = re.compile(r"^(?:main|c[0-9]{1,6})$")
 BRANCH_RE = re.compile(r"^[A-Za-z0-9_./-]{1,100}$")
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CATALOGS = 10
@@ -139,6 +140,10 @@ class Store:
     # --- GitHub -----------------------------------------------------------------
 
     def _own_token_path(self, cat_id):
+        # id приходит из запроса: только вида main или cN, иначе путь мог бы
+        # уйти из tokens_dir (../config.json).
+        if not CAT_ID_RE.match(str(cat_id)):
+            raise StoreError("Нет такого каталога")
         return os.path.join(self.tokens_dir, cat_id)
 
     @staticmethod
@@ -161,7 +166,7 @@ class Store:
 
     def set_token(self, cat_id, token):
         """Свой токен каталога; пустой — удалить (снова действует общий)."""
-        if cat_id != "main" and not any(c["id"] == cat_id for c in self.catalogs()) and token:
+        if not any(c["id"] == cat_id for c in self.catalogs()) and token:
             raise StoreError("Нет такого каталога")
         token = (token or "").strip()
         path = self._own_token_path(cat_id)

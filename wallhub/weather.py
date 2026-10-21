@@ -16,6 +16,7 @@ import logging
 import socket
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -84,7 +85,38 @@ MINUTELY = "precipitation,snowfall"
 
 
 class WeatherError(Exception):
-    pass
+    def __init__(self, message, causes=()):
+        super().__init__(message)
+        # Исходные исключения провайдеров: по ним выбирается понятная причина.
+        self.causes = list(causes)
+
+
+# Причины для экрана, по убыванию важности. Сырой текст («<urlopen error …>»)
+# остаётся в журнале и в проверке источников в админке.
+REASON_KEY = "Источник погоды не принял ключ"
+REASON_LIMIT = "Источник погоды временно ограничил запросы"
+REASON_SERVER = "Сервис погоды временно не отвечает"
+REASON_NETWORK = "Нет связи с сервисом погоды"
+REASON_DATA = "Сервис погоды прислал непонятный ответ"
+
+
+def reason(error):
+    """Понятная причина ошибки (исходная русская строка, переводится при выдаче)."""
+    causes = getattr(error, "causes", None) or [error]
+    found = set()
+    for e in causes:
+        if isinstance(e, urllib.error.HTTPError):
+            found.add(REASON_KEY if e.code in (401, 403) else REASON_LIMIT if e.code == 429 else REASON_SERVER)
+        elif isinstance(e, (urllib.error.URLError, OSError, http.client.HTTPException)):
+            found.add(REASON_NETWORK)
+        elif isinstance(e, WeatherError) and not e.causes:
+            found.add(str(e))
+        else:
+            found.add(REASON_DATA)
+    for r in (REASON_KEY, REASON_LIMIT, REASON_SERVER, REASON_NETWORK):
+        if r in found:
+            return r
+    return sorted(found)[0] if found else REASON_DATA
 
 
 def _connect_ipv4_first(host, port, timeout):
@@ -241,7 +273,7 @@ class Weather:
                 return self._result(entry, now)
             if entry and now - entry.get("failed_at", 0) < RETRY_AFTER:
                 if "data" not in entry:
-                    raise WeatherError(entry["error"])
+                    raise WeatherError(tr(entry["reason"]))
                 return self._result(entry, now)
             try:
                 data, ttl = self._fetch_any(key, tz, now)
@@ -253,9 +285,10 @@ class Weather:
                     entry["failed_at"] = now
                     return self._result(entry, now)
                 # Прогноза нет: запоминаем ошибку, чтобы не ждать сеть на каждый запрос.
-                error = tr("Не удалось получить погоду: {error}", error=e)
-                self._store(self._forecasts, key, {"at": 0, "failed_at": now, "error": error})
-                raise WeatherError(error)
+                # Храним исходную причину, а переводим при выдаче: язык мог смениться.
+                cause = reason(e)
+                self._store(self._forecasts, key, {"at": 0, "failed_at": now, "reason": cause})
+                raise WeatherError(tr(cause))
             return self._result(entry, now)
 
     def settings(self):
@@ -273,19 +306,20 @@ class Weather:
         usable = [p["id"] for p in settings["providers"] if p["enabled"]
                   and (not weather_providers.PROVIDERS[p["id"]]["key"] or settings["keys"].get(p["id"]))]
         if not usable:
-            raise WeatherError(tr("Нет включённых источников погоды"))
+            raise WeatherError("Нет включённых источников погоды")  # переводит forecast
         fresh = [pid for pid in usable if self.status.get(pid, {}).get("ok", True)
                  or now - self.status[pid]["at"] >= PROVIDER_COOLDOWN]
-        errors = []
+        errors, causes = [], []
         for pid in fresh or usable:
             try:
                 data = self._fetch_provider(pid, key, tz, now, settings["keys"].get(pid))
             except Exception as e:
                 errors.append(f"{weather_providers.PROVIDERS[pid]['title']}: {e}")
+                causes.append(e)
                 continue
             ttl = max(settings["refresh_min"] * 60, weather_providers.PROVIDERS[pid]["min_ttl"])
             return dict(data, refresh=ttl), ttl
-        raise WeatherError("; ".join(errors))
+        raise WeatherError("; ".join(errors), causes)
 
     def _fetch_provider(self, pid, key, tz, now, api_key=None):
         started = time.monotonic()
@@ -359,7 +393,7 @@ class Weather:
                 results = self._search_nominatim(query, language)
             except Exception as e2:
                 log.warning("city search via nominatim failed: %s", e2)
-                raise WeatherError(tr("Поиск города не удался: {error}", error=e2))
+                raise WeatherError(tr("Поиск города не удался: {error}", error=tr(reason(e2))))
         self._store(self._searches, key, {"data": results, "at": now})
         return results
 
