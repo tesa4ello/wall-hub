@@ -6,6 +6,7 @@ import os
 import signal
 import threading
 
+from . import auth
 from .config import Config
 from .server import App, serve
 from .system import System
@@ -34,6 +35,8 @@ def main():
 
     if args.reset_password:
         config.update({"admin": {"password_hash": ""}})
+        # Сессии теперь переживают перезапуск, поэтому сбрасываем и их.
+        auth.Sessions(os.path.join(os.path.dirname(os.path.abspath(config.path)), "sessions.json")).clear()
         return
 
     app = App(config, System(dry_run=args.dry_run), args.web, args.admin_port)
