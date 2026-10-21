@@ -11,6 +11,7 @@ import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
 import { ScreenView } from "/admin/screen.js";
+import { WeatherPanel } from "/admin/weather.js";
 
 const $ = (id) => document.getElementById(id);
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
@@ -21,6 +22,7 @@ const TABS = [
   { id: "display", title: "Экран", icon: "display" },
   { id: "desktops", title: "Столы", icon: "grid" },
   { id: "modules", title: "Модули", icon: "plus" },
+  { id: "weather", title: "Погода", icon: "sun" },
   { id: "screen", title: "Трансляция", icon: "eye" },
   { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
   { id: "updates", title: "Обновления", icon: "refresh" },
@@ -143,13 +145,14 @@ function show(tab) {
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
   if (tab === "modules") store.load().catch(() => {});
+  if (tab === "weather") weather.load().catch(() => {});
   if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
   if (tab === "display") loadLocation();
   render();
 }
 
 function render() {
-  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), weather: () => weather.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   editor?.destroy();
   editor = null;
   screenView.destroy();
@@ -210,6 +213,8 @@ function renderDisplay() {
 }
 
 const screenView = new ScreenView();
+
+const weather = new WeatherPanel({ guarded, toast, render: () => state.tab === "weather" && render() });
 
 const store = new StorePanel({
   guarded,
@@ -491,6 +496,7 @@ $("content").addEventListener("change", async (e) => {
   const el = e.target;
   if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onChange(e).catch(() => true))) return;
+  if (state.tab === "weather" && (await weather.onChange(e).catch(() => true))) return;
   if (e.target.id === "screen-control") return screenView.setControl(e.target.checked);
   if (el.dataset.ui) {
     let value = el.value;
@@ -522,6 +528,7 @@ $("content").addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));
   if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
+  if (state.tab === "weather" && (await weather.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
   } else if (e.target.id === "place-form") {
@@ -559,6 +566,7 @@ $("content").addEventListener("click", async (e) => {
   if (!b || b.disabled || b.getAttribute("type") === "submit") return;
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
+  if (state.tab === "weather" && (await weather.onClick(e).catch(() => true))) return;
   if ("screenReconnect" in b.dataset) return screenView.mount();
   const d = b.dataset;
   try {

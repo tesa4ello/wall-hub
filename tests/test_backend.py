@@ -597,7 +597,8 @@ class MetnoTest(unittest.TestCase):
         w = weather.Weather(fetch=fetch, local_tz=lambda: "Europe/Moscow")
         data = w.forecast(59.79, 30.16)
         self.assertEqual(data["source"], "met.no")
-        self.assertEqual(w.source, "met.no")
+        self.assertFalse(w.status["open-meteo"]["ok"])
+        self.assertTrue(w.status["met.no"]["ok"])
         self.assertEqual(data["place"]["timezone"], "Europe/Moscow")
         self.assertEqual(data["place"]["utc_offset"], 3 * 3600)
         self.assertGreaterEqual(len(data["hourly"]), 47)
@@ -609,7 +610,7 @@ class MetnoTest(unittest.TestCase):
         self.assertLess(day["sunrise"], day["sunset"])
         self.assertLessEqual(day["tmin"], day["tmax"])
         self.assertIsNotNone(data["current"]["feels"])
-        # Дальше сразу MET Norway, без ожидания Open-Meteo.
+        # Дальше сразу MET Norway, без ожидания Open-Meteo (он «остывает»).
         calls.clear()
         w.forecast(10, 10)
         self.assertEqual(calls, [__import__("wallhub").metno.URL])
@@ -715,3 +716,110 @@ class ScreenTest(unittest.TestCase):
             s.acquire()
             time.sleep(0.1)
             self.assertEqual(calls[-1], "start")
+
+
+class ProvidersTest(unittest.TestCase):
+    NOW = 1_800_000_000  # 2027-01-15 08:00 UTC
+
+    def test_settings_normalized(self):
+        from wallhub import weather
+        s = weather.normalize_settings({"providers": [{"id": "met.no", "enabled": True}, {"id": "bogus"}],
+                                        "refresh_min": 999, "keys": {"yandex": ""}})
+        ids = [p["id"] for p in s["providers"]]
+        self.assertEqual(ids[0], "met.no")
+        self.assertNotIn("bogus", ids)
+        self.assertEqual(len(ids), 5)
+        self.assertEqual(s["refresh_min"], 60)
+        self.assertEqual(s["keys"], {})
+
+    def test_order_and_keys(self):
+        from wallhub import weather, weather_providers as wp
+        calls = []
+
+        def fetch(url, params, headers=None):
+            calls.append(url)
+            if url == wp.WEATHERAPI_URL:
+                return self.weatherapi_sample()
+            raise OSError("down")
+
+        settings = {"providers": [{"id": "weatherapi", "enabled": True}, {"id": "yandex", "enabled": True},
+                                  {"id": "open-meteo", "enabled": True}], "keys": {"weatherapi": "k" * 20},
+                    "refresh_min": 15}
+        w = weather.Weather(fetch=fetch, clock=lambda: self.NOW, settings=lambda: settings)
+        data = w.forecast(55.75, 37.62)
+        # Яндекс без ключа пропущен, WeatherAPI ответил первым.
+        self.assertEqual(calls, [wp.WEATHERAPI_URL])
+        self.assertEqual(data["source"], "weatherapi")
+        self.assertEqual(data["refresh"], 15 * 60)
+        self.assertEqual(data["units"]["pressure"], "mmhg")
+
+    def weatherapi_sample(self):
+        hours = [{"time_epoch": self.NOW - 3600 + i * 3600, "temp_c": -3.0 + i * 0.1, "is_day": 1,
+                  "condition": {"code": 1213}, "chance_of_rain": 0, "chance_of_snow": 70, "precip_mm": 0.2}
+                 for i in range(24)]
+        return {
+            "location": {"tz_id": "Europe/Moscow"},
+            "current": {"last_updated_epoch": self.NOW, "temp_c": -2.5, "feelslike_c": -7.0, "humidity": 90,
+                        "precip_mm": 0.1, "condition": {"code": 1213}, "is_day": 1, "pressure_mb": 1015.0,
+                        "wind_kph": 18.0, "wind_degree": 200, "gust_kph": 30.0, "cloud": 100, "uv": 0.5},
+            "forecast": {"forecastday": [{"date": "2027-01-15", "day": {"maxtemp_c": -1.0, "mintemp_c": -6.0,
+                         "totalprecip_mm": 2.0, "daily_chance_of_rain": 0, "daily_chance_of_snow": 80, "uv": 1.0,
+                         "maxwind_kph": 25.0, "condition": {"code": 1213}},
+                         "astro": {"sunrise": "08:55 AM", "sunset": "04:20 PM"}, "hour": hours}]},
+        }
+
+    def test_weatherapi(self):
+        from wallhub import weather_providers as wp
+        data = wp.weatherapi(lambda url, params: self.weatherapi_sample(), 55.75, 37.62, None, "k", self.NOW, 48, 10)
+        self.assertEqual(data["current"]["code"], 71)
+        self.assertEqual(data["current"]["wind"], 5.0)
+        self.assertEqual(data["daily"][0]["sunrise"], 1_799_992_500)  # 08:55 MSK = 05:55 UTC
+        self.assertEqual(data["place"]["timezone"], "Europe/Moscow")
+        self.assertEqual(data["hourly"][0]["pop"], 70)
+
+    def test_openweathermap(self):
+        from wallhub import weather_providers as wp
+        cur = {"dt": self.NOW, "timezone": 10800, "weather": [{"id": 500, "icon": "10n"}],
+               "main": {"temp": 1.5, "feels_like": -2.0, "humidity": 80, "pressure": 1010},
+               "wind": {"speed": 4.0, "deg": 90}, "clouds": {"all": 75}, "rain": {"1h": 0.3},
+               "sys": {"sunrise": self.NOW + 3000, "sunset": self.NOW + 30000}}
+        fc = {"city": {"timezone": 10800}, "list": [
+            {"dt": self.NOW + i * 10800, "main": {"temp": 1.0 + i}, "weather": [{"id": 803}], "pop": 0.2,
+             "rain": {"3h": 0.9}, "sys": {"pod": "d"}, "wind": {"speed": 3}} for i in range(16)]}
+        fetch = lambda url, params: cur if url == wp.OWM_WEATHER else fc
+        data = wp.openweathermap(fetch, 55.75, 37.62, None, "k", self.NOW, 48, 10)
+        self.assertEqual(data["place"]["timezone"], "Etc/GMT-3")
+        self.assertEqual((data["current"]["code"], data["current"]["day"]), (61, False))
+        self.assertEqual(data["hourly"][0]["precip"], 0.3)
+        self.assertEqual(data["daily"][0]["sunrise"], self.NOW + 3000)
+        self.assertAlmostEqual(data["daily"][0]["precip"], 0.9 * 5, places=1)  # 11, 14, 17, 20, 23 по Москве
+
+    def test_yandex(self):
+        from wallhub import weather_providers as wp
+        raw = {"now": self.NOW, "info": {"tzinfo": {"name": "Europe/Moscow", "offset": 10800}},
+               "fact": {"temp": -4, "feels_like": -9, "condition": "light-snow", "wind_speed": 3.2, "wind_dir": "sw",
+                        "pressure_mm": 750, "humidity": 85, "daytime": "d", "cloudness": 0.75, "uv_index": 0},
+               "forecasts": [{"date_ts": self.NOW - 11 * 3600, "sunrise": "08:55", "sunset": "16:20",
+                              "parts": {"night": {"temp_min": -8, "temp_max": -6, "prec_prob": 10, "prec_mm": 0},
+                                        "day": {"temp_min": -5, "temp_max": -2, "condition": "snow", "prec_prob": 60,
+                                                "prec_mm": 1.5, "uv_index": 1}},
+                              "hours": [{"hour_ts": self.NOW + i * 3600, "temp": -4, "condition": "snow",
+                                         "prec_prob": 50, "prec_mm": 0.2} for i in range(10)]}]}
+        seen = {}
+
+        def fetch(url, params, headers=None):
+            seen.update(headers or {})
+            return raw
+        data = wp.yandex(fetch, 55.75, 37.62, None, "secret-key", self.NOW, 48, 7)
+        self.assertEqual(seen["X-Yandex-Weather-Key"], "secret-key")
+        self.assertEqual((data["current"]["code"], data["current"]["wind_dir"]), (71, 225))
+        self.assertAlmostEqual(data["current"]["pressure"], 999.9, places=0)
+        day = data["daily"][0]
+        self.assertEqual((day["tmin"], day["tmax"], day["code"], day["pop"]), (-8, -2, 73, 60))
+        self.assertEqual(day["sunrise"], 1_799_992_500)
+
+    def test_weather_keys_are_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            config.update({"weather": {"keys": {"yandex": "x" * 20}}})
+            self.assertNotIn("keys", config.public()["weather"])

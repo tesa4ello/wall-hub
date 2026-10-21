@@ -86,6 +86,9 @@ DEFAULTS = {
         "schedule": "daily",
         "time": "04:00",
     },
+    # Раздел «Погода» в админке: провайдеры, ключи (секрет), интервал,
+    # единицы по умолчанию. Пусто = значения из wallhub.weather.DEFAULT_SETTINGS.
+    "weather": {},
     # Ключ Яндекс Локатора (секрет, наружу отдаётся только признак).
     "location": {"yandex_key": ""},
     "admin": {
@@ -96,7 +99,7 @@ DEFAULTS = {
 }
 
 # Поля, которые нельзя отдавать наружу через API.
-SECRET_PATHS = (("admin", "password_hash"), ("location", "yandex_key"))
+SECRET_PATHS = (("admin", "password_hash"), ("location", "yandex_key"), ("weather", "keys"))
 
 
 def _merge(base, override):

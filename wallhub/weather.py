@@ -19,7 +19,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from . import metno
+from . import metno, weather_providers
 from .i18n import tr
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,39 @@ FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 # Запасной поиск городов, если Open-Meteo недоступен.
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-SOURCES = ("open-meteo", "met.no")
+# Провайдер, который не ответил, пропускаем столько секунд (если есть другие).
+PROVIDER_COOLDOWN = 30 * 60
+
+DEFAULT_SETTINGS = {
+    "providers": [{"id": pid, "enabled": not meta["key"]} for pid, meta in weather_providers.PROVIDERS.items()],
+    "keys": {},
+    "refresh_min": 10,
+    "units": {"temp": "c", "wind": "ms", "pressure": "mmhg"},
+}
+
+
+def normalize_settings(settings):
+    """Порядок и включённость провайдеров: неизвестные убираются, новые
+    (из более свежей версии) добавляются в конец выключенными."""
+    settings = dict(DEFAULT_SETTINGS, **(settings or {}))
+    seen, providers = set(), []
+    for p in settings.get("providers") or []:
+        pid = p.get("id") if isinstance(p, dict) else None
+        if pid in weather_providers.PROVIDERS and pid not in seen:
+            seen.add(pid)
+            providers.append({"id": pid, "enabled": bool(p.get("enabled"))})
+    for pid, meta in weather_providers.PROVIDERS.items():
+        if pid not in seen:
+            providers.append({"id": pid, "enabled": False})
+    settings["providers"] = providers
+    settings["keys"] = {k: v for k, v in (settings.get("keys") or {}).items() if v}
+    try:
+        settings["refresh_min"] = max(5, min(60, int(settings.get("refresh_min") or 10)))
+    except (TypeError, ValueError):
+        settings["refresh_min"] = 10
+    units = dict(DEFAULT_SETTINGS["units"], **(settings.get("units") or {}))
+    settings["units"] = units
+    return settings
 
 FORECAST_TTL = 10 * 60
 # Устаревший прогноз ещё показываем, но не дольше суток.
@@ -90,9 +122,9 @@ class _HTTPSHandler(urllib.request.HTTPSHandler):
 opener = urllib.request.build_opener(_HTTPSHandler())
 
 
-def get_json(url, params, timeout=6, limit=2 * 1024 * 1024):
+def get_json(url, params, timeout=6, limit=2 * 1024 * 1024, headers=None):
     full = url + "?" + urllib.parse.urlencode(params)
-    request = urllib.request.Request(full, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    request = urllib.request.Request(full, headers=dict({"User-Agent": USER_AGENT, "Accept": "application/json"}, **(headers or {})))
     started = time.monotonic()
     try:
         with opener.open(request, timeout=timeout) as response:
@@ -181,13 +213,15 @@ def normalize(raw, now=None):
 
 
 class Weather:
-    def __init__(self, fetch=get_json, clock=time.time, local_tz=lambda: None):
+    def __init__(self, fetch=get_json, clock=time.time, local_tz=lambda: None, settings=lambda: None):
         self._fetch = fetch
         self._clock = clock
-        # Часовой пояс панели: для MET Norway, который его не сообщает.
+        # Часовой пояс панели: для провайдеров, которые его не сообщают.
         self._local_tz = local_tz
-        # Источник, ответивший последним: с него и начинаем.
-        self.source = SOURCES[0]
+        # Настройки раздела «Погода» в админке (config["weather"]).
+        self._settings = settings
+        # id провайдера -> {"at", "ok", "error", "ms"}: последний запрос.
+        self.status = {}
         self._lock = threading.Lock()
         self._key_locks = {}
         # key -> {"data", "at", "failed_at"}
@@ -203,14 +237,15 @@ class Weather:
         with self._key_lock(key):
             entry = self._forecasts.get(key)
             now = self._clock()
-            if entry and "data" in entry and now - entry["at"] < FORECAST_TTL:
+            if entry and "data" in entry and now - entry["at"] < entry.get("ttl", FORECAST_TTL):
                 return self._result(entry, now)
             if entry and now - entry.get("failed_at", 0) < RETRY_AFTER:
                 if "data" not in entry:
                     raise WeatherError(entry["error"])
                 return self._result(entry, now)
             try:
-                entry = {"data": self._fetch_any(key, tz, now), "at": now}
+                data, ttl = self._fetch_any(key, tz, now)
+                entry = {"data": data, "at": now, "ttl": ttl}
                 self._store(self._forecasts, key, entry)
             except Exception as e:
                 log.warning("weather for %s failed: %s", key, e)
@@ -223,27 +258,67 @@ class Weather:
                 raise WeatherError(error)
             return self._result(entry, now)
 
+    def settings(self):
+        return normalize_settings(self._settings())
+
+    def clear(self):
+        """Настройки поменялись: следующий запрос идёт к провайдерам заново."""
+        with self._lock:
+            self._forecasts.clear()
+
     def _fetch_any(self, key, tz, now):
-        """Прогноз с первого ответившего источника, начиная с последнего удачного."""
-        order = [self.source] + [s for s in SOURCES if s != self.source]
+        """Прогноз с первого ответившего провайдера в порядке из настроек.
+        Недавно не ответивших пропускаем, пока есть кого спросить."""
+        settings = self.settings()
+        usable = [p["id"] for p in settings["providers"] if p["enabled"]
+                  and (not weather_providers.PROVIDERS[p["id"]]["key"] or settings["keys"].get(p["id"]))]
+        if not usable:
+            raise WeatherError(tr("Нет включённых источников погоды"))
+        fresh = [pid for pid in usable if self.status.get(pid, {}).get("ok", True)
+                 or now - self.status[pid]["at"] >= PROVIDER_COOLDOWN]
         errors = []
-        for source in order:
+        for pid in fresh or usable:
             try:
-                data = self._fetch_source(source, key, tz, now)
+                data = self._fetch_provider(pid, key, tz, now, settings["keys"].get(pid))
             except Exception as e:
-                log.warning("weather from %s for %s failed: %s", source, key, e)
-                errors.append(f"{source}: {e}")
+                errors.append(f"{weather_providers.PROVIDERS[pid]['title']}: {e}")
                 continue
-            if source != self.source:
-                log.info("weather source switched to %s", source)
-                self.source = source
-            return data
+            ttl = max(settings["refresh_min"] * 60, weather_providers.PROVIDERS[pid]["min_ttl"])
+            return dict(data, refresh=ttl), ttl
         raise WeatherError("; ".join(errors))
 
-    def _fetch_source(self, source, key, tz, now):
+    def _fetch_provider(self, pid, key, tz, now, api_key=None):
+        started = time.monotonic()
+        try:
+            data = self._fetch_source(pid, key, tz, now, api_key)
+        except Exception as e:
+            log.warning("weather from %s for %s failed: %s", pid, key, e)
+            self.status[pid] = {"at": now, "ok": False, "error": str(e), "ms": int((time.monotonic() - started) * 1000)}
+            raise
+        self.status[pid] = {"at": now, "ok": True, "error": None, "ms": int((time.monotonic() - started) * 1000)}
+        return data
+
+    def test(self, pid, lat, lon, tz=None):
+        """Проверка одного провайдера из админки (без кэша)."""
+        if pid not in weather_providers.PROVIDERS:
+            raise WeatherError(tr("Неизвестный источник погоды"))
+        settings = self.settings()
+        api_key = settings["keys"].get(pid)
+        if weather_providers.PROVIDERS[pid]["key"] and not api_key:
+            raise WeatherError(tr("Для этого источника нужен ключ"))
+        try:
+            data = self._fetch_provider(pid, place_key(lat, lon), tz, self._clock(), api_key)
+        except Exception as e:
+            raise WeatherError(str(e))
+        return {"temp": data["current"]["temp"], "code": data["current"]["code"], "ms": self.status[pid]["ms"]}
+
+    def _fetch_source(self, source, key, tz, now, api_key=None):
+        tz = tz or self._local_tz()
+        if source in weather_providers.FETCHERS:
+            return weather_providers.FETCHERS[source](self._fetch, key[0], key[1], tz, api_key, now, HOURS, DAYS)
         if source == "met.no":
             raw = self._fetch(metno.URL, {"lat": key[0], "lon": key[1]})
-            return metno.normalize(raw, key[0], key[1], tz or self._local_tz() or "UTC", now, HOURS, DAYS)
+            return metno.normalize(raw, key[0], key[1], tz or "UTC", now, HOURS, DAYS)
         raw = self._fetch(FORECAST_URL, {
             "latitude": key[0], "longitude": key[1],
             "current": CURRENT, "hourly": HOURLY, "daily": DAILY,
@@ -256,8 +331,8 @@ class Weather:
         return dict(normalize(raw, now), source="open-meteo")
 
     def _result(self, entry, now):
-        stale = now - entry["at"] >= FORECAST_TTL + RETRY_AFTER
-        return dict(entry["data"], updated=entry["at"], stale=stale)
+        stale = now - entry["at"] >= entry.get("ttl", FORECAST_TTL) + RETRY_AFTER
+        return dict(entry["data"], updated=entry["at"], stale=stale, units=self.settings()["units"])
 
     def _store(self, table, key, entry):
         with self._lock:
@@ -351,7 +426,7 @@ def fake_metno(lat, lon, now=None):
             "properties": {"meta": {"units": {}}, "timeseries": series}}
 
 
-def fake_fetch(url, params):
+def fake_fetch(url, params, headers=None):
     """Правдоподобный ответ Open-Meteo без сети (WALLHUB_FAKE_WEATHER=1):
     для разработки интерфейса и скриншотов. Дождь начинается минут через 30.
     WALLHUB_FAKE_WEATHER=metno: Open-Meteo «недоступен», ответ даёт MET Norway."""
