@@ -950,6 +950,18 @@ class SshKeysTest(unittest.TestCase):
             self.assertEqual(set(os.listdir(root)), {"keys.json", ".initialized", f"id_{kid}", f"id_{kid}.pub"})
 
 
+    def test_default_key_retried_after_missing_keygen(self):
+        from unittest import mock
+        from wallhub import sshkeys
+        with tempfile.TemporaryDirectory() as tmp:
+            keys = sshkeys.SshKeys(os.path.join(tmp, "ssh"))
+            with mock.patch.dict(os.environ, {"PATH": tmp}):
+                keys.ensure_default()
+            self.assertEqual(keys.list(), [])  # повтор ещё рано
+            keys.last_try -= sshkeys.RETRY_SECONDS + 1
+            self.assertIsNotNone(keys.path("panel"))
+            self.assertTrue(keys.ready)
+
 class NetConfigTest(unittest.TestCase):
     def test_parse_ipv4(self):
         from wallhub.netconfig import NetConfigError, parse_ipv4
@@ -1003,3 +1015,4 @@ class NetConfigTest(unittest.TestCase):
         self.assertEqual(mod.settings_for("end1", eth),
                          {"method": "manual", "address": "10.0.0.5/24", "gateway": "10.0.0.1", "dns": ["10.0.0.1"]})
         self.assertIsNone(mod.settings_for("wlan0", eth))
+

@@ -18,6 +18,7 @@ import secrets
 import subprocess
 import tempfile
 import threading
+import time
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ ID_RE = re.compile(r"^[a-z0-9]{1,16}$")
 DEFAULT_ID = "panel"
 DEFAULT_TITLE = "Ключ панели"
 MAX_TITLE = 60
+RETRY_SECONDS = 30
 
 
 class SshKeyError(ValueError):
@@ -42,6 +44,11 @@ class SshKeys:
         self.lock = threading.Lock()
         self.index_path = os.path.join(root, "keys.json")
         self.known_hosts = os.path.join(root, "known_hosts")
+        # Ключ по умолчанию создан (или был удалён пользователем). Пока нет,
+        # повторяем попытку при обращении к ключам: при обновлении ядро может
+        # стартовать раньше, чем apt поставит ssh-keygen.
+        self.ready = False
+        self.last_try = 0.0
 
     def _ensure_dir(self):
         os.makedirs(self.root, mode=0o700, exist_ok=True)
@@ -80,16 +87,30 @@ class SshKeys:
         # Метка, чтобы удалённый пользователем ключ не появлялся снова.
         marker = os.path.join(self.root, ".initialized")
         with self.lock:
+            self.last_try = time.monotonic()
             self._ensure_dir()
             if os.path.exists(marker) or self._index():
+                self.ready = True
                 return
             try:
                 self._generate(DEFAULT_ID, DEFAULT_TITLE)
                 open(marker, "w").close()
+                self.ready = True
+                log.info("создан ключ панели")
+            except FileNotFoundError:
+                log.warning("ключ панели не создан: нет ssh-keygen (пакет openssh-client), повторю позже")
             except (OSError, SshKeyError, subprocess.SubprocessError) as e:
+                log.warning("ключ панели не создан: %s, повторю позже", e)
+
+    def _retry_default(self):
+        if not self.ready and time.monotonic() - self.last_try > RETRY_SECONDS:
+            try:
+                self.ensure_default()
+            except OSError as e:
                 log.warning("ключ панели не создан: %s", e)
 
     def list(self):
+        self._retry_default()
         with self.lock:
             index = self._index()
         result = []
@@ -108,6 +129,7 @@ class SshKeys:
         """Путь к приватному ключу или None."""
         if not isinstance(key_id, str) or not ID_RE.match(key_id):
             return None
+        self._retry_default()
         with self.lock:
             if key_id not in self._index():
                 return None
