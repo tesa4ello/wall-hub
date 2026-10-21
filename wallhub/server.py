@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, desktops, i18n, status
 from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
+from .modules import Registry
 from .location import MODES as LOCATION_MODES, LocationError, Locator
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
@@ -146,7 +147,7 @@ class WifiWatchdog(threading.Thread):
 class App:
     """Общее состояние, которое нужно обработчикам запросов."""
 
-    def __init__(self, config, system, web_root, admin_port):
+    def __init__(self, config, system, web_root, admin_port, modules_dirs=()):
         self.config = config
         self.system = system
         self.web_root = os.path.realpath(web_root)
@@ -161,7 +162,9 @@ class App:
         # админка выглядела так же.
         self.kiosk_theme = None
         self.started = time.time()
-        i18n.load(self.web_root)
+        self.modules = Registry(os.path.join(self.web_root, "modules"), modules_dirs,
+                                os.path.join(state_dir, "modules"))
+        i18n.load(self.web_root, self.modules.loaded())
         i18n.set_language(config.get("ui", "language"))
         status.load_all()
         self.collector = StatusCollector(config)
@@ -174,7 +177,7 @@ class App:
         self.weather = Weather(fetch=fake_fetch) if os.environ.get("WALLHUB_FAKE_WEATHER") else Weather()
 
     def widget_catalog(self):
-        return desktops.load_catalog(self.web_root)
+        return desktops.load_catalog(self.modules.loaded())
 
     def admin_url(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -297,6 +300,16 @@ def make_handler(app, trusted, port):
                 self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
 
         def handle_static(self, path):
+            # Файлы модулей: штатные, установленные и из --modules-dir.
+            if path.startswith("/modules/"):
+                _, _, rest = path.partition("/modules/")
+                module_id, _, rel = rest.partition("/")
+                full = app.modules.static_file(module_id, rel)
+                if full is None:
+                    self.send_error_json("Not found", HTTPStatus.NOT_FOUND)
+                    return
+                self.send_file(full)
+                return
             if path == "/":
                 path = "/index.html" if trusted else "/admin/index.html"
             elif path.endswith("/"):
@@ -511,10 +524,13 @@ def make_handler(app, trusted, port):
             return app.network.speed_status()
 
         def api_catalog(self, **_):
+            found = app.modules.scan()
+            loaded = {k: m for k, m in found.items() if not m.error}
             return {
-                "widgets": list(app.widget_catalog().values()),
+                "widgets": list(desktops.load_catalog(loaded).values()),
                 "providers": status.catalog(),
-                "i18n": {code: i18n.module_catalog(app.web_root, code) for code in i18n.languages()},
+                "i18n": {code: i18n.module_catalog(loaded, code) for code in i18n.languages()},
+                "modules": [m.info() for _, m in sorted(found.items())],
             }
 
         # Wi‑Fi

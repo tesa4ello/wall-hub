@@ -18,7 +18,7 @@ _catalogs = {}
 _current = "ru"
 
 
-def load(web_root):
+def load(web_root, modules=None):
     """Читает список языков и каталоги, включая переводы модулей."""
     global _languages, _source
     root = os.path.join(web_root, "i18n")
@@ -34,20 +34,15 @@ def load(web_root):
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
                 catalog.update(json.load(f))
-        catalog.update(module_catalog(web_root, code))
+        catalog.update(module_catalog(modules or {}, code))
         _catalogs[code] = catalog
 
 
-def module_catalog(web_root, code):
+def module_catalog(modules, code):
+    """Переводы из module.json модулей ({id: Module})."""
     catalog = {}
-    modules = os.path.join(web_root, "modules")
-    if not os.path.isdir(modules):
-        return catalog
-    for name in sorted(os.listdir(modules)):
-        manifest = os.path.join(modules, name, "module.json")
-        if os.path.isfile(manifest):
-            with open(manifest, encoding="utf-8") as f:
-                catalog.update(json.load(f).get("i18n", {}).get(code, {}))
+    for _, module in sorted(modules.items()):
+        catalog.update(module.meta.get("i18n", {}).get(code, {}))
     return catalog
 
 

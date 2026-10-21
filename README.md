@@ -174,6 +174,15 @@ placed any number of times, each instance with its own settings. The layout is
 stored in `desktops` in `config.json` and checked on the server
 (`wallhub/desktops.py`): sizes, bounds, overlaps, settings types.
 
+Clock, status bar and weather are built-in modules in `web/modules/`. Other
+modules come from the module store, the repository
+[tesa4ello/wallhub-modules](https://github.com/tesa4ello/wallhub-modules) (its
+`CLAUDE.md` describes the format). Installed modules live in
+`/var/lib/wallhub/modules/<id>/`. Each `module.json` has `id`, `version` and
+`core`, the major version of the core module API (`CORE_API` in
+`wallhub/__init__.py`); a store module with a different `core` is not loaded.
+A widget whose module is missing stays on its desktop as a placeholder.
+
 ### On-screen controls
 
 There is no gear icon; the interface is touch only:
@@ -244,5 +253,9 @@ python3 -m wallhub --dry-run --config var/config.json --admin-port 8088
 # admin: http://localhost:8088/  (the password is set at first sign-in)
 python3 -m unittest discover -s tests
 ```
+
+To try store modules, point `--modules-dir` at a checkout of the store (the
+flag can repeat): `--modules-dir ../wallhub-modules/modules`. Files are served
+as they are, so reloading the page picks up changes.
 
 Python dependencies, if any, go into `requirements.txt`.
