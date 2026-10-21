@@ -430,5 +430,15 @@
   "В модуле {id} есть ссылки или особые файлы": "Module {id} contains links or special files",
   "В архиве каталога нет модуля {id}": "The catalog archive has no module {id}",
   "Архив каталога повреждён: {error}": "The catalog archive is damaged: {error}",
-  "Модуль {id} не установлен": "Module {id} is not installed"
+  "Модуль {id} не установлен": "Module {id} is not installed",
+  "Трансляция": "Screen",
+  "Трансляция экрана": "Screen mirror",
+  "Управление": "Control",
+  "Переподключить": "Reconnect",
+  "Подключаюсь…": "Connecting…",
+  "Отключено": "Disconnected",
+  "Нет связи с экраном панели": "Lost connection to the panel screen",
+  "Не удалось загрузить просмотрщик": "Could not load the viewer",
+  "Трансляция экрана не запустилась": "Screen mirroring did not start",
+  "Пока вкладка открыта, экран транслируется только вам, после входа в админку. С включённым управлением клики и клавиши уходят на панель.": "While this tab is open, the screen is streamed only to you, after signing in to the admin. With control on, clicks and keys are sent to the panel."
 }

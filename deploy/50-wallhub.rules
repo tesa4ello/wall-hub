@@ -1,5 +1,6 @@
 // Сервис wallhub управляет Wi‑Fi, питанием и часовым поясом без root,
-// а также запускает проверку и установку обновлений (кнопки в админке).
+// а также запускает проверку и установку обновлений (кнопки в админке)
+// и трансляцию экрана в админку.
 polkit.addRule(function (action, subject) {
     if (subject.user !== "wallhub") {
         return;
@@ -16,6 +17,11 @@ polkit.addRule(function (action, subject) {
         (action.lookup("unit") === "wallhub-update@check.service" ||
          action.lookup("unit") === "wallhub-update@install.service" ||
          action.lookup("unit") === "wallhub-update@rollback.service")) {
+        return polkit.Result.YES;
+    }
+    if (id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "wallhub-vnc.service" &&
+        (action.lookup("verb") === "start" || action.lookup("verb") === "stop")) {
         return polkit.Result.YES;
     }
 });

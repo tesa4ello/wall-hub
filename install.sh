@@ -45,6 +45,8 @@ PACKAGES=(
     fonts-inter fonts-dejavu-core
     # заставка при загрузке
     plymouth
+    # трансляция экрана в админку
+    x11vnc
 )
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -266,6 +268,7 @@ log "$(L 'Настраиваю сервисы и polkit')"
 install -m 0644 "$SRC_DIR/deploy/wallhub.service" /etc/systemd/system/wallhub.service
 install -m 0644 "$SRC_DIR/deploy/wallhub-update@.service" /etc/systemd/system/wallhub-update@.service
 install -m 0644 "$SRC_DIR/deploy/wallhub-update-auto.timer" /etc/systemd/system/wallhub-update-auto.timer
+install -m 0644 "$SRC_DIR/deploy/wallhub-vnc.service" /etc/systemd/system/wallhub-vnc.service
 install -d /etc/polkit-1/rules.d
 install -m 0644 "$SRC_DIR/deploy/50-wallhub.rules" /etc/polkit-1/rules.d/50-wallhub.rules
 systemctl restart polkit 2>/dev/null || true

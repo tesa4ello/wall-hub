@@ -651,3 +651,67 @@ class ConfigWaitTest(unittest.TestCase):
             self.assertTrue(config.wait(lambda: config.revision != start, 5))
             self.assertLess(time.monotonic() - t0, 2)
             self.assertFalse(config.wait(lambda: False, 0.05))
+
+
+class ScreenTest(unittest.TestCase):
+    def test_accept_key(self):
+        from wallhub import screen
+        # Пример из RFC 6455.
+        self.assertEqual(screen.accept_key("dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+    def test_frames(self):
+        import io
+        import struct
+        from wallhub import screen
+        for size in (0, 5, 200, 70000):
+            payload = bytes(range(256)) * (size // 256) + bytes(size % 256)
+            self.assertEqual(screen.read_frame(io.BytesIO(screen.frame(payload))), (2, payload))
+        # Браузер маскирует кадры.
+        mask = b"\x01\x02\x03\x04"
+        data = b"hello"
+        masked = bytes(c ^ mask[i % 4] for i, c in enumerate(data))
+        raw = bytes([0x82, 0x80 | len(data)]) + mask + masked
+        self.assertEqual(screen.read_frame(io.BytesIO(raw)), (2, data))
+        # Слишком большой кадр и обрыв — конец соединения.
+        with self.assertRaises(EOFError):
+            screen.read_frame(io.BytesIO(bytes([0x82, 127]) + struct.pack(">Q", 1 << 30)))
+        with self.assertRaises(EOFError):
+            screen.read_frame(io.BytesIO(b"\x82"))
+
+    def test_pump(self):
+        import io
+        import socket
+        from wallhub import screen
+        ours, vnc = socket.socketpair()
+        vnc.sendall(b"RFB 003.008\n")
+        vnc.shutdown(socket.SHUT_WR)
+        rfile = io.BytesIO(screen.frame(b"client") + screen.frame(b"", 8))
+        wfile = io.BytesIO()
+        screen.pump(rfile, wfile, ours)
+        self.assertEqual(vnc.recv(100), b"client")
+        out = io.BytesIO(wfile.getvalue())
+        self.assertEqual(screen.read_frame(out), (2, b"RFB 003.008\n"))
+        self.assertEqual(screen.read_frame(out), (8, b""))
+        vnc.close()
+
+    def test_idle_stop(self):
+        from unittest import mock
+        from wallhub import screen
+        s = screen.Screen(dry_run=True)
+        calls = []
+        s._systemctl = calls.append
+        with mock.patch.object(screen, "IDLE_STOP", 0.05):
+            s.acquire()
+            s.acquire()
+            s.release()
+            time.sleep(0.1)
+            self.assertEqual(calls, ["start", "start"])
+            s.release()
+            time.sleep(0.15)
+            self.assertEqual(calls, ["start", "start", "stop"])
+            # Вернулся до таймера — юнит не останавливается.
+            s.acquire()
+            s.release()
+            s.acquire()
+            time.sleep(0.1)
+            self.assertEqual(calls[-1], "start")
