@@ -639,3 +639,15 @@ class MetnoTest(unittest.TestCase):
         results = weather.Weather(fetch=fetch).search("Пушкин")
         self.assertEqual(results[0]["name"], "Пушкин")
         self.assertIn("Санкт-Петербург", results[0]["region"])
+class ConfigWaitTest(unittest.TestCase):
+    def test_wait_wakes_on_update(self):
+        import threading
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(os.path.join(tmp, "c.json"))
+            start = config.revision
+            threading.Timer(0.1, lambda: config.update({"ui": {"theme": "light"}})).start()
+            t0 = time.monotonic()
+            self.assertTrue(config.wait(lambda: config.revision != start, 5))
+            self.assertLess(time.monotonic() - t0, 2)
+            self.assertFalse(config.wait(lambda: False, 0.05))
