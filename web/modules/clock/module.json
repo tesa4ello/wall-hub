@@ -1,4 +1,7 @@
 {
+  "id": "clock",
+  "version": "1.0.0",
+  "core": "1",
   "title": "Часы",
   "description": "Время и дата",
   "widgets": [

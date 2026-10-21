@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="не выполнять системные команды (для разработки)")
     parser.add_argument("--reset-password", action="store_true",
                         help="сбросить пароль админки (новый задаётся при следующем входе) и выйти")
+    parser.add_argument("--modules-dir", action="append", default=[], metavar="DIR",
+                        help="папка с модулями в разработке (например, wallhub-modules/modules); можно несколько")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -39,7 +41,8 @@ def main():
         auth.Sessions(os.path.join(os.path.dirname(os.path.abspath(config.path)), "sessions.json")).clear()
         return
 
-    app = App(config, System(dry_run=args.dry_run), args.web, args.admin_port)
+    app = App(config, System(dry_run=args.dry_run), args.web, args.admin_port,
+              [os.path.realpath(d) for d in args.modules_dir])
     servers = [
         serve(app, "127.0.0.1", args.kiosk_port, trusted=True),
         serve(app, args.admin_bind, args.admin_port, trusted=False),

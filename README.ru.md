@@ -166,6 +166,15 @@ Chromium запускается в чистом киоске: флаги в `dep
 хранится в `desktops` в `config.json` и проверяется на сервере
 (`wallhub/desktops.py`): размеры, границы, перекрытия, типы настроек.
 
+Часы, статусная строка и погода — штатные модули в `web/modules/`. Остальные
+модули приходят из магазина, репозитория
+[tesa4ello/wallhub-modules](https://github.com/tesa4ello/wallhub-modules) (формат
+описан в его `CLAUDE.md`). Установленные модули лежат в
+`/var/lib/wallhub/modules/<id>/`. В каждом `module.json` есть `id`, `version` и
+`core` — мажорная версия API ядра для модулей (`CORE_API` в
+`wallhub/__init__.py`); модуль магазина с другим `core` не загружается.
+Виджет, модуль которого пропал, остаётся на столе заглушкой.
+
 ### Управление на экране
 
 Шестерёнки нет, интерфейс чисто сенсорный:
@@ -237,5 +246,9 @@ python3 -m wallhub --dry-run --config var/config.json --admin-port 8088
 # админка: http://localhost:8088/  (пароль задаётся при первом входе)
 python3 -m unittest discover -s tests
 ```
+
+Модули магазина подключаются флагом `--modules-dir` с путём к клону магазина
+(флаг можно повторять): `--modules-dir ../wallhub-modules/modules`. Файлы
+отдаются как есть, после правки достаточно обновить страницу.
 
 Зависимости Python, если появятся, добавляются в `requirements.txt`.

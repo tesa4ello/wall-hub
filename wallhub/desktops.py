@@ -3,15 +3,13 @@
 Экран делится на сетку layout.cols × layout.rows клеток. Стол — это список
 виджетов, каждый занимает прямоугольник клеток (x, y, w, h).
 
-Виджеты поставляют модули: web/modules/<модуль>/module.json описывает один
+Виджеты поставляют модули (см. modules.py): module.json описывает один
 или несколько типов виджетов (название, размеры, схема настроек), а
 module.js их рисует. Тип виджета — «модуль/виджет», например clock/clock.
 У каждого экземпляра на столе свои настройки, так что один тип можно
 поставить несколько раз (например, погоду для разных городов).
 """
 
-import json
-import os
 import re
 
 from .i18n import tr
@@ -20,27 +18,26 @@ MAX_DESKTOPS = 10
 MAX_WIDGETS = 40
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+TYPE_RE = re.compile(r"^[a-z0-9_-]{1,32}/[a-z0-9_-]{1,32}$")
 
 
 class LayoutError(ValueError):
     pass
 
 
-def load_catalog(web_root):
-    """Типы виджетов всех модулей: {"модуль/виджет": описание}."""
+def load_catalog(modules):
+    """Типы виджетов загруженных модулей: {"модуль/виджет": описание}.
+
+    modules — {id: Module} из modules.Registry.loaded().
+    """
     catalog = {}
-    root = os.path.join(web_root, "modules")
-    for module in sorted(os.listdir(root)):
-        manifest = os.path.join(root, module, "module.json")
-        if not NAME_RE.match(module) or not os.path.isfile(manifest):
-            continue
-        with open(manifest, encoding="utf-8") as f:
-            info = json.load(f)
+    for name, module in sorted(modules.items()):
+        info = module.meta
         for widget in info.get("widgets", []):
             if not NAME_RE.match(widget.get("id", "")):
                 continue
-            type_id = f"{module}/{widget['id']}"
-            catalog[type_id] = dict(widget, id=type_id, module=module, module_title=info.get("title", module))
+            type_id = f"{name}/{widget['id']}"
+            catalog[type_id] = dict(widget, id=type_id, module=name, module_title=info.get("title", name))
     return catalog
 
 
@@ -131,9 +128,13 @@ def validate(desktops, catalog, cols, rows, providers=()):
         for w in widgets:
             if not isinstance(w, dict):
                 raise LayoutError(tr("Некорректный виджет"))
-            meta = catalog.get(w.get("type"))
-            if meta is None:
-                raise LayoutError(tr("Неизвестный виджет {type}", type=repr(w.get("type"))))
+            w_type = w.get("type")
+            if not isinstance(w_type, str) or not TYPE_RE.match(w_type):
+                raise LayoutError(tr("Неизвестный виджет {type}", type=repr(w_type)))
+            # Виджет удалённого или сломанного модуля остаётся на столе как есть
+            # (на экране заглушка), чтобы из-за него не ломалось сохранение.
+            known = w_type in catalog
+            meta = catalog.get(w_type) or {"id": w_type, "title": w_type}
             w_id = str(w.get("id", ""))
             if not ID_RE.match(w_id) or w_id in seen_ids:
                 raise LayoutError(tr("Некорректный идентификатор виджета"))
@@ -154,10 +155,12 @@ def validate(desktops, catalog, cols, rows, providers=()):
                     if (cx, cy) in occupied:
                         raise LayoutError(tr("«{title}» перекрывает «{other}»", title=title, other=occupied[(cx, cy)]))
                     occupied[(cx, cy)] = title
-            clean = {
-                "id": w_id, "type": meta["id"], "x": x, "y": y, "w": width, "h": height,
-                "options": clean_options(meta, w.get("options", {}), providers),
-            }
+            options = w.get("options", {})
+            if known:
+                options = clean_options(meta, options, providers)
+            elif not isinstance(options, dict):
+                options = {}
+            clean = {"id": w_id, "type": w_type, "x": x, "y": y, "w": width, "h": height, "options": options}
             # Плитка-подложка: своя у виджета или как задано в каталоге.
             if isinstance(w.get("card"), bool) and w["card"] != bool(meta.get("card")):
                 clean["card"] = w["card"]

@@ -138,9 +138,38 @@ class UpdateProgressTest(unittest.TestCase):
 WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 
 
+class ModulesTest(unittest.TestCase):
+    def make(self, root, name, **meta):
+        os.makedirs(os.path.join(root, name))
+        with open(os.path.join(root, name, "module.json"), "w", encoding="utf-8") as f:
+            json.dump(dict({"id": name, "core": "1", "widgets": []}, **meta), f)
+        with open(os.path.join(root, name, "module.js"), "w") as f:
+            f.write("export const widgets = {};")
+
+    def test_sources_and_compatibility(self):
+        from wallhub.modules import Registry
+        with tempfile.TemporaryDirectory() as dev, tempfile.TemporaryDirectory() as inst:
+            self.make(dev, "quotes")
+            self.make(dev, "clock")  # штатный id перекрыть нельзя
+            self.make(dev, "_template")
+            self.make(inst, "old", core="0")
+            self.make(inst, "quotes", version="9.9.9")
+            reg = Registry(os.path.join(WEB, "modules"), [dev], inst)
+            found = reg.scan()
+            self.assertEqual(found["quotes"].source, "dev")
+            self.assertEqual(found["clock"].source, "builtin")
+            self.assertNotIn("_template", found)
+            self.assertIsNotNone(found["old"].error)
+            self.assertNotIn("old", reg.loaded())
+            self.assertTrue(reg.static_file("quotes", "module.js"))
+            self.assertIsNone(reg.static_file("quotes", "../quotes/module.js/.."))
+            self.assertIsNone(reg.static_file("quotes", "backend/__init__.py"))
+
+
 class DesktopsTest(unittest.TestCase):
     def setUp(self):
-        self.catalog = desktops.load_catalog(WEB)
+        from wallhub.modules import Registry
+        self.catalog = desktops.load_catalog(Registry(os.path.join(WEB, "modules")).loaded())
         self.providers = ["wifi", "load"]
 
     def check(self, widgets):
@@ -166,6 +195,10 @@ class DesktopsTest(unittest.TestCase):
             self.check([dict(clock, id="a", x=0, y=0, w=1)])
         with self.assertRaises(desktops.LayoutError):
             self.check([dict(clock, id="a", x=0, y=0, type="nope")])
+
+    def test_unknown_module_widget_is_kept(self):
+        w = {"id": "a", "type": "gone/widget", "x": 0, "y": 0, "w": 3, "h": 2, "options": {"k": 1}}
+        self.assertEqual(self.check([w])[0]["widgets"][0], w)
 
     def test_migration_from_modules(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -239,8 +272,9 @@ class FirstLoginTest(unittest.TestCase):
 class I18nTest(unittest.TestCase):
     def setUp(self):
         from wallhub import i18n
+        from wallhub.modules import Registry
         self.i18n = i18n
-        i18n.load(os.path.join(os.path.dirname(__file__), "..", "web"))
+        i18n.load(WEB, Registry(os.path.join(WEB, "modules")).loaded())
 
     def tearDown(self):
         self.i18n.set_language("ru")

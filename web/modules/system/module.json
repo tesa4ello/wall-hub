@@ -1,4 +1,7 @@
 {
+  "id": "system",
+  "version": "1.0.0",
+  "core": "1",
   "title": "Система",
   "description": "Состояние самой панели",
   "widgets": [
