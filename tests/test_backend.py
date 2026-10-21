@@ -341,3 +341,22 @@ class WidgetCardTest(unittest.TestCase):
         self.assertTrue(desktops.validate(desk({"card": True}), catalog, 16, 10)[0]["widgets"][0]["card"])
         self.assertNotIn("card", desktops.validate(desk({"card": False}), catalog, 16, 10)[0]["widgets"][0])
         self.assertNotIn("card", desktops.validate(desk({"card": "yes"}), catalog, 16, 10)[0]["widgets"][0])
+
+
+class BuiltinBackgroundsTest(unittest.TestCase):
+    def test_builtins_listed_and_protected(self):
+        from wallhub.background import BackgroundError, Backgrounds
+        web = os.path.join(os.path.dirname(__file__), "..", "web", "backgrounds")
+        with tempfile.TemporaryDirectory() as tmp:
+            bgs = Backgrounds(tmp, web)
+            ids = [i["id"] for i in bgs.list()]
+            # Значения по умолчанию указывают на настоящие встроенные фоны.
+            from wallhub.config import DEFAULTS
+            self.assertIn(DEFAULTS["ui"]["background"], ids)
+            self.assertIn(DEFAULTS["ui"]["background_dark"], ids)
+            for item in bgs.list():
+                self.assertIsNotNone(bgs.file(item["url"][len("/bg/"):]))
+                self.assertIsNotNone(bgs.file(item["blur"][len("/bg/"):]))
+            with self.assertRaises(BackgroundError):
+                bgs.delete("default-aurora-dark")
+            validate_ui({"background": "default-waves-light", "background_dark": "default-orbs-dark"})

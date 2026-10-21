@@ -347,5 +347,6 @@
   "Перезапускаю сервис…": "Restarting the service…",
   "Нажмите, чтобы скрыть": "Tap to hide",
   "Проверяю, что сервис запустился…": "Checking that the service has started…",
-  "Возвращаю прошлую версию…": "Restoring the previous version…"
+  "Возвращаю прошлую версию…": "Restoring the previous version…",
+  "Встроенный фон нельзя удалить": "A built-in background cannot be deleted"
 }
