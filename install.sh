@@ -144,7 +144,8 @@ install -m 0644 "$SRC_DIR/deploy/chromium-policy.json" /etc/chromium/policies/ma
 
 KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
 install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$KIOSK_HOME/.config/openbox"
-install -m 0644 -o "$KIOSK_USER" -g "$KIOSK_USER" "$SRC_DIR/deploy/openbox-autostart" "$KIOSK_HOME/.config/openbox/autostart"
+# Старый автозапуск openbox (до перехода на запуск из .xinitrc).
+rm -f "$KIOSK_HOME/.config/openbox/autostart"
 install -m 0644 -o "$KIOSK_USER" -g "$KIOSK_USER" "$SRC_DIR/deploy/openbox-rc.xml" "$KIOSK_HOME/.config/openbox/rc.xml"
 install -m 0755 -o "$KIOSK_USER" -g "$KIOSK_USER" "$SRC_DIR/deploy/xinitrc" "$KIOSK_HOME/.xinitrc"
 install -m 0644 -o "$KIOSK_USER" -g "$KIOSK_USER" "$SRC_DIR/deploy/bash_profile" "$KIOSK_HOME/.bash_profile"
@@ -204,7 +205,11 @@ fi
 plymouth-set-default-theme -R wallhub
 
 log "Перезапускаю сеанс киоска на tty1"
+# На части образов Armbian getty@tty1 выключен и стартует только при
+# переключении на tty1, тогда киоск после загрузки не появляется.
+systemctl enable getty@tty1.service
 systemctl restart getty@tty1.service
+chvt 1 || true
 
 # --- итог ------------------------------------------------------------------------------
 

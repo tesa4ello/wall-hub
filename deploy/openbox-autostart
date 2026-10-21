@@ -1,2 +1,0 @@
-# Автозапуск openbox: только киоск.
-/opt/wallhub/deploy/kiosk.sh &

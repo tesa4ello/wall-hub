@@ -53,6 +53,6 @@ while true; do
         --hide-scrollbars \
         --default-background-color=ff0c0e11 \
         --autoplay-policy=no-user-gesture-required \
-        >/dev/null 2>&1
+        >"$HOME/.chromium.log" 2>&1
     sleep 2
 done
