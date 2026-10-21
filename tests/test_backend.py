@@ -1020,3 +1020,77 @@ class DisplayTest(unittest.TestCase):
         d.set_report({"screen_w": "x"})  # мусор не портит прошлый отчёт
         self.assertEqual(d.info()["width"], 1366)
         self.assertTrue(info["touch"])
+
+
+class ModuleUpdateTest(unittest.TestCase):
+    """Автообновление модулей: проверка, установка и откат (GitHub подменён)."""
+
+    def setUp(self):
+        import io
+        import tarfile
+        from wallhub.store import Store
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = Config(os.path.join(self.tmp.name, "config.json"))
+        self.version = "1.0.0"
+
+        def archive():
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                data = json.dumps({"id": "hello", "version": self.version, "core": "1", "title": "Привет", "widgets": []}).encode()
+                info = tarfile.TarInfo("repo-abc/modules/hello/module.json")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            return buf.getvalue()
+
+        def fetch(url, accept=None, limit=None):
+            if "/commits/" in url:
+                return json.dumps({"sha": "c" + self.version.replace(".", "") + "0000000"}).encode()
+            if "catalog.json" in url:
+                return json.dumps({"modules": [{"id": "hello", "version": self.version, "core": "1", "title": "Привет"}]}).encode()
+            if "/tarball/" in url:
+                return archive()
+            raise AssertionError(url)
+
+        self.store = Store(self.config, os.path.join(self.tmp.name, "modules"), "/nonexistent", [], fetch=fetch)
+        self.store.install("hello")
+        self.backend_error = None
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def updater(self):
+        from wallhub.modupdate import ModuleUpdater
+        return ModuleUpdater(self.store, self.config, self.tmp.name, backend_error=lambda mid: self.backend_error)
+
+    def test_check_install_rollback(self):
+        up = self.updater()
+        self.assertEqual(up.run(install=False)["available"], [])
+        self.version = "1.1.0"
+        status = up.run(install=False)
+        self.assertEqual(status["available"], [{"id": "hello", "title": "Привет", "installed": "1.0.0", "version": "1.1.0"}])
+        self.assertEqual(up.available_count(), 1)
+        up.run(install=True)
+        self.assertEqual(self.store.installed()["hello"]["version"], "1.1.0")
+        self.assertEqual(up.available_count(), 0)
+        # Новая версия не запускается — возвращаем прошлую.
+        self.version = "1.2.0"
+        self.backend_error = "ImportError: boom"
+        status = up.run(install=True)
+        self.assertEqual(self.store.installed()["hello"]["version"], "1.1.0")
+        self.assertTrue(status["failed"][0]["rolled_back"])
+        current = os.readlink(os.path.join(self.tmp.name, "modules", "hello", "current"))
+        self.assertTrue(current.startswith("1.1.0-"), current)
+
+    def test_due(self):
+        import datetime
+        from wallhub.modupdate import due, normalize
+        tz = datetime.timezone.utc
+        now = datetime.datetime(2026, 10, 21, 5, 0, tzinfo=tz)
+        daily = {"schedule": "daily", "time": "04:30"}
+        self.assertTrue(due(daily, None, now))
+        self.assertFalse(due(daily, now.replace(hour=4, minute=40), now))
+        self.assertTrue(due(daily, now - datetime.timedelta(days=1), now))
+        self.assertFalse(due({"schedule": "off"}, None, now))
+        self.assertTrue(due({"schedule": "hourly"}, now - datetime.timedelta(minutes=59, seconds=30), now))
+        self.assertEqual(normalize({"schedule": "x", "time": "25:00"}), {"schedule": "daily", "time": "04:30", "auto": True})

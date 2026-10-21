@@ -218,6 +218,15 @@ Module server parts run inside the core process (see above); their data in
 `wallhub/__init__.py`); a store module with a different `core` is not loaded.
 A widget whose module is missing stays on its desktop as a placeholder.
 
+Installed store modules update themselves like the system does
+(`wallhub/modupdate.py`, settings in "Modules → Module updates"): on a
+schedule (hourly, every 6 hours, daily at a set time or off) the core re-reads
+the catalogs and, with automatic install on, installs newer compatible
+versions. If the server part of a new version fails to start, the previous
+version is restored. Without automatic install the admin panel and the shade
+on the screen show how many modules can be updated. The result is kept in
+`/var/lib/wallhub/module-update.json`.
+
 ### On-screen controls
 
 There is no gear icon; the interface is made for touch:

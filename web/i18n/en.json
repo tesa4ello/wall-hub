@@ -574,5 +574,19 @@
   "Есть": "Yes",
   "масштаб ×{scale}": "scale ×{scale}",
   "не удалось определить, взято по умолчанию": "could not be detected, using the default",
-  "Не найден": "Not found"
+  "Не найден": "Not found",
+  "Обновление модулей уже идёт": "Module update is already running",
+  "Не удалось прочитать каталог {repo}": "Could not read catalog {repo}",
+  "Не все модули обновились": "Not all modules were updated",
+  "Обновлено модулей: {n}": "Modules updated: {n}",
+  "Доступны обновления модулей: {n}": "Module updates available: {n}",
+  "Все модули в актуальном состоянии": "All modules are up to date",
+  "У модуля {id} нет прошлой версии": "Module {id} has no previous version",
+  "вернул прошлую версию": "previous version restored",
+  "Обновления модулей": "Module updates",
+  "Проверяю каталоги…": "Checking catalogs…",
+  "Обновить все ({n})": "Update all ({n})",
+  "Если серверная часть новой версии не запустится, вернётся прошлая": "If the new version's server part fails to start, the previous one is restored",
+  "Обновления модулей: {n}": "Module updates: {n}",
+  "В админке": "In the admin"
 }

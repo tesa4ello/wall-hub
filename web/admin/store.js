@@ -2,7 +2,7 @@
 // обновление, удаление и сами каталоги.
 
 import { api } from "/lib/api.js";
-import { language, t } from "/lib/i18n.js";
+import { language, locale, t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -62,7 +62,65 @@ export class StorePanel {
   async load(path = "/store", body) {
     const call = body ? () => api.post(path, body) : () => api.get(path);
     this.data = await this.ctx.guarded(call);
+    if (!body) await this.loadUpdates();
     this.ctx.render();
+  }
+
+  // Автообновление модулей: настройки и итог последней проверки.
+  async loadUpdates(body) {
+    clearTimeout(this.updTimer);
+    try {
+      this.upd = await (body ? this.ctx.guarded(() => api.post("/store/updates", body)) : api.get("/store/updates"));
+    } catch {
+      return;
+    }
+    if (this.upd.status.state === "running") {
+      this.updTimer = setTimeout(async () => {
+        await this.loadUpdates();
+        // Закончили: список модулей мог поменяться.
+        if (this.upd.status.state !== "running") {
+          this.data = await api.get("/store").catch(() => this.data);
+          await this.ctx.changed();
+        }
+        this.ctx.render();
+      }, 2000);
+    }
+  }
+
+  renderUpdates() {
+    const u = this.upd;
+    if (!u) return "";
+    const st = u.status;
+    const s = u.settings;
+    const busy = st.state === "running";
+    const date = st.checked_at ? new Date(st.checked_at).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }) : "—";
+    const item = (m, text, cls = "") => `<div class="field"><span>${esc(m.title || m.id)}</span><b class="${cls}">${esc(text)}</b></div>`;
+    const lines = [
+      ...st.available.map((m) => item(m, `${m.installed} → ${m.version}`, "accent")),
+      ...(st.failed || []).map((m) => item(m, (m.rolled_back ? t("вернул прошлую версию") + ": " : "") + t(m.error, m.error_args), "error")),
+    ].join("");
+    const schedules = [["off", "Не проверять"], ["hourly", "Каждый час"], ["6h", "Каждые 6 часов"], ["daily", "Раз в день"]];
+    return `
+      <h1>${t("Обновления модулей")}</h1>
+      <section class="panel">
+        <div class="field"><span>${t("Проверено")}<small>${busy ? t("Проверяю каталоги…") : esc(st.message ? t(st.message, st.message_args) : "")}</small></span><b>${esc(date)}</b></div>
+        ${lines}
+        <div class="row-buttons">
+          <button class="btn" data-modupd-run="check" ${busy ? "disabled" : ""}>${icon("refresh")} ${t("Проверить")}</button>
+          ${st.available.length ? `<button class="btn btn-primary" data-modupd-run="install" ${busy ? "disabled" : ""}>${t("Обновить все ({n})", { n: st.available.length })}</button>` : ""}
+        </div>
+      </section>
+      <section class="panel">
+        <label class="field"><span>${t("Проверять обновления")}</span>
+          <select data-modupd="schedule">${schedules.map(([v, l]) => `<option value="${v}" ${s.schedule === v ? "selected" : ""}>${t(l)}</option>`).join("")}</select>
+        </label>
+        <label class="field"><span>${t("Время проверки")}<small>${t("Для «раз в день»")}</small></span>
+          <input type="time" data-modupd="time" value="${esc(s.time)}" ${s.schedule === "daily" ? "" : "disabled"}>
+        </label>
+        <label class="field"><span>${t("Ставить автоматически")}<small>${t("Если серверная часть новой версии не запустится, вернётся прошлая")}</small></span>
+          <input type="checkbox" data-modupd="auto" ${s.auto ? "checked" : ""}>
+        </label>
+      </section>`;
   }
 
   // Подписи из каталога переводятся его же переводами (модуль ещё не установлен).
@@ -88,6 +146,7 @@ export class StorePanel {
       <div class="row-buttons flush">
         <button class="btn" data-store-refresh ${this.busy ? "disabled" : ""}>${icon("refresh")} ${t("Проверить каталоги")}</button>
       </div>
+      ${this.renderUpdates()}
       <h1>${t("Каталоги")}</h1>
       <section class="panel list">${d.catalogs.map((c, i) => this.renderCatalog(c, i, d.catalogs.length)).join("")}</section>
       <form class="panel inline-form" id="catalog-form">
@@ -186,6 +245,9 @@ export class StorePanel {
     } else if ("storeBack" in d) {
       this.settingsFor = null;
       this.ctx.render();
+    } else if (d.modupdRun) {
+      await this.loadUpdates({ action: d.modupdRun });
+      this.ctx.render();
     } else if ("storeRefresh" in d) {
       await this.run("refresh", () => this.load("/store/refresh", {}));
     } else if (d.storeInstall) {
@@ -227,6 +289,13 @@ export class StorePanel {
   }
 
   async onChange(e) {
+    const key = e.target.dataset.modupd;
+    if (key) {
+      const value = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+      await this.loadUpdates({ action: "settings", settings: { [key]: value } });
+      this.ctx.render();
+      return true;
+    }
     const id = e.target.dataset.catalogToggle;
     if (!id) return false;
     await this.load("/store/catalogs", { action: e.target.checked ? "enable" : "disable", id });
