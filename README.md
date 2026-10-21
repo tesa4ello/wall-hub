@@ -87,9 +87,10 @@ without blur, **Solid** is opaque. Any widget can get or drop its tile with
 The panel updates from GitHub without reinstalling the system. There are two
 channels:
 
-- **Stable**: branch `main`, the default;
+- **Stable**: branch `stable`, the default (it was called `main` before 1.0.0;
+  the updater still finds it under the old name);
 - **Development**: branch `dev`. New changes land here first and reach stable
-  when `dev` is merged into `main`.
+  when `dev` is merged into `stable`.
 
 How a release is installed:
 
@@ -126,7 +127,10 @@ From the console: `sudo systemctl start wallhub-update@install` (or `check`,
 
 On the screen, under "Settings → Network":
 
-- interface addresses, gateway and DNS;
+- Ethernet and Wi‑Fi: current addresses, gateway and DNS; DHCP or a manual
+  address (address with mask, gateway and DNS are typed on the on-screen
+  keyboard), a "Back to DHCP" button and "Manage from the panel" for Ethernet
+  under netplan, the same as in the admin panel (see below);
 - the external address from several services (Yandex, Cloudflare, ipify,
   icanhazip, ifconfig.me, ipinfo.io). If the services see different addresses
   (for example, some traffic goes through a proxy), all of them are shown with
@@ -144,7 +148,7 @@ connection for 10 minutes, the service turns it back on: otherwise the panel
 would lose its admin panel, and NetworkManager remembers the radio being off
 even after a reboot.
 
-The "Network" section of the admin panel covers both Wi‑Fi and Ethernet. For
+The "Network" section of the admin panel (and of the screen) covers both Wi‑Fi and Ethernet. For
 the connected Wi‑Fi network and for the cable you can choose DHCP or set the
 address with mask, gateway and DNS by hand. The panel applies the change in
 the background, waits up to 25 seconds for an address and a reply from the

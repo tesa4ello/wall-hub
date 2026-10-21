@@ -112,6 +112,53 @@ class UpdateSettingsTest(unittest.TestCase):
         self.assertEqual(normalize_settings({"channel": "dev"})["channel"], "dev")
 
 
+class UpdaterBranchTest(unittest.TestCase):
+    """Стабильная ветка переименована из main в stable (1.0.0)."""
+
+    def setUp(self):
+        import importlib.util
+        path = os.path.join(os.path.dirname(__file__), "..", "deploy", "wallhub-update.py")
+        spec = importlib.util.spec_from_file_location("wallhub_update", path)
+        self.up = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.up)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.up.CONFIG = os.path.join(self.tmp.name, "config.json")
+
+    def fake_github(self, branches):
+        def github(url, raw=False, accept=None):
+            if "/contents/" in url:
+                raise self.up.UpdateError("нет")
+            ref = url.rsplit("/commits/", 1)[1]
+            if ref not in branches:
+                e = self.up.UpdateError("не найдено")
+                e.http_status = 404
+                raise e
+            return {"sha": branches[ref], "commit": {"committer": {"date": "2026-10-21T00:00:00Z"}, "message": "m"}}
+        self.up.github = github
+
+    def test_old_config_points_to_stable(self):
+        with open(self.up.CONFIG, "w") as f:
+            json.dump({"update": {"branches": {"stable": "main", "dev": "dev"}}}, f)
+        self.assertEqual(self.up.settings()["branches"]["stable"], "stable")
+
+    def test_falls_back_between_main_and_stable(self):
+        cfg = self.up.settings()
+        self.fake_github({"main": "aaa"})
+        self.assertEqual(self.up.latest(cfg)["ref"], "main")
+        self.fake_github({"stable": "bbb"})
+        self.assertEqual(self.up.latest(cfg)["commit"], "bbb")
+        self.fake_github({})
+        with self.assertRaises(self.up.UpdateError):
+            self.up.latest(cfg)
+
+    def test_core_config_migrates_branch(self):
+        path = os.path.join(self.tmp.name, "core.json")
+        with open(path, "w") as f:
+            json.dump({"update": {"branches": {"stable": "main", "dev": "dev"}}}, f)
+        self.assertEqual(Config(path).get("update", "branches"), {"stable": "stable", "dev": "dev"})
+
+
 class UpdateProgressTest(unittest.TestCase):
     def progress(self, **status):
         with tempfile.TemporaryDirectory() as d:

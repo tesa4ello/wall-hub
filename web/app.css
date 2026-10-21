@@ -337,6 +337,7 @@ body.kiosk {
 /* --- сеть ---------------------------------------------------------------- */
 
 .ext-warn { color: var(--warn); }
+.busy.net-error { color: var(--crit); }
 .speed-cell { display: flex; align-items: center; gap: 18px; }
 .speed { display: flex; align-items: baseline; gap: 14px; font-variant-numeric: tabular-nums; }
 .speed span { display: flex; align-items: center; gap: 4px; }

@@ -16,7 +16,8 @@ import { WeatherPanel } from "/admin/weather.js";
 
 const $ = (id) => document.getElementById(id);
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
-const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
+// Пользователю показываем только номер версии.
+const versionText = (info) => info.version || "—";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // group — заголовок группы в боковом меню, sub — подзаголовок страницы.
@@ -529,8 +530,8 @@ async function loadUpdate() {
 }
 
 const shortDate = (s) => (s ? new Date(s).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }) : "—");
-// Версия и номер сборки (короткий коммит), без текста коммита.
-const buildText = (b, version) => (b && b.commit ? [version || b.version, b.commit.slice(0, 7), shortDate(b.date)].filter(Boolean).join(" · ") : "—");
+// Только номер версии; без него (старые сборки) — короткий коммит.
+const buildText = (b, version) => (b && b.commit ? version || b.version || b.commit.slice(0, 7) : version || "—");
 
 function renderUpdates() {
   const u = state.update;

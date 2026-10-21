@@ -97,7 +97,7 @@ DEFAULTS = {
     "update": {
         "repo": "tesa4ello/wall-hub",
         "channel": "stable",
-        "branches": {"stable": "main", "dev": "dev"},
+        "branches": {"stable": "stable", "dev": "dev"},
         "auto": True,
         "schedule": "daily",
         "time": "04:00",
@@ -134,6 +134,10 @@ def _merge(base, override):
 def _migrate(data):
     """Приводит настройки старых версий к текущему виду."""
     ui = data.get("ui", {})
+    # До 1.0.0 стабильной веткой была main, теперь stable.
+    branches = data.get("update", {}).get("branches", {})
+    if branches.get("stable") == "main":
+        branches["stable"] = "stable"
     # Раньше пароль генерировался и показывался на экране.
     data.get("admin", {}).pop("initial_password", None)
     # Кто уже вписал координаты вручную, у того они и остаются.

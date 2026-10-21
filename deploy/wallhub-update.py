@@ -51,7 +51,7 @@ HEALTH_TIMEOUT = 60
 DEFAULT_SETTINGS = {
     "repo": "tesa4ello/wall-hub",
     "channel": "stable",
-    "branches": {"stable": "main", "dev": "dev"},
+    "branches": {"stable": "stable", "dev": "dev"},
     "auto": True,
     "schedule": "daily",
     "time": "04:00",
@@ -90,6 +90,10 @@ def read_version(release_dir):
     return info
 
 
+# Стабильная ветка называлась main до выпуска 1.0.0.
+BRANCH_ALIASES = {"stable": "main", "main": "stable"}
+
+
 def settings():
     try:
         with open(CONFIG, encoding="utf-8") as f:
@@ -98,6 +102,9 @@ def settings():
         data = {}
     cfg = dict(DEFAULT_SETTINGS, **data.get("update", {}))
     cfg["branches"] = dict(DEFAULT_SETTINGS["branches"], **cfg.get("branches", {}))
+    # До 1.0.0 стабильной веткой была main, теперь stable.
+    if cfg["branches"]["stable"] == "main":
+        cfg["branches"]["stable"] = "stable"
     if cfg["channel"] not in cfg["branches"]:
         cfg["channel"] = "stable"
     return cfg
@@ -182,9 +189,18 @@ def latest(cfg):
     try:
         commit = github(f"{api}/commits/{ref}")
     except UpdateError as e:
-        if e.http_status in (404, 422):
+        if e.http_status not in (404, 422):
+            raise
+        # stable и main — одна ветка до и после переименования: пробуем другое имя.
+        if ref not in BRANCH_ALIASES:
             raise UpdateError("В репозитории нет ветки {ref} (или нет доступа к нему)", ref=ref)
-        raise
+        try:
+            commit = github(f"{api}/commits/{BRANCH_ALIASES[ref]}")
+        except UpdateError as e2:
+            if e2.http_status in (404, 422):
+                raise UpdateError("В репозитории нет ветки {ref} (или нет доступа к нему)", ref=ref)
+            raise
+        ref = BRANCH_ALIASES[ref]
     return {
         "commit": commit["sha"],
         "ref": ref,
