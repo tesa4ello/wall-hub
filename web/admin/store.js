@@ -162,7 +162,7 @@ export class StorePanel {
         <button class="btn btn-primary" type="submit" ${this.busy ? "disabled" : ""}>${t("Сохранить")}</button>
         ${d.token_set ? `<button class="btn" type="button" data-store-token-clear>${t("Удалить")}</button>` : ""}
       </form>
-      <p class="muted small panel-inset">${t("Один токен на панель: им же скачиваются обновления. Для приватных каталогов токену нужен доступ на чтение к каждому репозиторию (у fine-grained токена — Contents: Read-only).")}</p>`;
+      <p class="muted small panel-inset">${t("Общий токен панели: им же скачиваются обновления. Каталогу можно задать свой токен кнопкой с шестерёнкой. Для приватных каталогов токену нужен доступ на чтение к каждому репозиторию (у fine-grained токена — Contents: Read-only).")}</p>`;
   }
 
   renderModule(m, names) {
@@ -207,18 +207,28 @@ export class StorePanel {
 
   renderCatalog(c, i, count) {
     const error = c.enabled && c.error ? `<div class="small error">${esc(t(c.error, c.error_args))}</div>` : "";
+    const tokens = { own: "свой токен", shared: "общий токен", "": "без токена" };
+    const editing = this.catalogEdit === c.id;
+    const edit = editing ? `
+        <form class="inline-form catalog-edit" data-catalog-form="${esc(c.id)}">
+          <input name="branch" value="${esc(c.branch)}" class="narrow" autocomplete="off" required title="${t("Ветка")}" placeholder="${t("Ветка")}">
+          <input name="token" type="password" autocomplete="off" placeholder="${t(c.token === "own" ? "Свой токен сохранён · вставьте новый, чтобы заменить" : "Свой токен (пусто — общий токен панели)")}">
+          <button class="btn btn-primary" type="submit">${t("Сохранить")}</button>
+          ${c.token === "own" ? `<button class="btn" type="button" data-catalog-token-clear="${esc(c.id)}">${t("Удалить токен")}</button>` : ""}
+        </form>` : "";
     return `
       <div class="item">
         <div class="item-main">
           <label class="check grow"><input type="checkbox" data-catalog-toggle="${esc(c.id)}" ${c.enabled ? "checked" : ""}>
             <span><span class="item-title">${esc(c.repo)}</span>
-            <span class="muted small">${t("ветка {branch}", { branch: esc(c.branch) })}${c.main ? ` · ${t("основной")}` : ""}</span></span></label>
+            <span class="muted small">${t("ветка {branch}", { branch: esc(c.branch) })} · ${t(tokens[c.token || ""])}${c.main ? ` · ${t("основной")}` : ""}</span></span></label>
+          <div class="order"><button class="btn btn-small ${editing ? "on" : ""}" data-catalog-edit="${esc(c.id)}" title="${t("Ветка и токен")}">${icon("gear")}</button></div>
           ${c.main ? "" : `<div class="order">
             <button class="btn btn-small" data-catalog="up" data-id="${esc(c.id)}" ${i <= 1 ? "disabled" : ""} title="${t("Выше")}">${icon("up")}</button>
             <button class="btn btn-small" data-catalog="down" data-id="${esc(c.id)}" ${i === count - 1 ? "disabled" : ""} title="${t("Ниже")}">${icon("down")}</button>
             <button class="btn btn-small" data-catalog="remove" data-id="${esc(c.id)}" title="${t("Отключить каталог")}">${icon("trash")}</button></div>`}
         </div>
-        ${error}
+        ${error}${edit}
       </div>`;
   }
 
@@ -271,6 +281,13 @@ export class StorePanel {
       const ok = await this.ctx.confirm({ title: t("Удалить токен GitHub?"), ok: t("Удалить"), danger: true });
       if (!ok) return true;
       await this.saveToken("");
+    } else if (d.catalogEdit) {
+      this.catalogEdit = this.catalogEdit === d.catalogEdit ? null : d.catalogEdit;
+      this.ctx.render();
+    } else if (d.catalogTokenClear) {
+      const ok = await this.ctx.confirm({ title: t("Удалить свой токен каталога?"), text: t("Каталог будет читаться с общим токеном панели."), ok: t("Удалить"), danger: true });
+      if (!ok) return true;
+      await this.run("refresh", () => this.load("/store/catalogs", { action: "token", id: d.catalogTokenClear, token: "" }));
     } else if (d.catalog) {
       if (d.catalog === "remove") {
         const c = this.data.catalogs.find((x) => x.id === d.id);
@@ -315,6 +332,18 @@ export class StorePanel {
       await this.saveToken(data.token.trim());
       e.target.reset?.();
       this.ctx.toast(t("Токен сохранён"));
+      return true;
+    }
+    const catId = e.target.dataset.catalogForm;
+    if (catId) {
+      const c = this.data.catalogs.find((x) => x.id === catId);
+      await this.run("refresh", async () => {
+        if (data.token.trim()) await this.load("/store/catalogs", { action: "token", id: catId, token: data.token.trim() });
+        if (data.branch.trim() !== c.branch) await this.load("/store/catalogs", { action: "branch", id: catId, branch: data.branch.trim() });
+      });
+      this.catalogEdit = null;
+      this.ctx.render();
+      this.ctx.toast(t("Каталог сохранён"));
       return true;
     }
     if (e.target.id !== "catalog-form") return false;

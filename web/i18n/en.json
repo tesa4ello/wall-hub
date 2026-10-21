@@ -392,7 +392,6 @@
   "Ссылка на репозиторий GitHub или owner/repo": "GitHub repository link or owner/repo",
   "Подключить": "Connect",
   "Подключая каталог, вы доверяете всем его модулям: их код работает на панели.": "By connecting a catalog you trust all of its modules: their code runs on the panel.",
-  "Один токен на панель: им же скачиваются обновления. Для приватных каталогов токену нужен доступ на чтение к каждому репозиторию (у fine-grained токена — Contents: Read-only).": "One token per panel, also used to download updates. For private catalogs the token needs read access to every repository (Contents: Read-only for a fine-grained token).",
   "Входит в ядро": "Part of the core",
   "Нужна серверная часть, эта версия панели её пока не поддерживает": "Needs a server part, which this panel version does not support yet",
   "Не подходит к этой версии панели": "Not compatible with this panel version",
@@ -612,5 +611,18 @@
   "0 — сразу после касания": "0 — right after the touch",
   "Интервал карусели: от {lo} до {hi} секунд": "Carousel interval: {lo} to {hi} seconds",
   "Некорректные настройки карусели": "Invalid carousel settings",
-  "Пауза карусели после касания: от {lo} до {hi} минут": "Carousel pause after a touch: {lo} to {hi} minutes"
+  "Пауза карусели после касания: от {lo} до {hi} минут": "Carousel pause after a touch: {lo} to {hi} minutes",
+  "Общий токен панели: им же скачиваются обновления. Каталогу можно задать свой токен кнопкой с шестерёнкой. Для приватных каталогов токену нужен доступ на чтение к каждому репозиторию (у fine-grained токена — Contents: Read-only).": "The panel's shared token: updates are downloaded with it too. A catalog can have its own token (gear button). For private catalogs the token needs read access to each repository (for a fine-grained token, Contents: Read-only).",
+  "свой токен": "own token",
+  "общий токен": "shared token",
+  "без токена": "no token",
+  "Ветка": "Branch",
+  "Удалить токен": "Delete token",
+  "Ветка и токен": "Branch and token",
+  "Удалить свой токен каталога?": "Delete the catalog's own token?",
+  "Каталог будет читаться с общим токеном панели.": "The catalog will be read with the panel's shared token.",
+  "Каталог сохранён": "Catalog saved",
+  "Некорректный токен": "Invalid token",
+  "Свой токен сохранён · вставьте новый, чтобы заменить": "Own token saved · paste a new one to replace it",
+  "Свой токен (пусто — общий токен панели)": "Own token (empty — the panel's shared token)"
 }

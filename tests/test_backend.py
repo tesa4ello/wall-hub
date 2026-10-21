@@ -10,6 +10,7 @@ from wallhub.config import Config
 from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
 from wallhub.system import split_terse
+from wallhub.store import StoreError
 from wallhub.update import Updates, normalize_settings
 
 
@@ -246,7 +247,10 @@ class StoreTest(unittest.TestCase):
         catalog = {"modules": [{"id": "hello", "version": "1.2.0", "core": "1", "title": "Привет"},
                                {"id": "clock", "version": "9.0.0", "core": "1", "title": "Часы"}]}
 
-        def fetch(url, accept=None, limit=None):
+        self.tokens_seen = []
+
+        def fetch(url, accept=None, limit=None, token=""):
+            self.tokens_seen.append(token)
             if "/commits/" in url:
                 return json.dumps({"sha": "abcdef1234567"}).encode()
             if "catalog.json" in url:
@@ -286,6 +290,28 @@ class StoreTest(unittest.TestCase):
         from wallhub.store import StoreError
         with self.assertRaises(StoreError):
             self.store.install("clock")
+
+    def test_catalog_token(self):
+        self.store.refresh()
+        self.assertEqual(self.tokens_seen[-1], "")
+        self.assertEqual(self.store.listing()["catalogs"][0]["token"], "")
+        self.store.set_token("main", "ghp_own")
+        path = os.path.join(self.store.tokens_dir, "main")
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.store.refresh()
+        self.assertEqual(self.tokens_seen[-1], "ghp_own")
+        self.assertEqual(self.store.listing()["catalogs"][0]["token"], "own")
+        self.assertNotIn("ghp_own", json.dumps(self.store.listing()))
+        self.store.set_token("main", "")
+        self.assertFalse(os.path.exists(path))
+        with self.assertRaises(StoreError):
+            self.store.set_token("main", "a b")
+
+    def test_catalog_branch(self):
+        self.store.set_catalog("main", branch="dev")
+        self.assertEqual(self.store.catalogs()[0]["branch"], "dev")
+        with self.assertRaises(StoreError):
+            self.store.set_catalog("main", branch="bad branch")
 
     def test_parse_repo(self):
         from wallhub.store import StoreError, parse_repo
@@ -1110,7 +1136,10 @@ class ModuleUpdateTest(unittest.TestCase):
                 tar.addfile(info, io.BytesIO(data))
             return buf.getvalue()
 
-        def fetch(url, accept=None, limit=None):
+        self.tokens_seen = []
+
+        def fetch(url, accept=None, limit=None, token=""):
+            self.tokens_seen.append(token)
             if "/commits/" in url:
                 return json.dumps({"sha": "c" + self.version.replace(".", "") + "0000000"}).encode()
             if "catalog.json" in url:

@@ -278,6 +278,7 @@ input[type="time"] { font-variant-numeric: tabular-nums; }
 .inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px var(--row-pad); }
 .inline-form input { flex: 1 1 200px; min-width: 0; }
 .inline-form input.narrow { flex: none; width: 120px; }
+.inline-form.catalog-edit { padding: 0 0 4px; }
 .row-buttons { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px var(--row-pad); }
 .row-buttons.flush { padding: 0 0 16px; }
 .panel > .row-buttons { border-top: 1px solid var(--border); }

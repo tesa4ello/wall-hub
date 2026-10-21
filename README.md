@@ -218,8 +218,10 @@ GitHub repository with the same layout (`modules/<id>/` plus `catalog.json`);
 more catalogs are connected on the same tab, and if two catalogs have a module
 with the same id, the one higher in the list wins. Connecting a catalog means
 trusting its code. Private catalogs need a GitHub token with read access to
-their repositories; it is the same token as for updates and can be set on the
-"Modules" or "Updates" tab. Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
+their repositories; by default it is the same token as for updates (set on the
+"Modules" or "Updates" tab). The gear button next to a catalog changes its
+branch and sets the catalog's own token, stored in
+`/var/lib/wallhub/store-tokens/<catalog>` (mode 600, never sent to the browser). Installed modules live in `/var/lib/wallhub/modules/<id>/` (`current` and
 `previous` point to versions); the service installs them itself, without root.
 Module server parts run inside the core process (see above); their data in
 `/var/lib/wallhub/module-data/<id>/` is kept when the module is removed. Each `module.json` has `id`, `version` and
