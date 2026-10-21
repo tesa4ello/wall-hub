@@ -569,7 +569,7 @@ export class Settings {
       : u.available
         ? `<div class="update-banner">${icon("refresh")}<div>
             <div class="update-banner-title">${t("Доступна новая версия {version}", { version: esc(newVersion) })}</div>
-            <div class="update-banner-text">${esc(latest.title || "")}</div></div>
+            ${latest.date ? `<div class="update-banner-text">${esc(new Date(latest.date).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }))}</div>` : ""}</div>
             <button class="btn" data-update-run="install">${t("Обновить")}</button></div>`
         : "";
     const checked = st.checked_at ? ` · ${t("проверено {ago}", { ago: ago(Date.parse(st.checked_at) / 1000) })}` : "";
