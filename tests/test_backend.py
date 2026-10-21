@@ -921,60 +921,6 @@ def setup(ctx):
         self.assertEqual(desktops.clean_options(meta, {})["server"], "")
 
 
-@unittest.skipUnless(__import__("shutil").which("ssh-keygen"), "нужен ssh-keygen")
-class SshKeysTest(unittest.TestCase):
-    def test_store(self):
-        import stat
-        import subprocess
-        from wallhub.sshkeys import SshKeyError, SshKeys
-        with tempfile.TemporaryDirectory() as tmp:
-            root = os.path.join(tmp, "ssh")
-            keys = SshKeys(root)
-            keys.ensure_default()
-            self.assertEqual(stat.S_IMODE(os.stat(root).st_mode), 0o700)
-            (panel,) = keys.list()
-            self.assertEqual(panel["id"], "panel")
-            self.assertTrue(panel["public_key"].startswith("ssh-ed25519 "))
-            self.assertNotIn("PRIVATE", json.dumps(keys.list()))
-            path = keys.path("panel")
-            self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
-            self.assertIsNone(keys.path("../etc"))
-            # Удалённый ключ по умолчанию не создаётся заново.
-            keys.delete("panel")
-            keys.ensure_default()
-            self.assertEqual(keys.list(), [])
-            # Импорт: ключ без пароля принимается, мусор и ключ с паролем — нет.
-            src = os.path.join(tmp, "k")
-            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", src], check=True)
-            with open(src) as f:
-                kid = keys.import_key("Мой", f.read())
-            self.assertEqual(keys.list()[0]["title"], "Мой")
-            with open(src + ".pub") as f:
-                self.assertEqual(keys.list()[0]["public_key"].split()[1], f.read().split()[1])
-            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "secret", "-f", src + "p"], check=True)
-            with open(src + "p") as f, self.assertRaises(SshKeyError):
-                keys.import_key("С паролем", f.read())
-            with self.assertRaises(SshKeyError):
-                keys.import_key("Мусор", "hello")
-            with self.assertRaises(SshKeyError):
-                keys.generate("  ")
-            keys.rename(kid, "Новое")
-            # Отвергнутые ключи не оставили файлов.
-            self.assertEqual(set(os.listdir(root)), {"keys.json", ".initialized", f"id_{kid}", f"id_{kid}.pub"})
-
-
-    def test_default_key_retried_after_missing_keygen(self):
-        from unittest import mock
-        from wallhub import sshkeys
-        with tempfile.TemporaryDirectory() as tmp:
-            keys = sshkeys.SshKeys(os.path.join(tmp, "ssh"))
-            with mock.patch.dict(os.environ, {"PATH": tmp}):
-                keys.ensure_default()
-            self.assertEqual(keys.list(), [])  # повтор ещё рано
-            keys.last_try -= sshkeys.RETRY_SECONDS + 1
-            self.assertIsNotNone(keys.path("panel"))
-            self.assertTrue(keys.ready)
-
 class NetConfigTest(unittest.TestCase):
     def test_parse_ipv4(self):
         from wallhub.netconfig import NetConfigError, parse_ipv4

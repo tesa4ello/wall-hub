@@ -190,8 +190,7 @@ Widgets come from modules. A module is a folder `web/modules/<module>/`:
   a route `/api/m/<module>/<path>` (for the panel screen and the admin; with
   `admin=True` for the admin only), `ctx.settings()`/`ctx.save_settings()`
   keep the module settings in the config, `ctx.data_dir` is its folder in
-  `/var/lib/wallhub/module-data/`, and `ctx.ssh_keys()`, `ctx.ssh_key_path(id)`
-  and `ctx.ssh_known_hosts()` give access to the panel SSH keys. A function
+  `/var/lib/wallhub/module-data/`. Modules keep their own secrets, such as SSH keys, in `ctx.data_dir`. A function
   (or an object with `stop()`) returned from `setup` is called when the module
   is removed or updated.
 
@@ -227,16 +226,6 @@ There is no gear icon; the interface is touch only:
   Wi‑Fi, theme, "Settings" and the new version notice;
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
-
-### SSH keys
-
-The panel connects to servers over SSH itself (for example, from the server
-monitoring module), so the keys live in the core: `/var/lib/wallhub/ssh/`
-(0700, service only, `wallhub/sshkeys.py`). An ed25519 "Panel key" is created
-on first start. The "SSH keys" tab in the admin creates more keys, imports
-your own (without a passphrase), copies the public key for `authorized_keys`
-and deletes keys. Private keys are never sent out; modules only get the path
-to a key file and the shared `known_hosts`.
 
 ### Sound
 

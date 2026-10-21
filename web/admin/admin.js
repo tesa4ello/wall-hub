@@ -11,7 +11,6 @@ import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
 import { ScreenView } from "/admin/screen.js";
-import { SshKeysPanel } from "/admin/sshkeys.js";
 import { NetworkPanel } from "/admin/network.js";
 import { WeatherPanel } from "/admin/weather.js";
 
@@ -28,7 +27,6 @@ const TABS = [
   { id: "modules", title: "Модули", icon: "plus", group: "Расширения", sub: "Дополнительные виджеты из каталогов" },
   { id: "weather", title: "Погода", icon: "sun", group: "Расширения", sub: "Источники прогноза и место для виджетов погоды" },
   { id: "wifi", title: "Сеть", icon: "wifi", group: "Устройство", sub: "Wi‑Fi, Ethernet и IP-адреса" },
-  { id: "ssh", title: "SSH-ключи", icon: "key", group: "Устройство", sub: "Ключи, с которыми панель подключается к серверам" },
   { id: "updates", title: "Обновления", icon: "refresh", group: "Устройство", sub: "Версия панели и автоматические обновления" },
   { id: "system", title: "Система", icon: "info", group: "Устройство", sub: "Часовой пояс, пароль и питание" },
 ];
@@ -162,14 +160,13 @@ function show(tab) {
   if (tab === "updates") loadUpdate();
   if (tab === "modules") store.load().catch(() => {});
   if (tab === "weather") weather.load().catch(() => {});
-  if (tab === "ssh") sshKeys.load().catch(() => {});
   if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
   if (tab === "display") loadLocation();
   render();
 }
 
 function render() {
-  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), weather: () => weather.render(), screen: () => screenView.render(), ssh: () => sshKeys.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), weather: () => weather.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   editor?.destroy();
   editor = null;
   screenView.destroy();
@@ -274,7 +271,6 @@ const screenView = new ScreenView();
 const weather = new WeatherPanel({ guarded, toast, render: () => state.tab === "weather" && render() });
 
 const network = new NetworkPanel({ guarded, toast, confirm: confirmDialog, render: () => state.tab === "wifi" && render(), active: () => state.tab === "wifi" });
-const sshKeys = new SshKeysPanel({ guarded, toast, confirm: confirmDialog, render: () => state.tab === "ssh" && render() });
 
 const store = new StorePanel({
   guarded,
@@ -591,7 +587,6 @@ $("content").addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onSubmit(e, data).catch(() => true))) return;
-  if (state.tab === "ssh" && (await sshKeys.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
@@ -631,7 +626,6 @@ $("content").addEventListener("click", async (e) => {
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onClick(e).catch(() => true))) return;
-  if (state.tab === "ssh" && (await sshKeys.onClick(e).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onClick(e).catch(() => true))) return;
   if ("screenReconnect" in b.dataset) return screenView.mount();
   const d = b.dataset;

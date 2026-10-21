@@ -27,7 +27,6 @@ from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
 from .backends import Backends, ModuleError
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
-from .sshkeys import SshKeyError, SshKeys
 from .modules import Registry
 from .store import Store, StoreError
 from .location import MODES as LOCATION_MODES, LocationError, Locator
@@ -198,9 +197,7 @@ class App:
         self.sound = {"seq": 0, "name": ""}
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
         # Серверные части модулей: запускаются здесь и при каждой смене модулей.
-        self.ssh = SshKeys(os.path.join(state_dir, "ssh"))
-        self.ssh.ensure_default()
-        self.backends = Backends(config, os.path.join(state_dir, "module-data"), self.ssh)
+        self.backends = Backends(config, os.path.join(state_dir, "module-data"))
         self.backends.sync(self.modules.loaded())
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
@@ -870,25 +867,6 @@ def make_handler(app, trusted, port):
 
         # SSH-ключи панели: приватные части наружу не отдаются.
 
-        def api_ssh_keys(self, **_):
-            return {"keys": app.ssh.list()}
-
-        def api_ssh_keys_action(self, body, **_):
-            action = body.get("action")
-            try:
-                if action == "generate":
-                    app.ssh.generate(body.get("title"))
-                elif action == "import":
-                    app.ssh.import_key(body.get("title"), body.get("private"))
-                elif action == "rename":
-                    app.ssh.rename(str(body.get("id", "")), body.get("title"))
-                elif action == "delete":
-                    app.ssh.delete(str(body.get("id", "")))
-                else:
-                    raise ApiError(tr("Неизвестное действие"))
-            except SshKeyError as e:
-                raise ApiError(tr(e.message, **e.params))
-            return {"keys": app.ssh.list()}
 
         def api_sound_test(self, body, **_):
             name = body.get("name") or app.config.get("ui", "sound_name")
@@ -1006,8 +984,6 @@ def make_handler(app, trusted, port):
         ("POST", "/update/token"): (H.api_update_token, False),
         ("POST", "/update/run"): (H.api_update_run, False),
         ("POST", "/sound/test"): (H.api_sound_test, False),
-        ("GET", "/ssh/keys"): (H.api_ssh_keys, False),
-        ("POST", "/ssh/keys"): (H.api_ssh_keys_action, False),
         ("GET", "/store"): (H.api_store, False),
         ("POST", "/store/refresh"): (H.api_store_refresh, False),
         ("POST", "/store/install"): (H.api_store_install, False),
