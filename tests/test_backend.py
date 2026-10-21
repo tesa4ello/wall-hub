@@ -141,3 +141,55 @@ class DesktopsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FirstLoginTest(unittest.TestCase):
+    """Пароль админки задаётся при первом входе."""
+
+    def setUp(self):
+        import http.client
+        from wallhub.server import App, serve
+        from wallhub.system import System
+
+        self.http = http.client
+        self.tmp = tempfile.TemporaryDirectory()
+        config = Config(os.path.join(self.tmp.name, "c.json"))
+        web = os.path.join(os.path.dirname(__file__), "..", "web")
+        self.app = App(config, System(dry_run=True), web, 80)
+        self.admin = serve(self.app, "127.0.0.1", 0, trusted=False)
+        self.port = self.admin.server_address[1]
+
+    def tearDown(self):
+        self.admin.shutdown()
+        self.admin.server_close()
+        self.tmp.cleanup()
+
+    def call(self, method, path, body=None, cookie=None):
+        conn = self.http.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Content-Type": "application/json"}
+        if cookie:
+            headers["Cookie"] = cookie
+        conn.request(method, "/api" + path, json.dumps(body) if body is not None else None, headers)
+        resp = conn.getresponse()
+        data = json.loads(resp.read() or b"{}")
+        cookie = resp.getheader("Set-Cookie", "").split(";")[0]
+        conn.close()
+        return resp.status, data, cookie
+
+    def test_setup_then_login(self):
+        status, session, _ = self.call("GET", "/session")
+        self.assertTrue(session["setup"])
+        self.assertFalse(session["authorized"])
+        self.assertEqual(self.call("POST", "/setup/password", {"new": "123"})[0], 400)
+        status, _, cookie = self.call("POST", "/setup/password", {"new": "secret1"})
+        self.assertEqual(status, 200)
+        status, config, _ = self.call("GET", "/config", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertTrue(config["admin"]["password_set"])
+        # Второй раз задать пароль без входа нельзя.
+        self.assertEqual(self.call("POST", "/setup/password", {"new": "hacker1"})[0], 409)
+        self.assertFalse(self.call("GET", "/session")[1]["setup"])
+        self.assertEqual(self.call("POST", "/login", {"password": "secret1"})[0], 200)
+
+    def test_admin_url_without_default_port(self):
+        self.assertNotIn(":80/", self.app.admin_url())

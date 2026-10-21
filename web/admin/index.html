@@ -11,9 +11,10 @@
   <div id="login" class="login" hidden>
     <form class="login-card" id="login-form">
       <div class="brand">Wall-HUB</div>
-      <p class="muted">Начальный пароль показан на самой панели: Настройки → Система.</p>
+      <p class="muted" id="login-hint"></p>
       <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password" required>
-      <button class="btn btn-primary" type="submit">Войти</button>
+      <input type="password" id="login-repeat" placeholder="Повторите пароль" autocomplete="new-password" hidden>
+      <button class="btn btn-primary" type="submit" id="login-submit">Войти</button>
       <div class="error" id="login-error"></div>
     </form>
   </div>

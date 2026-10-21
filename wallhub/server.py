@@ -2,7 +2,8 @@
 
 Один и тот же обработчик обслуживает два слушателя:
   * киоск — 127.0.0.1:8080, доверенный, без пароля;
-  * админка — 0.0.0.0:8088, всё API только после входа по паролю.
+  * админка — 0.0.0.0:80, всё API только после входа по паролю. Пока
+    пароль не задан, первый вошедший в админку его придумывает.
 """
 
 import json
@@ -104,6 +105,9 @@ class App:
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
         self.login_lock = threading.Lock()
+        # Тема, которую сейчас показывает экран (сообщает сам киоск), чтобы
+        # админка выглядела так же.
+        self.kiosk_theme = None
         self.started = time.time()
         status.load_all()
         self.collector = StatusCollector(config)
@@ -121,7 +125,15 @@ class App:
             ip = socket.gethostname()
         finally:
             sock.close()
-        return f"http://{ip}:{self.admin_port}/"
+        port = "" if self.admin_port == 80 else f":{self.admin_port}"
+        return f"http://{ip}{port}/"
+
+
+def check_new_password(body):
+    new = str(body.get("new", ""))
+    if len(new) < 6:
+        raise ApiError("Пароль должен быть не короче 6 символов")
+    return new
 
 
 def make_handler(app, trusted, port):
@@ -253,7 +265,26 @@ def make_handler(app, trusted, port):
         # --- маршруты API ------------------------------------------------
 
         def api_session(self, **_):
-            return {"authorized": self.authorized(), "trusted": trusted}
+            return {
+                "authorized": self.authorized(),
+                "trusted": trusted,
+                "setup": not app.config.get("admin", "password_hash"),
+            }
+
+        def start_session(self):
+            token = app.sessions.create()
+            cookie = f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={auth.SESSION_TTL}"
+            return {"ok": True}, HTTPStatus.OK, {"Set-Cookie": cookie}
+
+        def api_setup_password(self, body, **_):
+            # Первый вход: пароля ещё нет, его задаёт тот, кто первым открыл админку.
+            new = check_new_password(body)
+            with app.login_lock:
+                if app.config.get("admin", "password_hash"):
+                    raise ApiError("Пароль уже задан, войдите с ним", HTTPStatus.CONFLICT)
+                app.config.update({"admin": {"password_hash": auth.hash_password(new)}})
+            app.sessions.clear()
+            return self.start_session()
 
         def api_login(self, body, **_):
             if trusted:
@@ -264,22 +295,22 @@ def make_handler(app, trusted, port):
                 if not stored or not auth.check_password(str(body.get("password", "")), stored):
                     time.sleep(auth.FAIL_DELAY)
                     raise ApiError("Неверный пароль", HTTPStatus.UNAUTHORIZED)
-            token = app.sessions.create()
-            cookie = f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={auth.SESSION_TTL}"
-            return {"ok": True}, HTTPStatus.OK, {"Set-Cookie": cookie}
+            return self.start_session()
 
         def api_logout(self, **_):
             app.sessions.drop(self.session_token())
             return {"ok": True}, HTTPStatus.OK, {"Set-Cookie": f"{COOKIE}=; Path=/; Max-Age=0"}
 
         def api_config(self, **_):
-            data = app.config.public()
-            if not trusted:
-                # Начальный пароль виден только на самом экране.
-                data["admin"].pop("initial_password", None)
-            return data
+            return app.config.public()
 
-        def api_revision(self, **_):
+        def api_theme(self, **_):
+            return {"theme": app.kiosk_theme}
+
+        def api_revision(self, query, **_):
+            theme = (query.get("theme") or [None])[0]
+            if trusted and theme in ("dark", "light"):
+                app.kiosk_theme = theme
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
             return {
@@ -362,18 +393,14 @@ def make_handler(app, trusted, port):
         # Только админка (на киоске тоже работают, он доверенный)
 
         def api_admin_password(self, body, **_):
-            new = str(body.get("new", ""))
-            if len(new) < 6:
-                raise ApiError("Пароль должен быть не короче 6 символов")
+            new = check_new_password(body)
             if not trusted:
                 stored = app.config.get("admin", "password_hash")
                 if not auth.check_password(str(body.get("current", "")), stored):
                     raise ApiError("Текущий пароль указан неверно", HTTPStatus.FORBIDDEN)
-            app.config.update({"admin": {"password_hash": auth.hash_password(new), "initial_password": ""}})
+            app.config.update({"admin": {"password_hash": auth.hash_password(new)}})
             app.sessions.clear()
-            token = app.sessions.create()
-            cookie = f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={auth.SESSION_TTL}"
-            return {"ok": True}, HTTPStatus.OK, {"Set-Cookie": cookie}
+            return self.start_session()
 
         def api_time(self, **_):
             return {"timezone": app.system.timezone(), "timezones": app.system.timezones()}
@@ -452,9 +479,11 @@ def make_handler(app, trusted, port):
     ROUTES = {
         ("GET", "/session"): (H.api_session, True),
         ("POST", "/login"): (H.api_login, True),
+        ("POST", "/setup/password"): (H.api_setup_password, True),
         ("POST", "/logout"): (H.api_logout, True),
         ("GET", "/config"): (H.api_config, False),
         ("GET", "/revision"): (H.api_revision, False),
+        ("GET", "/theme"): (H.api_theme, True),
         ("POST", "/settings"): (H.api_settings, False),
         ("GET", "/status"): (H.api_status, False),
         ("GET", "/info"): (H.api_info, False),

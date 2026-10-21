@@ -65,10 +65,9 @@ DEFAULTS = {
         "time": "04:00",
     },
     "admin": {
-        # Хеш пароля админки (см. wallhub.auth). Пустой = админка закрыта.
+        # Хеш пароля админки (см. wallhub.auth). Пустой = пароль ещё не задан,
+        # его придумывают при первом входе в админку.
         "password_hash": "",
-        # Начальный пароль показывается на экране, пока его не сменят.
-        "initial_password": "",
     },
 }
 
@@ -90,6 +89,8 @@ def _merge(base, override):
 def _migrate(data):
     """Приводит настройки старых версий к текущему виду."""
     ui = data.get("ui", {})
+    # Раньше пароль генерировался и показывался на экране.
+    data.get("admin", {}).pop("initial_password", None)
     if "auto_theme" in ui:
         ui.setdefault("theme_mode", "schedule" if ui.pop("auto_theme") else "manual")
     # До столов были список модулей и отдельная статусная строка.
@@ -151,6 +152,7 @@ class Config:
             for key in path[:-1]:
                 node = node.get(key, {})
             node.pop(path[-1], None)
+        data["admin"]["password_set"] = bool(self._data["admin"]["password_hash"])
         data["revision"] = self.revision
         return data
 

@@ -603,7 +603,7 @@ export class Settings {
   renderSystem() {
     const info = this.info || {};
     const admin = this.net && this.net.admin;
-    const initial = this.config.admin.initial_password;
+    const passwordSet = this.config.admin.password_set;
     return `
       <h2>Система</h2>
       ${this.renderUpdate()}
@@ -614,17 +614,14 @@ export class Settings {
       <div class="card">
         <div class="row">
           <div class="row-label">${icon("admin")} Админка
+            ${admin ? `<div class="admin-url mono">${esc(admin.url)}</div>` : ""}
             <div class="row-hint">${admin
-              ? "Наведите камеру телефона, подключённого к той же сети"
+              ? "Откройте адрес или наведите камеру телефона, подключённого к той же сети"
               : "Появится после подключения к сети"}</div>
+            ${admin && !passwordSet ? `<div class="row-hint">Пароль ещё не задан: его попросят придумать при первом входе</div>` : ""}
           </div>
           ${admin && admin.qr ? `<div class="qr">${admin.qr}</div>` : ""}
         </div>
-        ${initial ? `
-        <div class="row">
-          <div class="row-label">Начальный пароль<div class="row-hint">Пропадёт отсюда после смены пароля в админке</div></div>
-          <div class="row-value mono big">${esc(initial)}</div>
-        </div>` : ""}
       </div>
       <div class="power">
         <button class="btn power-btn" data-power="reboot">${icon("reboot")}Перезагрузить</button>
