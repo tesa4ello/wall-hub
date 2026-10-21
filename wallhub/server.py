@@ -421,7 +421,8 @@ def make_handler(app, trusted, port):
         def handle_api(self, method, path, query):
             # Язык общий для экрана и админки: ошибки API приходят на нём же.
             i18n.set_language(app.config.get("ui", "language"))
-            if path.startswith("/m/"):
+            # Штатные модули (погода) держат свои маршруты /m/... в ROUTES ядра.
+            if path.startswith("/m/") and (method, path) not in ROUTES:
                 self.handle_module_api(method, path[len("/m/"):], query)
                 return
             route = ROUTES.get((method, path))
