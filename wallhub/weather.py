@@ -10,8 +10,10 @@ Open-Meteo опрашивается не чаще раза в FORECAST_TTL. Ес
 пересчитывает сам виджет.
 """
 
+import http.client
 import json
 import logging
+import socket
 import threading
 import time
 import urllib.parse
@@ -49,11 +51,50 @@ class WeatherError(Exception):
     pass
 
 
-def get_json(url, params, timeout=10, limit=2 * 1024 * 1024):
+def _connect_ipv4_first(host, port, timeout):
+    """Как socket.create_connection, но сначала IPv4. На панелях часто есть
+    IPv6-адрес без IPv6-маршрута: тогда попытка по IPv6 висит до таймаута."""
+    infos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    infos.sort(key=lambda info: info[0] != socket.AF_INET)
+    error = None
+    for family, kind, proto, _, address in infos:
+        sock = socket.socket(family, kind, proto)
+        sock.settimeout(timeout)
+        try:
+            sock.connect(address)
+            return sock
+        except OSError as e:
+            sock.close()
+            error = e
+    raise error or OSError(f"cannot resolve {host}")
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        sock = _connect_ipv4_first(self.host, self.port, self.timeout)
+        self.sock = sock
+        if self._tunnel_host:
+            self._tunnel()
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self._tunnel_host or self.host)
+
+
+class _HTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_HTTPSConnection, req, context=self._context)
+
+
+opener = urllib.request.build_opener(_HTTPSHandler())
+
+
+def get_json(url, params, timeout=6, limit=2 * 1024 * 1024):
     full = url + "?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(full, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read(limit).decode("utf-8"))
+    started = time.monotonic()
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return json.loads(response.read(limit).decode("utf-8"))
+    finally:
+        log.info("GET %s: %.1f s", url, time.monotonic() - started)
 
 
 def place_key(lat, lon):
@@ -154,9 +195,11 @@ class Weather:
         with self._key_lock(key):
             entry = self._forecasts.get(key)
             now = self._clock()
-            if entry and now - entry["at"] < FORECAST_TTL:
+            if entry and "data" in entry and now - entry["at"] < FORECAST_TTL:
                 return self._result(entry, now)
             if entry and now - entry.get("failed_at", 0) < RETRY_AFTER:
+                if "data" not in entry:
+                    raise WeatherError(entry["error"])
                 return self._result(entry, now)
             try:
                 raw = self._fetch(FORECAST_URL, {
@@ -172,10 +215,13 @@ class Weather:
                 self._store(self._forecasts, key, entry)
             except Exception as e:
                 log.warning("weather for %s failed: %s", key, e)
-                if entry and now - entry["at"] < STALE_LIMIT:
+                if entry and "data" in entry and now - entry["at"] < STALE_LIMIT:
                     entry["failed_at"] = now
                     return self._result(entry, now)
-                raise WeatherError(tr("Не удалось получить погоду: {error}", error=e))
+                # Прогноза нет: запоминаем ошибку, чтобы не ждать сеть на каждый запрос.
+                error = tr("Не удалось получить погоду: {error}", error=e)
+                self._store(self._forecasts, key, {"at": 0, "failed_at": now, "error": error})
+                raise WeatherError(error)
             return self._result(entry, now)
 
     def _result(self, entry, now):

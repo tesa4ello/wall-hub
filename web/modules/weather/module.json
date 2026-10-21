@@ -542,7 +542,8 @@
       "Прогноз на {n} день|Прогноз на {n} дня|Прогноз на {n} дней": "{n}-day forecast|{n}-day forecast",
       "Нет данных о погоде": "No weather data",
       "Загружаю погоду…": "Loading weather…",
-      "Осадки в течение часа": "Precipitation within the hour"
+      "Осадки в течение часа": "Precipitation within the hour",
+      "Панель не дождалась ответа о погоде": "The panel timed out waiting for the weather"
     }
   }
 }

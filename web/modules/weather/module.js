@@ -12,6 +12,8 @@ import { glyph, weatherIcon } from "./icons.js";
 const REFRESH_MS = 10 * 60 * 1000;
 const RETRY_MS = 60 * 1000;
 const TICK_MS = 60 * 1000;
+// Сервер сам ограничивает ожидание Open-Meteo; это страховка от зависшего запроса.
+const TIMEOUT_MS = 30 * 1000;
 // Осадки за 15 минут, начиная с которых интервал считается «мокрым», мм.
 const WET_QUARTER = 0.05;
 const WET_HOUR = 0.1;
@@ -35,15 +37,24 @@ function store(api, loc) {
     s.load = async () => {
       clearTimeout(s.timer);
       s.loading = true;
+      let timeout;
       try {
-        s.data = await api.get("/m/weather/forecast" + query);
+        s.data = await Promise.race([
+          api.get("/m/weather/forecast" + query),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error(t("Панель не дождалась ответа о погоде"))), TIMEOUT_MS);
+          }),
+        ]);
         s.error = null;
         s.timer = setTimeout(s.load, REFRESH_MS);
       } catch (e) {
         s.error = e.message;
         s.timer = setTimeout(s.load, RETRY_MS);
       }
+      clearTimeout(timeout);
       s.loading = false;
+      // Все виджеты места убрали, пока шёл запрос: не опрашиваем дальше.
+      if (stores.get(s.query) !== s) clearTimeout(s.timer);
       s.subs.forEach((fn) => fn(s));
     };
     stores.set(query, s);

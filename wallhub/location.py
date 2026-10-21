@@ -18,6 +18,7 @@ import threading
 import time
 import urllib.request
 
+from . import weather
 from .i18n import tr
 from .system import CommandError
 
@@ -50,7 +51,7 @@ def _request_json(url, body=None, timeout=10):
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with weather.opener.open(request, timeout=timeout) as response:
         return json.loads(response.read(256 * 1024).decode("utf-8"))
 
 
