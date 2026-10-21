@@ -1,0 +1,4 @@
+# Автологин на tty1 запускает графическую сессию киоска.
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    exec startx -- -nocursor >"$HOME/.xsession.log" 2>&1
+fi

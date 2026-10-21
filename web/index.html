@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="google" content="notranslate">
+  <title>Wall-HUB</title>
+  <link rel="stylesheet" href="/lib/base.css">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body class="kiosk">
+  <header class="statusbar">
+    <div class="status-items" id="status-items"></div>
+    <div class="status-offline" id="status-offline" hidden>нет связи с сервисом</div>
+    <button class="status-btn" id="open-settings" aria-label="Настройки"></button>
+  </header>
+  <main class="modules" id="modules"></main>
+  <div class="settings" id="settings" hidden></div>
+  <div class="dim" id="dim" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

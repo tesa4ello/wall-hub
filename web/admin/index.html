@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wall-HUB · Админка</title>
+  <link rel="stylesheet" href="/lib/base.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <div id="login" class="login" hidden>
+    <form class="login-card" id="login-form">
+      <div class="brand">Wall-HUB</div>
+      <p class="muted">Начальный пароль показан на самой панели: Настройки → Система.</p>
+      <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password" required>
+      <button class="btn btn-primary" type="submit">Войти</button>
+      <div class="error" id="login-error"></div>
+    </form>
+  </div>
+
+  <div id="app" class="layout" hidden>
+    <nav class="sidebar">
+      <div class="brand">Wall-HUB</div>
+      <div class="tabs" id="tabs"></div>
+      <button class="btn logout" id="logout">Выйти</button>
+    </nav>
+    <main class="content" id="content"></main>
+  </div>
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>
