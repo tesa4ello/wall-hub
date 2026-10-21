@@ -281,7 +281,12 @@ install -d /etc/systemd/system/plymouth-quit.service.d
 install -m 0644 "$SRC_DIR/deploy/plymouth-quit.conf" /etc/systemd/system/plymouth-quit.service.d/wallhub.conf
 
 # Параметры ядра: заставка вместо текста, без логов и мигающего курсора.
-QUIET_ARGS="quiet splash loglevel=0 vt.global_cursor_default=0 systemd.show_status=false rd.udev.log_level=3 plymouth.ignore-serial-consoles consoleblank=0"
+# fbcon=map:9 привязывает текстовую консоль к несуществующему fb9, то есть
+# она вообще не рисуется на экране. Иначе между заставкой и киоском (и при
+# выключении, когда X уже закрылся) на пару секунд проступает tty1.
+# Plymouth и X работают через DRM напрямую, им консоль не нужна.
+# Обслуживание: по SSH или через последовательный порт.
+QUIET_ARGS="quiet splash loglevel=0 vt.global_cursor_default=0 systemd.show_status=false rd.udev.log_level=3 plymouth.ignore-serial-consoles consoleblank=0 fbcon=map:9"
 ARMBIAN_ENV=/boot/armbianEnv.txt
 set_env() {
     if grep -q "^$1=" "$ARMBIAN_ENV"; then
