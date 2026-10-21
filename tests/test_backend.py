@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from wallhub import auth
+from wallhub import desktops
 from wallhub.config import Config
 from wallhub.network import group_external, parse_ip
 from wallhub.server import ApiError, validate_ui
@@ -91,6 +92,51 @@ class UpdateSettingsTest(unittest.TestCase):
         for old in ("main", "releases", None):
             self.assertEqual(normalize_settings({"channel": old})["channel"], "stable")
         self.assertEqual(normalize_settings({"channel": "dev"})["channel"], "dev")
+
+
+WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+
+
+class DesktopsTest(unittest.TestCase):
+    def setUp(self):
+        self.catalog = desktops.load_catalog(WEB)
+        self.providers = ["wifi", "load"]
+
+    def check(self, widgets):
+        desk = [{"id": "d1", "name": "Стол", "widgets": widgets}]
+        return desktops.validate(desk, self.catalog, 16, 10, self.providers)
+
+    def test_defaults_are_valid(self):
+        from wallhub.config import DEFAULTS
+        desktops.validate(DEFAULTS["desktops"], self.catalog, 16, 10, ["wifi", "load", "memory", "temp", "traffic"])
+
+    def test_options_cleaned(self):
+        result = self.check([{"id": "a", "type": "system/statusbar", "x": 0, "y": 0, "w": 16, "h": 1,
+                              "options": {"items": ["load", "bogus", "load"], "junk": 1}}])
+        self.assertEqual(result[0]["widgets"][0]["options"], {"items": ["load"], "align": "left"})
+
+    def test_rejects_overlap_bounds_and_size(self):
+        clock = {"type": "clock/clock", "w": 4, "h": 3, "options": {}}
+        with self.assertRaises(desktops.LayoutError):
+            self.check([dict(clock, id="a", x=0, y=0), dict(clock, id="b", x=3, y=2)])
+        with self.assertRaises(desktops.LayoutError):
+            self.check([dict(clock, id="a", x=14, y=0)])
+        with self.assertRaises(desktops.LayoutError):
+            self.check([dict(clock, id="a", x=0, y=0, w=1)])
+        with self.assertRaises(desktops.LayoutError):
+            self.check([dict(clock, id="a", x=0, y=0, type="nope")])
+
+    def test_migration_from_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            with open(path, "w") as f:
+                json.dump({"modules": [{"id": "clock", "enabled": True, "options": {"seconds": False}}],
+                           "statusbar": ["load"]}, f)
+            cfg = Config(path)
+            widgets = cfg.get("desktops")[0]["widgets"]
+            self.assertEqual(widgets[0]["options"]["items"], ["load"])
+            self.assertFalse(widgets[1]["options"]["seconds"])
+            self.assertNotIn("modules", cfg.public())
 
 
 if __name__ == "__main__":

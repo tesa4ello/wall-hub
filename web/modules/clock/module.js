@@ -1,8 +1,12 @@
-// Модуль «Часы». Контракт модуля: mount(el, {options, api}) -> {destroy()}.
+// Модуль «Часы».
+//
+// Контракт модуля: module.js экспортирует widgets — словарь
+// {id виджета: mount}, где mount(el, {options, api}) -> {destroy()}.
+// Описание виджетов (размеры, настройки) — в module.json.
 
 const pad = (n) => String(n).padStart(2, "0");
 
-export function mount(el, { options }) {
+function mountClock(el, { options }) {
   const showSeconds = options.seconds !== false;
   const showDate = options.date !== false;
 
@@ -15,6 +19,7 @@ export function mount(el, { options }) {
   const s = el.querySelector(".clock-s");
   const date = el.querySelector(".clock-date");
   s.hidden = !showSeconds;
+  el.querySelector(".clock").classList.toggle("no-date", !showDate);
   date.hidden = !showDate;
 
   const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "long" });
@@ -37,3 +42,5 @@ export function mount(el, { options }) {
     },
   };
 }
+
+export const widgets = { clock: mountClock };

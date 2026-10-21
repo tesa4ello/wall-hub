@@ -92,9 +92,9 @@ export class Settings {
     this.content.addEventListener("click", (e) => this.onClick(e));
   }
 
-  open() {
+  open(section) {
     this.root.hidden = false;
-    this.show(this.section);
+    this.show(section || this.section);
   }
 
   close() {

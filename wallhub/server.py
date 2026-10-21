@@ -19,7 +19,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from . import BUILD, __version__, auth, status
+from . import BUILD, __version__, auth, desktops, status
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
@@ -86,7 +86,8 @@ class StatusCollector(threading.Thread):
 
     def run(self):
         while True:
-            self.snapshot = status.collect(self.config.get("statusbar"))
+            # Опрашиваем только пункты, которые показывает хоть один виджет.
+            self.snapshot = status.collect(desktops.used_providers(self.config.get("desktops")))
             time.sleep(self.interval)
 
 
@@ -108,15 +109,8 @@ class App:
         self.collector = StatusCollector(config)
         self.collector.start()
 
-    def module_catalog(self):
-        modules = []
-        root = os.path.join(self.web_root, "modules")
-        for name in sorted(os.listdir(root)):
-            manifest = os.path.join(root, name, "module.json")
-            if os.path.isfile(manifest):
-                with open(manifest, encoding="utf-8") as f:
-                    modules.append(dict(json.load(f), id=name))
-        return modules
+    def widget_catalog(self):
+        return desktops.load_catalog(self.web_root)
 
     def admin_url(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -331,8 +325,8 @@ def make_handler(app, trusted, port):
                 raise ApiError("Тест скорости уже идёт", HTTPStatus.CONFLICT)
             return app.network.speed_status()
 
-        def api_modules(self, **_):
-            return {"modules": app.module_catalog(), "providers": status.catalog()}
+        def api_catalog(self, **_):
+            return {"widgets": list(app.widget_catalog().values()), "providers": status.catalog()}
 
         # Wi‑Fi
 
@@ -387,20 +381,20 @@ def make_handler(app, trusted, port):
         def api_admin_timezone(self, body, **_):
             app.system.set_timezone(str(body.get("timezone", "")))
 
-        def api_admin_modules(self, body, **_):
-            known = {m["id"] for m in app.module_catalog()}
-            modules = body.get("modules")
-            if not isinstance(modules, list):
-                raise ApiError("Ожидается список модулей")
-            clean = []
-            for item in modules:
-                if not isinstance(item, dict) or item.get("id") not in known:
-                    raise ApiError("Неизвестный модуль")
-                options = item.get("options", {})
-                if not isinstance(options, dict):
-                    raise ApiError("Некорректные параметры модуля")
-                clean.append({"id": item["id"], "enabled": bool(item.get("enabled", True)), "options": options})
-            app.config.set(("modules",), clean)
+        def api_admin_desktops(self, body, **_):
+            layout = app.config.get("layout")
+            try:
+                clean = desktops.validate(
+                    body.get("desktops"), app.widget_catalog(), layout["cols"], layout["rows"],
+                    providers=status.PROVIDERS.keys(),
+                )
+            except desktops.LayoutError as e:
+                raise ApiError(str(e))
+            minutes = body.get("home_after_min", layout["home_after_min"])
+            if not isinstance(minutes, int) or isinstance(minutes, bool) or not 0 <= minutes <= 240:
+                raise ApiError("Возврат на первый стол: от 0 до 240 минут")
+            app.config.update({"desktops": clean, "layout": {"home_after_min": minutes}})
+            return {"revision": app.config.revision, "desktops": clean}
 
         # Обновления
 
@@ -453,12 +447,6 @@ def make_handler(app, trusted, port):
             except subprocess.SubprocessError as e:
                 raise ApiError(f"Не удалось запустить обновление: {e}", HTTPStatus.BAD_GATEWAY)
 
-        def api_admin_statusbar(self, body, **_):
-            items = body.get("items")
-            if not isinstance(items, list) or any(i not in status.PROVIDERS for i in items):
-                raise ApiError("Неизвестный пункт статусной строки")
-            app.config.set(("statusbar",), items)
-
     H = Handler
     # (метод, путь) -> (функция, доступна ли без входа)
     ROUTES = {
@@ -470,7 +458,7 @@ def make_handler(app, trusted, port):
         ("POST", "/settings"): (H.api_settings, False),
         ("GET", "/status"): (H.api_status, False),
         ("GET", "/info"): (H.api_info, False),
-        ("GET", "/modules"): (H.api_modules, False),
+        ("GET", "/catalog"): (H.api_catalog, False),
         ("GET", "/network"): (H.api_network, False),
         ("GET", "/network/external"): (H.api_network_external, False),
         ("GET", "/speedtest"): (H.api_speedtest, False),
@@ -485,8 +473,7 @@ def make_handler(app, trusted, port):
         ("POST", "/admin/password"): (H.api_admin_password, False),
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
-        ("POST", "/admin/modules"): (H.api_admin_modules, False),
-        ("POST", "/admin/statusbar"): (H.api_admin_statusbar, False),
+        ("POST", "/admin/desktops"): (H.api_admin_desktops, False),
         ("GET", "/update"): (H.api_update, False),
         ("POST", "/update/settings"): (H.api_update_settings, False),
         ("POST", "/update/token"): (H.api_update_token, False),

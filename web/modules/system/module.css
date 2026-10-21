@@ -1,0 +1,17 @@
+.sb {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 100%;
+  padding: 0 16px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: min(36cqh, 15px);
+  font-variant-numeric: tabular-nums;
+}
+.sb-center { justify-content: center; }
+.sb-right { justify-content: flex-end; }
+.sb-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sb-item .icon { width: 1.2em; height: 1.2em; opacity: 0.85; }
+.sb-item[data-level="warn"] { color: var(--warn); }
+.sb-item[data-level="crit"] { color: var(--crit); }

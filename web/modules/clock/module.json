@@ -1,8 +1,18 @@
 {
   "title": "Часы",
-  "description": "Крупные часы с датой и днём недели",
-  "options": [
-    {"key": "seconds", "type": "bool", "title": "Показывать секунды", "default": true},
-    {"key": "date", "type": "bool", "title": "Показывать дату и день недели", "default": true}
+  "description": "Время и дата",
+  "widgets": [
+    {
+      "id": "clock",
+      "title": "Часы",
+      "description": "Крупные часы с датой и днём недели",
+      "icon": "clock",
+      "card": false,
+      "size": {"default": [8, 5], "min": [3, 2], "max": [16, 10]},
+      "options": [
+        {"key": "seconds", "type": "bool", "title": "Показывать секунды", "default": true},
+        {"key": "date", "type": "bool", "title": "Показывать дату и день недели", "default": true}
+      ]
+    }
   ]
 }
