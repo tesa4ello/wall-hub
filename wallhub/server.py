@@ -147,8 +147,8 @@ class App:
         self.system = system
         self.web_root = os.path.realpath(web_root)
         self.admin_port = admin_port
-        self.sessions = auth.Sessions()
         state_dir = os.path.dirname(os.path.abspath(config.path))
+        self.sessions = auth.Sessions(os.path.join(state_dir, "sessions.json"))
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
         self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"), os.path.join(self.web_root, "backgrounds"))
