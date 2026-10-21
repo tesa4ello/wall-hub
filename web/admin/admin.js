@@ -209,7 +209,41 @@ function renderDisplay() {
         <input type="number" min="0" max="240" data-ui="blank_after_min" data-int value="${ui.blank_after_min}">
       </label>
     </section>
+    ${renderSound(ui)}
     ${backgrounds.render(ui)}`;
+}
+
+// Звуковые уведомления: играет сама панель, здесь только настройки.
+const SOUND_NAMES = [["chime", "Перезвон"], ["bell", "Колокольчик"], ["soft", "Мягкий"], ["beep", "Сигнал"]];
+
+function renderSound(ui) {
+  const off = ui.sound_enabled ? "" : "disabled";
+  const quiet = ui.sound_enabled && ui.sound_quiet ? "" : "disabled";
+  const names = SOUND_NAMES.map(([v, l]) => `<option value="${v}" ${v === ui.sound_name ? "selected" : ""}>${esc(t(l))}</option>`).join("");
+  return `
+    <h1>${t("Звук")}</h1>
+    <section class="panel">
+      <label class="field"><span>${t("Звуковые уведомления")}<small>${t("Панель подаёт звук, например когда вышло обновление")}</small></span>
+        <input type="checkbox" data-ui="sound_enabled" ${ui.sound_enabled ? "checked" : ""}>
+      </label>
+      <label class="field"><span>${t("Громкость, %")}</span>
+        <input type="number" min="0" max="100" step="10" data-ui="sound_volume" data-int value="${ui.sound_volume}" ${off}>
+      </label>
+      <div class="field"><span>${t("Звук")}<small>${t("«Проверить» играет на панели, даже когда звук выключен")}</small></span>
+        <div class="field-controls">
+          <select data-ui="sound_name" ${off}>${names}</select>
+          <button class="btn btn-small" type="button" data-sound-test>${t("Проверить")}</button>
+        </div>
+      </div>
+      <label class="field"><span>${t("Об обновлениях")}<small>${t("Вышла новая версия, обновление закончилось")}</small></span>
+        <input type="checkbox" data-ui="sound_update" ${ui.sound_update ? "checked" : ""} ${off}>
+      </label>
+      <label class="field"><span>${t("Тихие часы")}<small>${t("В это время панель молчит")}</small></span>
+        <input type="checkbox" data-ui="sound_quiet" ${ui.sound_quiet ? "checked" : ""} ${off}>
+      </label>
+      <label class="field"><span>${t("Тихо с")}</span><input type="time" data-ui="sound_quiet_from" value="${ui.sound_quiet_from}" ${quiet}></label>
+      <label class="field"><span>${t("Тихо до")}</span><input type="time" data-ui="sound_quiet_to" value="${ui.sound_quiet_to}" ${quiet}></label>
+    </section>`;
 }
 
 const screenView = new ScreenView();
@@ -499,7 +533,7 @@ $("content").addEventListener("change", async (e) => {
   if (state.tab === "weather" && (await weather.onChange(e).catch(() => true))) return;
   if (e.target.id === "screen-control") return screenView.setControl(e.target.checked);
   if (el.dataset.ui) {
-    let value = el.value;
+    let value = el.type === "checkbox" ? el.checked : el.value;
     if ("int" in el.dataset) value = parseInt(el.value, 10);
     if ("float" in el.dataset) value = parseFloat(el.value);
     if (Number.isNaN(value)) return;
@@ -610,6 +644,9 @@ $("content").addEventListener("click", async (e) => {
       state.update.status = { ...state.update.status, state: d.updateRun === "check" ? "checking" : "installing", message: "Запускаю…", message_args: {} };
       render();
       setTimeout(loadUpdate, 1000);
+    } else if ("soundTest" in d) {
+      const name = document.querySelector('[data-ui="sound_name"]')?.value;
+      await guarded(() => api.post("/sound/test", { name })).then(() => toast(t("Звук отправлен на панель"))).catch(() => {});
     } else if ("tokenClear" in d) {
       if (await confirmDialog({ title: t("Удалить токен GitHub?"), ok: t("Удалить"), danger: true })) {
         await guarded(() => api.post("/update/token", { token: "" }));

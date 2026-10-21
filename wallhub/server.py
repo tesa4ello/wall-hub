@@ -46,6 +46,8 @@ LONG_POLL_BUSY = 2
 # Сколько секунд после запуска обновления опрашивать часто, пока обновлятор
 # не записал, что установка идёт.
 UPDATE_START_GRACE = 30
+# Звуки уведомлений, их синтезирует киоск (web/lib/sound.js).
+SOUNDS = ("chime", "bell", "soft", "beep")
 # Загрузка фона: две картинки в base64 внутри JSON.
 MAX_UPLOAD = 16 * 1024 * 1024
 
@@ -87,6 +89,13 @@ def validate_ui(patch):
         "bg_dim": lambda v: _int(v) and 0 <= v <= 80,
         "tile_transparency": lambda v: _int(v) and 0 <= v <= 90,
         "tiles": lambda v: v in ("baked", "blur", "frosted", "solid"),
+        "sound_enabled": lambda v: isinstance(v, bool),
+        "sound_volume": lambda v: _int(v) and 0 <= v <= 100,
+        "sound_name": lambda v: v in SOUNDS,
+        "sound_quiet": lambda v: isinstance(v, bool),
+        "sound_quiet_from": lambda v: isinstance(v, str) and TIME_RE.match(v),
+        "sound_quiet_to": lambda v: isinstance(v, str) and TIME_RE.match(v),
+        "sound_update": lambda v: isinstance(v, bool),
     }
     for key, value in patch.items():
         check = rules.get(key)
@@ -180,6 +189,9 @@ class App:
         # Когда из админки запустили обновление (time.monotonic()): киоск
         # сразу выходит из долгого опроса и начинает показывать ход установки.
         self.update_started = None
+        # Звук, который киоск должен сыграть (кнопка «Проверить» в админке):
+        # номер растёт с каждой просьбой, киоск играет, когда номер сменился.
+        self.sound = {"seq": 0, "name": ""}
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
         self.screen = screen.Screen(system.dry_run)
         self.store = Store(config, os.path.join(state_dir, "modules"), self.updates.token_path, builtin,
@@ -488,8 +500,9 @@ def make_handler(app, trusted, port):
                 started = app.update_started
                 busy = (app.updates.status().get("state") == "installing"
                         or (started is not None and time.monotonic() - started < UPDATE_START_GRACE))
+                sound = app.sound["seq"]
                 app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen
-                                or app.update_started != started,
+                                or app.update_started != started or app.sound["seq"] != sound,
                                 LONG_POLL_BUSY if busy else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
@@ -501,6 +514,8 @@ def make_handler(app, trusted, port):
                 "progress": app.updates.progress(),
                 "modules": app.modules_rev,
                 "version": __version__,
+                # sound: последняя просьба сыграть звук на панели.
+                "sound": app.sound,
             }
 
         def api_settings(self, body, **_):
@@ -797,6 +812,13 @@ def make_handler(app, trusted, port):
                 except (subprocess.SubprocessError, OSError) as e:
                     log.warning("update check after channel change failed: %s", e)
 
+        def api_sound_test(self, body, **_):
+            name = body.get("name") or app.config.get("ui", "sound_name")
+            if name not in SOUNDS:
+                raise ApiError(tr("Недопустимое значение: {key}", key="name"))
+            app.sound = {"seq": app.sound["seq"] + 1, "name": name}
+            app.config.notify()
+
         def api_update_token(self, body, **_):
             token = str(body.get("token", "")).strip()
             if token and not re.fullmatch(r"[A-Za-z0-9_]{20,255}", token):
@@ -902,6 +924,7 @@ def make_handler(app, trusted, port):
         ("POST", "/update/settings"): (H.api_update_settings, False),
         ("POST", "/update/token"): (H.api_update_token, False),
         ("POST", "/update/run"): (H.api_update_run, False),
+        ("POST", "/sound/test"): (H.api_sound_test, False),
         ("GET", "/store"): (H.api_store, False),
         ("POST", "/store/refresh"): (H.api_store_refresh, False),
         ("POST", "/store/install"): (H.api_store_install, False),

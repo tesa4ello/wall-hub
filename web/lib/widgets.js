@@ -6,6 +6,13 @@ import { addTranslations, t } from "/lib/i18n.js";
 
 const modules = new Map();
 
+// Звук для виджетов: ctx.sound.play(name?). На панели его подключает app.js,
+// в превью админки он молчит.
+let sound = { play: () => false };
+export function setSound(player) {
+  sound = player;
+}
+
 function ensureStyle(href) {
   if (document.querySelector(`link[href="${href}"]`)) return;
   const link = document.createElement("link");
@@ -45,7 +52,7 @@ export async function mountWidget(el, w, catalog) {
     const mod = await loadModule(module);
     const mount = mod.widgets && mod.widgets[id];
     if (!mount) throw new Error("модуль не экспортирует виджет");
-    return mount(el, { options: w.options || {}, api }) || {};
+    return mount(el, { options: w.options || {}, api, sound }) || {};
   } catch (e) {
     console.error("widget failed", w.type, e);
     el.innerHTML = `<div class="widget-error">${t("Виджет «{title}» не загрузился", { title: meta ? t(meta.title) : w.type })}</div>`;

@@ -7,7 +7,8 @@ import { icon } from "/lib/icons.js";
 import { confirmWifiOff } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
 import { Wallpaper } from "/lib/wallpaper.js";
-import { destroyAll, loadCatalog, renderDesktop } from "/lib/widgets.js";
+import * as sound from "/lib/sound.js";
+import { destroyAll, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 
 const state = {
@@ -15,7 +16,7 @@ const state = {
   catalog: null,
   revision: -1,
   build: null,
-  updateAvailable: false,
+  updateAvailable: null, // null — ещё не знаем (до первого ответа сервера)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -294,6 +295,7 @@ async function loadConfig() {
   state.revision = config.revision;
   applyTheme();
   dimmer.configure(config.ui);
+  sound.configure(config.ui);
   await desks.render(config, state.catalog.widgets);
   settings.onConfig(config);
 }
@@ -304,9 +306,10 @@ async function pollRevision() {
   const theme = document.documentElement.dataset.theme;
   const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules } = await api.get(`/revision?theme=${theme}${wait}`);
+    const { revision, build, update, progress, version, modules, sound: soundReq } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
     updateBanner.show(progress, version);
+    notifySounds(update, progress, soundReq);
     state.updateAvailable = Boolean(update);
     $("edge-dot").hidden = !update;
     settings.setUpdateBadge(update);
@@ -323,6 +326,33 @@ async function pollRevision() {
     // Во время установки сервис перезапускается: это не обрыв связи.
     $("status-offline").hidden = updateBanner.offline();
     return false;
+  }
+}
+
+// --- звуковые уведомления -------------------------------------------------------
+
+setSound({ play: (name) => sound.play(name) });
+
+let soundSeq = null;
+function notifySounds(update, progress, req) {
+  // Проверка звука из админки: играем, даже если звук выключен.
+  if (req) {
+    if (soundSeq !== null && req.seq !== soundSeq) sound.play(req.name, { force: true });
+    soundSeq = req.seq;
+  }
+  const ui = state.config?.ui;
+  if (!ui?.sound_update) return;
+  // Вышла новая версия: только при смене «нет» → «есть», не при загрузке.
+  if (update && state.updateAvailable === false) sound.play();
+  // Обновление закончилось. После установки страница перезагружается,
+  // поэтому сыгранное помним в localStorage, чтобы не повторять.
+  if (progress && progress.state !== "installing" && progress.finished_at) {
+    let played = null;
+    try { played = localStorage.getItem("wallhub-update-sound"); } catch {}
+    if (played !== progress.finished_at) {
+      try { localStorage.setItem("wallhub-update-sound", progress.finished_at); } catch {}
+      sound.play(progress.result === "failed" ? "beep" : undefined);
+    }
   }
 }
 
