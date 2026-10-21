@@ -1190,3 +1190,57 @@ class ModuleUpdateTest(unittest.TestCase):
         self.assertFalse(due({"schedule": "off"}, None, now))
         self.assertTrue(due({"schedule": "hourly"}, now - datetime.timedelta(minutes=59, seconds=30), now))
         self.assertEqual(normalize({"schedule": "x", "time": "25:00"}), {"schedule": "daily", "time": "04:30", "auto": True})
+
+
+class NotificationsTest(unittest.TestCase):
+    def setUp(self):
+        from wallhub.notifications import Notifications, Tiles
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "n.json")
+        self.n = Notifications(self.path)
+        self.tiles = Tiles()
+        self.tr = lambda text, params: text.format(**params)
+
+    def test_add_key_dismiss_and_persist(self):
+        from wallhub.notifications import Notifications
+        a = self.n.add("servers", "{host} недоступен", level="crit", key="down:a", params={"host": "a"})
+        self.n.add("servers", "{host} недоступен", level="crit", key="down:a", params={"host": "a"})
+        b = self.n.add("weather", "Нет прогноза", level="bogus")
+        items = self.n.listing(self.tr)
+        self.assertEqual([i["title"] for i in items], ["Нет прогноза", "a недоступен"])
+        self.assertEqual(items[0]["level"], "info")
+        self.assertEqual(self.n.seq, b["id"])
+        self.assertGreater(b["id"], a["id"])
+        self.n.dismiss(b["id"])
+        reloaded = Notifications(self.path)
+        self.assertEqual(len(reloaded.listing(self.tr)), 1)
+        self.assertEqual(reloaded.seq, self.n.listing(self.tr)[0]["id"])
+        self.n.remove_key("servers", "down:a")
+        self.assertEqual(self.n.listing(self.tr), [])
+
+    def test_validation_and_limit(self):
+        from wallhub.notifications import LIMIT
+        with self.assertRaises(ValueError):
+            self.n.add("m", "")
+        with self.assertRaises(ValueError):
+            self.n.add("m", "x", action={"kind": "rm -rf"})
+        for i in range(LIMIT + 5):
+            self.n.add("m", f"n{i}")
+        self.assertEqual(len(self.n.listing(self.tr)), LIMIT)
+        self.n.dismiss(None)
+        self.assertEqual(self.n.listing(self.tr), [])
+
+    def test_module_context(self):
+        from wallhub.backends import Backends, Context
+        backends = Backends(None, self.tmp.name, notifications=self.n, tiles=self.tiles)
+        ctx = Context(backends, "servers", self.tmp.name)
+        ctx.notify("{n} недоступен", level="warn", key="k", n=2)
+        ctx.tile("state", "Серверы", "{n} недоступен", level="crit", n=1)
+        self.assertEqual(self.n.listing(self.tr)[0]["title"], "2 недоступен")
+        self.assertEqual(self.n.listing(self.tr)[0]["source"], "servers")
+        self.assertEqual(self.tiles.listing(self.tr)[0]["text"], "1 недоступен")
+        rev = self.tiles.rev
+        ctx.remove_tile()
+        self.assertEqual(self.tiles.listing(self.tr), [])
+        self.assertGreater(self.tiles.rev, rev)

@@ -253,6 +253,8 @@ input[type="time"] { font-variant-numeric: tabular-nums; }
 .field + .field, .panel > * + .field { border-top: 1px solid var(--border); }
 .panel > .field:first-child { border-top: none; }
 .field > span { display: flex; flex: 1 1 220px; flex-direction: column; min-width: 0; font-weight: 500; }
+.field-sub { min-height: 52px; padding-left: calc(var(--row-pad) + 16px); }
+.field-sub > span { font-weight: 400; }
 .field > span b, .field b { font-weight: 600; }
 .field small { margin-top: 3px; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.35; }
 .field > :not(span) { margin-left: auto; }

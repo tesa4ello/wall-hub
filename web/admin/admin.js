@@ -220,6 +220,11 @@ function renderDisplay() {
   const showSchedule = ui.theme_mode === "schedule" || (ui.theme_mode === "manual" && ui.night_dim > 0);
   return `
     <h1>${t("Экран")}</h1>
+    <section class="panel">
+      <label class="field"><span>${t("Имя панели")}<small>${t("Видно в шторке. Пусто — имя устройства ({host})", { host: state.info?.hostname || "—" })}</small></span>
+        <input data-ui="panel_name" maxlength="40" value="${esc(ui.panel_name || "")}" placeholder="${esc(state.info?.hostname || "")}">
+      </label>
+    </section>
     ${languages().length > 1 ? `
     <section class="panel">
       <label class="field"><span>${t("Язык")}<small>${t("Общий для панели и админки")}</small></span>
@@ -286,12 +291,29 @@ function renderSound(ui) {
       <label class="field"><span>${t("Об обновлениях")}<small>${t("Вышла новая версия, обновление закончилось")}</small></span>
         <input type="checkbox" data-ui="sound_update" ${ui.sound_update ? "checked" : ""} ${off}>
       </label>
+      ${ui.sound_enabled ? renderSourceSounds(ui) : ""}
       <label class="field"><span>${t("Тихие часы")}<small>${t("В это время панель молчит")}</small></span>
         <input type="checkbox" data-ui="sound_quiet" ${ui.sound_quiet ? "checked" : ""} ${off}>
       </label>
       <label class="field"><span>${t("Тихо с")}</span><input type="time" data-ui="sound_quiet_from" value="${ui.sound_quiet_from}" ${quiet}></label>
       <label class="field"><span>${t("Тихо до")}</span><input type="time" data-ui="sound_quiet_to" value="${ui.sound_quiet_to}" ${quiet}></label>
     </section>`;
+}
+
+// Свой звук уведомлений у системы и у каждого модуля из магазина.
+function renderSourceSounds(ui) {
+  const sources = [["system", t("Система")], ...(state.catalog?.modules || [])
+    .filter((m) => m.source !== "builtin").map((m) => [m.id, t(m.title)])];
+  const choices = [["", t("Общий звук")], ...SOUND_NAMES.map(([v, l]) => [v, t(l)]), ["off", t("Без звука")]];
+  return `<div class="field"><span>${t("Звук по источнику")}<small>${t("Модулю можно дать свой звук или выключить его уведомления")}</small></span></div>
+    ${sources.map(([id, title]) => {
+      const cur = ui.sound_sources?.[id] || "";
+      return `<div class="field field-sub"><span>${esc(title)}</span>
+        <div class="field-controls">
+          <select data-source-sound="${esc(id)}">${choices.map(([v, l]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+          <button class="btn btn-small" type="button" data-sound-test-source="${esc(id)}" ${cur === "off" ? "disabled" : ""}>${t("Проверить")}</button>
+        </div></div>`;
+    }).join("")}`;
 }
 
 const screenView = new ScreenView();
@@ -598,7 +620,12 @@ $("content").addEventListener("change", async (e) => {
   if (state.tab === "weather" && (await weather.onChange(e).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onChange(e).catch(() => true))) return;
   if (e.target.id === "screen-control") return screenView.setControl(e.target.checked);
-  if (el.dataset.ui) {
+  if (el.dataset.sourceSound) {
+    const sources = { ...(state.config.ui.sound_sources || {}) };
+    if (el.value) sources[el.dataset.sourceSound] = el.value;
+    else delete sources[el.dataset.sourceSound];
+    await saveUi({ sound_sources: sources }).catch(() => render());
+  } else if (el.dataset.ui) {
     let value = el.type === "checkbox" ? el.checked : el.value;
     if ("int" in el.dataset) value = parseInt(el.value, 10);
     if ("float" in el.dataset) value = parseFloat(el.value);
@@ -717,6 +744,9 @@ $("content").addEventListener("click", async (e) => {
       state.update.status = { ...state.update.status, state: d.updateRun === "check" ? "checking" : "installing", message: "Запускаю…", message_args: {} };
       render();
       setTimeout(loadUpdate, 1000);
+    } else if (d.soundTestSource) {
+      const name = state.config.ui.sound_sources?.[d.soundTestSource] || state.config.ui.sound_name;
+      await guarded(() => api.post("/sound/test", { name })).then(() => toast(t("Звук отправлен на панель"))).catch(() => {});
     } else if ("soundTest" in d) {
       const name = document.querySelector('[data-ui="sound_name"]')?.value;
       await guarded(() => api.post("/sound/test", { name })).then(() => toast(t("Звук отправлен на панель"))).catch(() => {});

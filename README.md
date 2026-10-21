@@ -188,7 +188,7 @@ Widgets come from modules. A module is a folder `web/modules/<module>/`:
   `providers`, `location`, `choice` with choices served by the module backend)
   and translations (`i18n`);
 - `module.js`: exports `widgets = {id: mount}`, where
-  `mount(el, {options, api, sound})` returns `{destroy()}`; `sound.play(name?)` plays a notification sound on the panel (respecting the sound settings and quiet hours; silent in the admin preview);
+  `mount(el, {options, api, sound, notify})` returns `{destroy()}`; `sound.play(name?)` plays a notification sound on the panel (respecting the sound settings, "Do not disturb" and quiet hours; without a name, the sound chosen for the module; silent in the admin preview); `notify({title, text, level, key, sound})` posts a notification (see "Notifications");
 - `module.css`: styles. Prefer `cqw`/`cqh` units: a widget is a container, so
   its content fits any size;
 - `admin.js` (optional): the module settings page, `mount(el, {api, t})`,
@@ -243,7 +243,7 @@ on the screen show how many modules can be updated. The result is kept in
 There is no gear icon; the interface is made for touch:
 
 - **swipe down from the top edge** (or tap the very edge) to open the shade:
-  Wi‑Fi, theme, "Settings" and the new version notice;
+  Wi‑Fi, theme, "Settings" and notifications;
 - **long press (2 s)** anywhere on a desktop opens the settings;
 - **a red dot at the top edge** means a new version is out.
 
@@ -273,7 +273,35 @@ The panel can play notification sounds; the kiosk synthesizes them itself
 updates make a sound: a new version is out and an update has finished (a failed
 one uses a different signal). "Test" plays the sound on the panel even when
 sound is off. Modules play sounds via `sound.play()` in the widget context.
-Audio goes to the default ALSA device; the kiosk user is in the audio group.
+"Sound by source" gives the system and each module from the store its own
+sound or mutes it. Audio goes to the default ALSA device; the kiosk user is in
+the audio group.
+
+### Notifications
+
+The core (a new panel version, module updates) and modules post
+notifications. A new one pops up as a toast with its source's sound; the shade
+keeps the list, where a notification is dismissed or all are cleared. "Do not
+disturb" in the shade silences sounds and toasts, notifications still collect.
+
+- In a widget: `notify({title, text, level, key, action, sound})` from the
+  mount context. The module translates the text itself with `t()`.
+- In a module backend: `ctx.notify(title, text="", level="info", key=None,
+  action=None, sound=True, **params)`. `title` and `text` are Russian source
+  strings from the module's `i18n` with `{params}`, translated when shown.
+  `ctx.clear_notification(key)` withdraws it.
+- `level`: `info`, `ok`, `warn`, `crit`. A new notification with the same
+  `key` from the same source replaces the old one (for example, "server is
+  down" does not pile up).
+- `ctx.tile(id, title, text="", level="info", icon=None, **params)` puts a
+  short status tile into the shade ("1 down · backup-01"), `ctx.remove_tile(id)`
+  removes it. Tiles disappear when the backend stops.
+
+API: `GET /api/shade` (status, toggles, brightness, volume, notifications,
+module tiles), `POST /api/shade` `{dnd?, brightness?, volume?}`,
+`POST /api/notifications` (from widgets), `POST /api/notifications/dismiss`
+`{id}` or `{all: true}`, `POST /api/notifications/action` `{id}`. The list
+lives in `/var/lib/wallhub/notifications.json` (the last 50).
 
 ### Screen mirror
 

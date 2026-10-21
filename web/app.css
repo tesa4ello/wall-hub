@@ -204,6 +204,19 @@ body.kiosk {
   text-align: left;
 }
 .shade-update span { flex: 1; }
+/* Уведомления в шторке (временная вёрстка до новой шторки). */
+.shade-notes { display: flex; flex-direction: column; gap: 8px; max-height: 260px; margin-top: 12px; overflow-y: auto; }
+.shade-notes-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 14px; }
+.shade-notes-head button { border: none; background: none; color: var(--accent); font-size: 14px; }
+.shade-note { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); border-left: 4px solid var(--accent); }
+.shade-note.level-ok { border-left-color: var(--ok); }
+.shade-note.level-warn { border-left-color: var(--warn); }
+.shade-note.level-crit { border-left-color: var(--crit); }
+.shade-note-body { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.shade-note-body span { color: var(--muted); font-size: 14px; }
+.shade-note-action { align-self: flex-start; margin-top: 4px; padding: 0; border: none; background: none; color: var(--accent); font-weight: 600; }
+.shade-note-close { padding: 4px; border: none; background: none; color: var(--muted); }
+.shade-note-close .icon { width: 18px; height: 18px; }
 .shade-handle { width: 44px; height: 5px; margin: 12px auto 0; border-radius: 3px; background: var(--muted); opacity: 0.5; }
 
 /* --- затемнение ---------------------------------------------------------- */

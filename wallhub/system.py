@@ -78,6 +78,8 @@ class System:
         """
         if self.dry_run:
             state = self._fake_wifi_state()
+            signal = next((n["signal"] for n in state["networks"] if n["active"]), None)
+            state["signal"] = signal
             return dict(state, networks=[], saved=[]) if brief else state
         with self._lock:
             radio = self._run(["nmcli", "radio", "wifi"]).strip() == "enabled"
@@ -107,9 +109,19 @@ class System:
                     if prev is None or item["active"] or (not prev["active"] and item["signal"] > prev["signal"]):
                         seen[ssid] = item
                 networks = sorted(seen.values(), key=lambda n: (not n["active"], -n["signal"]))
+            signal = None
+            if brief and radio and device and device["state"] == "connected":
+                # Уровень текущей сети из кэша NetworkManager, без сканирования.
+                out = self._run(["nmcli", "-t", "-f", "IN-USE,SIGNAL", "device", "wifi", "list", "--rescan", "no"])
+                for line in out.splitlines():
+                    use, sig = (split_terse(line) + ["", ""])[:2]
+                    if use.strip() == "*" and sig.isdigit():
+                        signal = int(sig)
+                        break
             return {
                 "available": device is not None,
                 "radio": radio,
+                "signal": signal if brief else next((n["signal"] for n in networks if n["active"]), None),
                 "device": device["device"] if device else None,
                 "connection": device["connection"] if device and device["state"] == "connected" else None,
                 "networks": networks,

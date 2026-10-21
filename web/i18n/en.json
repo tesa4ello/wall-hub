@@ -624,5 +624,18 @@
   "Каталог сохранён": "Catalog saved",
   "Некорректный токен": "Invalid token",
   "Свой токен сохранён · вставьте новый, чтобы заменить": "Own token saved · paste a new one to replace it",
-  "Свой токен (пусто — общий токен панели)": "Own token (empty — the panel's shared token)"
+  "Свой токен (пусто — общий токен панели)": "Own token (empty — the panel's shared token)",
+  "Уведомления": "Notifications",
+  "Очистить": "Clear",
+  "Убрать": "Dismiss",
+  "Доступна версия {version}": "Version {version} available",
+  "Нет такого модуля": "No such module",
+  "Некорректное уведомление": "Invalid notification",
+  "Нет такого уведомления": "No such notification",
+  "Общий звук": "Common sound",
+  "Без звука": "No sound",
+  "Звук по источнику": "Sound by source",
+  "Модулю можно дать свой звук или выключить его уведомления": "A module can have its own sound, or its notifications can be muted",
+  "Имя панели": "Panel name",
+  "Видно в шторке. Пусто — имя устройства ({host})": "Shown in the shade. Empty — the device name ({host})"
 }

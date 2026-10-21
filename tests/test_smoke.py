@@ -68,3 +68,18 @@ class SmokeTest(unittest.TestCase):
         # Без координат прогноз отвечает ошибкой запроса, но не «нет такого маршрута».
         for path in ("/api/m/weather/forecast", "/api/m/weather/search?q="):
             self.assertNotEqual(self.request(path)[0], 404, path)
+
+    def test_notifications(self):
+        status, body = self.request("/api/notifications", {"module": "weather", "title": "Проверка", "level": "warn"})
+        self.assertEqual(status, 200, body)
+        note_id = json.loads(body)["id"]
+        shade = json.loads(self.request("/api/shade")[1])
+        self.assertIn(note_id, [n["id"] for n in shade["notifications"]])
+        self.assertIn("status", shade)
+        self.assertEqual(self.request("/api/notifications", {"module": "nope", "title": "x"})[0], 400)
+        self.assertEqual(self.request("/api/notifications/dismiss", {"id": note_id})[0], 200)
+        shade = json.loads(self.request("/api/shade", {"dnd": True, "brightness": 70})[1])
+        self.assertTrue(shade["toggles"]["dnd"])
+        self.assertEqual(shade["brightness"], 70)
+        self.assertNotIn(note_id, [n["id"] for n in shade["notifications"]])
+        self.assertEqual(self.request("/api/shade", {"brightness": 5})[0], 400)
