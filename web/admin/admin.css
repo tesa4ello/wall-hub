@@ -226,6 +226,11 @@ input:disabled, select:disabled { opacity: 0.45; }
 .props p { margin: 0; }
 .prov-list { display: flex; flex-direction: column; gap: 4px; }
 .prov { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* .prop input растягивает поля на всю ширину; чекбоксу это не нужно. */
+.prov .check { flex: 1; min-width: 0; align-items: flex-start; }
+.prov .check input { flex: none; width: 17px; margin-top: 1px; }
+.prov .check span { min-width: 0; overflow-wrap: anywhere; }
+.prov .order { display: flex; gap: 4px; flex: none; }
 .prov .btn-small { min-height: 28px; padding: 0 8px; }
 .props .btn-danger .icon, .props .btn .icon { width: 16px; height: 16px; }
 

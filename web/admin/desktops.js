@@ -208,7 +208,7 @@ export class DesktopEditor {
       return `<div class="prop"><span>${esc(o.title)}</span><div class="prov-list">
         ${order.map((id, i) => `
           <div class="prov">
-            <label class="check"><input type="checkbox" data-prov="${key}" data-id="${esc(id)}" ${chosen.includes(id) ? "checked" : ""}> ${esc(title(id))}</label>
+            <label class="check"><input type="checkbox" data-prov="${key}" data-id="${esc(id)}" ${chosen.includes(id) ? "checked" : ""}><span>${esc(title(id))}</span></label>
             <span class="order">
               <button class="btn btn-small" data-prov-move="${key}" data-id="${esc(id)}" data-dir="-1" ${i === 0 || !chosen.includes(id) ? "disabled" : ""}>↑</button>
               <button class="btn btn-small" data-prov-move="${key}" data-id="${esc(id)}" data-dir="1" ${i >= chosen.length - 1 || !chosen.includes(id) ? "disabled" : ""}>↓</button>
