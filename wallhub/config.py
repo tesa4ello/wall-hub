@@ -44,6 +44,8 @@ DEFAULTS = {
         "background_dark": "default-aurora-dark",
         # Затемнение фона, 0..80 %.
         "bg_dim": 0,
+        # Прозрачность стеклянных плиток, 0..90 % (0 — почти сплошные).
+        "tile_transparency": 58,
         # Плитки поверх фона: baked | blur | frosted | solid (см. web/lib/wallpaper.js).
         "tiles": "baked",
         "language": "ru",

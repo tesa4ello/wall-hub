@@ -47,6 +47,7 @@ export class Wallpaper {
   async apply(ui, theme) {
     const root = document.documentElement;
     root.style.setProperty("--bg-dim", (ui.bg_dim || 0) / 100);
+    root.style.setProperty("--glass-alpha", 1 - (ui.tile_transparency ?? 58) / 100);
     const id = backgroundFor(ui, theme) || "";
     if (id !== this.id) {
       this.id = id;

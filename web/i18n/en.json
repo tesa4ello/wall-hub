@@ -383,5 +383,7 @@
   "Яндекс Локатор не нашёл место": "Yandex Locator found no location",
   "Яндекс Локатор не ответил: {error}": "Yandex Locator did not respond: {error}",
   "Яндекс Локатор, {time}": "Yandex Locator, {time}",
-  "Яндекс Локатор, {time}, точность {m} м": "Yandex Locator, {time}, accuracy {m} m"
+  "Яндекс Локатор, {time}, точность {m} м": "Yandex Locator, {time}, accuracy {m} m",
+  "Прозрачность плиток, %": "Tile transparency, %",
+  "Для стекла и матовых плиток. 0 — почти сплошные": "For glass and frosted tiles. 0 means nearly solid"
 }
