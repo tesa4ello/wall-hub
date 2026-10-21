@@ -6,6 +6,8 @@ import { icon, signalBars } from "/lib/icons.js";
 import { confirmDialog, toast } from "/lib/dialog.js";
 
 const $ = (id) => document.getElementById(id);
+// «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
+const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 const TABS = [
@@ -281,7 +283,7 @@ function renderSystem() {
     <h1>Система</h1>
     <section class="panel">
       <div class="field"><span>Устройство</span><b>${esc(info.hostname || "—")}</b></div>
-      <div class="field"><span>Версия</span><b>${esc(info.version || "—")}</b></div>
+      <div class="field"><span>Версия</span><b>${esc(versionText(info))}</b></div>
       <label class="field"><span>Часовой пояс</span>
         ${t ? `<select id="tz">${t.timezones.map((z) => `<option ${z === t.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>` : "…"}
       </label>
