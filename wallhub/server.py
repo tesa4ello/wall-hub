@@ -838,6 +838,7 @@ def make_handler(app, trusted, port):
                 "token_set": app.updates.token_set(),
                 "status": app.updates.status(),
                 "build": BUILD,
+                "version": __version__,
             }
 
         def api_update_settings(self, body, **_):

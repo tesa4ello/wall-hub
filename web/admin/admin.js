@@ -490,7 +490,8 @@ async function loadUpdate() {
 }
 
 const shortDate = (s) => (s ? new Date(s).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }) : "—");
-const buildText = (b) => (b && b.commit ? `${b.ref || ""} ${b.commit.slice(0, 7)} · ${shortDate(b.date)}` : "—");
+// Версия и номер сборки (короткий коммит), без текста коммита.
+const buildText = (b, version) => (b && b.commit ? [version || b.version, b.commit.slice(0, 7), shortDate(b.date)].filter(Boolean).join(" · ") : "—");
 
 function renderUpdates() {
   const u = state.update;
@@ -502,8 +503,8 @@ function renderUpdates() {
   return `
     <h1>${t("Обновления")}</h1>
     <section class="panel">
-      <div class="field"><span>${t("Установлена")}</span><b class="mono">${esc(buildText(u.build))}</b></div>
-      <div class="field"><span>${t("Последняя в канале")}${latest && latest.title ? `<small>${esc(latest.title)}</small>` : ""}</span>
+      <div class="field"><span>${t("Установлена")}</span><b class="mono">${esc(buildText(u.build, u.version))}</b></div>
+      <div class="field"><span>${t("Последняя в канале")}</span>
         <b class="mono">${esc(buildText(latest))}</b></div>
       <div class="field"><span>${t("Проверено")}</span><b>${esc(shortDate(st.checked_at))}</b></div>
       <div class="update-state ${level}">${esc(st.message ? t(st.message, st.message_args) : "")}</div>
