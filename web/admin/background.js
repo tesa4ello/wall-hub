@@ -82,7 +82,7 @@ function gallery(name, items, current, extra) {
     ${extra.map(([id, label]) => thumb(id, `<span>${esc(t(label))}</span>`, t(label))).join("")}
     ${items.map((i) => `<div class="bg-item">
       ${thumb(i.id, `<img src="${esc(i.url)}" alt="" loading="lazy">`, t("Выбрать"))}
-      ${name === "background" ? `<button type="button" class="bg-delete" data-bg-delete="${esc(i.id)}" title="${esc(t("Удалить"))}">${icon("trash")}</button>` : ""}
+      ${name === "background" && !i.builtin ? `<button type="button" class="bg-delete" data-bg-delete="${esc(i.id)}" title="${esc(t("Удалить"))}">${icon("trash")}</button>` : ""}
     </div>`).join("")}
   </div>`;
 }

@@ -5,6 +5,9 @@
 копии вместо backdrop-filter). Сюда приходят уже готовые JPEG/PNG/WebP;
 сервер только проверяет их и хранит парой файлов <id>.<ext> и <id>-blur.<ext>
 в каталоге backgrounds рядом с настройками.
+
+Встроенные фоны (default-<имя>-light|dark) лежат в web/backgrounds и приходят
+с версией панели; их нельзя удалить.
 """
 
 import os
@@ -17,8 +20,8 @@ from .i18n import tr
 # Готовая картинка 1024×600 весит сотни килобайт; запас на PNG.
 MAX_IMAGE = 6 * 1024 * 1024
 MAX_COUNT = 30
-ID_RE = re.compile(r"^[0-9a-f]{12}$")
-FILE_RE = re.compile(r"^([0-9a-f]{12})(-blur)?\.(jpg|png|webp)$")
+ID_RE = re.compile(r"^([0-9a-f]{12}|default-[a-z]+-(light|dark))$")
+FILE_RE = re.compile(r"^([0-9a-f]{12}|default-[a-z]+-(?:light|dark))(-blur)?\.(jpg|png|webp)$")
 TYPES = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 
 
@@ -38,35 +41,53 @@ def sniff(data):
 
 
 class Backgrounds:
-    def __init__(self, path):
+    def __init__(self, path, builtin_path=None):
         self.path = path
+        self.builtin_path = builtin_path
         self._lock = threading.Lock()
 
-    def _files(self):
+    @staticmethod
+    def _scan(path):
+        """{id: {имя суффикса: имя файла}} для файлов каталога."""
+        found = {}
         try:
-            return os.listdir(self.path)
+            names = os.listdir(path) if path else []
         except FileNotFoundError:
-            return []
+            names = []
+        for name in names:
+            m = FILE_RE.match(name)
+            if m:
+                found.setdefault(m.group(1), {})["blur" if m.group(2) else "url"] = name
+        return found
+
+    def _user(self):
+        return {k: v for k, v in self._scan(self.path).items() if not k.startswith("default-")}
+
+    def _builtin(self):
+        return {k: v for k, v in self._scan(self.builtin_path).items() if k.startswith("default-")}
 
     def list(self):
-        """Загруженные фоны, новые первыми."""
-        items = {}
-        for name in self._files():
-            m = FILE_RE.match(name)
-            if not m:
+        """Загруженные фоны (новые первыми), затем встроенные."""
+        user = []
+        for bg_id, files in self._user().items():
+            # Без основного файла фон не показать (например, оборвалась запись).
+            if "url" not in files:
                 continue
-            item = items.setdefault(m.group(1), {"id": m.group(1)})
-            full = os.path.join(self.path, name)
-            if m.group(2):
-                item["blur"] = f"/bg/{name}"
-            else:
-                item["url"] = f"/bg/{name}"
-                item["size"] = os.path.getsize(full)
-                item["mtime"] = os.path.getmtime(full)
-        # Без основного файла фон не показать (например, оборвалась запись).
-        result = [i for i in items.values() if "url" in i]
-        result.sort(key=lambda i: i["mtime"], reverse=True)
-        return result
+            full = os.path.join(self.path, files["url"])
+            item = {"id": bg_id, "url": f"/bg/{files['url']}", "size": os.path.getsize(full),
+                    "mtime": os.path.getmtime(full)}
+            if "blur" in files:
+                item["blur"] = f"/bg/{files['blur']}"
+            user.append(item)
+        user.sort(key=lambda i: i["mtime"], reverse=True)
+        builtin = []
+        for bg_id, files in sorted(self._builtin().items()):
+            if "url" in files:
+                builtin.append({"id": bg_id, "url": f"/bg/{files['url']}", "blur": f"/bg/{files.get('blur', files['url'])}",
+                                "builtin": True, "theme": bg_id.rsplit("-", 1)[1]})
+        # Тёмные встроенные после светлых, чтобы галереи шли по темам.
+        builtin.sort(key=lambda i: i["theme"] == "dark")
+        return user + builtin
 
     def exists(self, bg_id):
         return any(i["id"] == bg_id for i in self.list())
@@ -78,7 +99,7 @@ class Backgrounds:
         if len(image) > MAX_IMAGE or len(blur) > MAX_IMAGE:
             raise BackgroundError(tr("Слишком большая картинка"))
         with self._lock:
-            if len(self.list()) >= MAX_COUNT:
+            if len(self._user()) >= MAX_COUNT:
                 raise BackgroundError(tr("Можно хранить не больше {n} фонов, удалите лишние", n=MAX_COUNT))
             os.makedirs(self.path, exist_ok=True)
             bg_id = secrets.token_hex(6)
@@ -93,16 +114,19 @@ class Backgrounds:
     def delete(self, bg_id):
         if not ID_RE.match(str(bg_id)):
             raise BackgroundError(tr("Нет такого фона"))
+        if bg_id.startswith("default-"):
+            raise BackgroundError(tr("Встроенный фон нельзя удалить"))
         with self._lock:
-            for name in self._files():
-                m = FILE_RE.match(name)
-                if m and m.group(1) == bg_id:
-                    os.remove(os.path.join(self.path, name))
+            for name in self._user().get(bg_id, {}).values():
+                os.remove(os.path.join(self.path, name))
 
     def file(self, name):
         """Путь и тип файла для раздачи по /bg/<name> или None."""
         m = FILE_RE.match(name)
-        full = os.path.join(self.path, name)
-        if not m or not os.path.isfile(full):
+        if not m:
+            return None
+        base = self.builtin_path if m.group(1).startswith("default-") else self.path
+        full = os.path.join(base or "", name)
+        if not base or not os.path.isfile(full):
             return None
         return full, TYPES[m.group(3)]

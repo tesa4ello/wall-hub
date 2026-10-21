@@ -338,5 +338,6 @@
   "Можно хранить не больше {n} фонов, удалите лишние": "At most {n} backgrounds can be stored, delete some",
   "Нет такого фона": "No such background",
   "Нет картинки": "No image",
-  "Картинка повреждена": "The image is damaged"
+  "Картинка повреждена": "The image is damaged",
+  "Встроенный фон нельзя удалить": "A built-in background cannot be deleted"
 }

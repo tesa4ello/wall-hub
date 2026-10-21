@@ -151,7 +151,7 @@ class App:
         state_dir = os.path.dirname(os.path.abspath(config.path))
         self.updates = Updates(state_dir, system.dry_run)
         self.network = Network(state_dir, admin_port, system.dry_run)
-        self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"))
+        self.backgrounds = Backgrounds(os.path.join(state_dir, "backgrounds"), os.path.join(self.web_root, "backgrounds"))
         self.login_lock = threading.Lock()
         # Тема, которую сейчас показывает экран (сообщает сам киоск), чтобы
         # админка выглядела так же.
