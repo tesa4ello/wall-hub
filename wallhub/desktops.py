@@ -137,10 +137,14 @@ def validate(desktops, catalog, cols, rows, providers=()):
                     if (cx, cy) in occupied:
                         raise LayoutError(tr("«{title}» перекрывает «{other}»", title=title, other=occupied[(cx, cy)]))
                     occupied[(cx, cy)] = title
-            clean_widgets.append({
+            clean = {
                 "id": w_id, "type": meta["id"], "x": x, "y": y, "w": width, "h": height,
                 "options": clean_options(meta, w.get("options", {}), providers),
-            })
+            }
+            # Плитка-подложка: своя у виджета или как задано в каталоге.
+            if isinstance(w.get("card"), bool) and w["card"] != bool(meta.get("card")):
+                clean["card"] = w["card"]
+            clean_widgets.append(clean)
         result.append({"id": desk_id, "name": name, "widgets": clean_widgets})
     return result
 

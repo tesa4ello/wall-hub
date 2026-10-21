@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 from . import BUILD, __version__, auth, desktops, i18n, status
-from .background import BackgroundError, Backgrounds
+from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
@@ -68,6 +68,10 @@ def validate_ui(patch):
         "dim_after_min": lambda v: _int(v) and 0 <= v <= 240,
         "dim_level": lambda v: _int(v) and 0 <= v <= 95,
         "language": lambda v: v in i18n.languages(),
+        "background": lambda v: v == "" or (isinstance(v, str) and BG_ID_RE.match(v)),
+        "background_dark": lambda v: v in ("", "same") or (isinstance(v, str) and BG_ID_RE.match(v)),
+        "bg_dim": lambda v: _int(v) and 0 <= v <= 80,
+        "tiles": lambda v: v in ("baked", "blur", "frosted", "solid"),
     }
     for key, value in patch.items():
         check = rules.get(key)
@@ -395,6 +399,9 @@ def make_handler(app, trusted, port):
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
+            for key in ("background", "background_dark"):
+                if patch.get(key) not in (None, "", "same") and not app.backgrounds.exists(patch[key]):
+                    raise ApiError("Нет такого фона")
             return {"revision": app.config.update({"ui": patch})}
 
         def api_status(self, **_):
