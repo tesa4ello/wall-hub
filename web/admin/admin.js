@@ -1,7 +1,9 @@
 // Сетевая админка: всё, что есть на экране, плюс модули, статусная строка,
-// часовой пояс и пароль.
+// часовой пояс и пароль. Подписи в константах — исходные строки, t()
+// переводит их при отрисовке.
 
 import { api } from "/lib/api.js";
+import { language, languages, locale, setLanguage, t, translateDom } from "/lib/i18n.js";
 import { icon, signalBars } from "/lib/icons.js";
 import { confirmDialog, toast } from "/lib/dialog.js";
 import { loadCatalog } from "/lib/widgets.js";
@@ -24,39 +26,49 @@ const state = { tab: "display", config: null, catalog: null, wifi: null, time: n
 
 // Админка показывает ту же тему, что сейчас на экране панели. Пока панель
 // о ней не сообщила (киоск не запущен), следуем теме компьютера.
+// Язык общий с панелью: если его сменили на экране, перезагружаемся.
 const media = matchMedia("(prefers-color-scheme: light)");
 let panelTheme = null;
 const syncTheme = () =>
   (document.documentElement.dataset.theme = panelTheme || (media.matches ? "light" : "dark"));
 media.addEventListener("change", syncTheme);
 syncTheme();
-async function pollTheme() {
+async function pollPanel() {
   try {
-    panelTheme = (await api.get("/theme")).theme;
+    const panel = await api.get("/theme");
+    panelTheme = panel.theme;
     syncTheme();
+    if (languageLoaded && panel.language !== language()) location.reload();
   } catch {}
 }
-pollTheme();
-setInterval(pollTheme, 5000);
+pollPanel();
+setInterval(pollPanel, 5000);
 
 // --- вход ------------------------------------------------------------------
 
 // Пока пароль не задан, форма входа превращается в форму создания пароля.
 let setupMode = false;
+let languageLoaded = false;
 
 async function boot() {
   const session = await api.get("/session");
+  if (!languageLoaded) {
+    await setLanguage(session.language);
+    languageLoaded = true;
+    translateDom();
+    renderTabs();
+  }
   if (!session.authorized) {
     setupMode = session.setup;
     $("login-hint").textContent = setupMode
-      ? "Первый вход: придумайте пароль админки, не короче 6 символов."
-      : "Введите пароль админки. Забыли — сбросьте его на панели: sudo ./install.sh --reset-password.";
-    $("login-password").placeholder = setupMode ? "Новый пароль" : "Пароль";
+      ? t("Первый вход: придумайте пароль админки, не короче 6 символов.")
+      : t("Введите пароль админки. Забыли — сбросьте его на панели: sudo ./install.sh --reset-password.");
+    $("login-password").placeholder = t(setupMode ? "Новый пароль" : "Пароль");
     $("login-password").autocomplete = setupMode ? "new-password" : "current-password";
     $("login-password").minLength = setupMode ? 6 : 0;
     $("login-repeat").hidden = !setupMode;
     $("login-repeat").required = setupMode;
-    $("login-submit").textContent = setupMode ? "Задать пароль и войти" : "Войти";
+    $("login-submit").textContent = t(setupMode ? "Задать пароль и войти" : "Войти");
     $("login").hidden = false;
     $("app").hidden = true;
     $("login-password").focus();
@@ -73,7 +85,7 @@ $("login-form").addEventListener("submit", async (e) => {
   try {
     const password = $("login-password").value;
     if (setupMode) {
-      if (password !== $("login-repeat").value) throw new Error("Пароли не совпадают");
+      if (password !== $("login-repeat").value) throw new Error(t("Пароли не совпадают"));
       await api.post("/setup/password", { new: password });
     } else {
       await api.post("/login", { password });
@@ -104,7 +116,9 @@ async function guarded(fn) {
 
 // --- навигация -------------------------------------------------------------
 
-$("tabs").innerHTML = TABS.map((t) => `<button class="tab" data-tab="${t.id}">${icon(t.icon)}<span>${t.title}</span></button>`).join("");
+function renderTabs() {
+  $("tabs").innerHTML = TABS.map((tab) => `<button class="tab" data-tab="${tab.id}">${icon(tab.icon)}<span>${t(tab.title)}</span></button>`).join("");
+}
 $("tabs").addEventListener("click", (e) => {
   const b = e.target.closest(".tab");
   if (b) show(b.dataset.tab);
@@ -138,6 +152,7 @@ function render() {
 async function saveUi(patch) {
   await guarded(() => api.post("/settings", { ui: patch }));
   state.config = await api.get("/config");
+  if (state.config.ui.language !== language()) return location.reload();
   render();
 }
 
@@ -145,39 +160,44 @@ async function saveUi(patch) {
 
 function renderDisplay() {
   const ui = state.config.ui;
-  const opts = (values, current) => values.map(([v, l]) => `<option value="${v}" ${v === current ? "selected" : ""}>${l}</option>`).join("");
+  const opts = (values, current) => values.map(([v, l]) => `<option value="${v}" ${v === current ? "selected" : ""}>${esc(l)}</option>`).join("");
   const sched = ui.theme_mode === "sun" ? "disabled" : "";
   return `
-    <h1>Экран</h1>
+    <h1>${t("Экран")}</h1>
     <section class="panel">
-      <label class="field"><span>Выбор темы</span>
-        <select data-ui="theme_mode">${opts([["manual", "Вручную"], ["schedule", "По времени"], ["sun", "По солнцу"]], ui.theme_mode)}</select>
+      <label class="field"><span>${t("Язык")}<small>${t("Общий для панели и админки")}</small></span>
+        <select data-ui="language">${opts(languages().map((l) => [l.code, l.name]), ui.language)}</select>
       </label>
-      <label class="field"><span>Тема</span>
-        <select data-ui="theme" ${ui.theme_mode === "manual" ? "" : "disabled"}>${opts([["light", "Светлая"], ["dark", "Тёмная"]], ui.theme)}</select>
+    </section>
+    <section class="panel">
+      <label class="field"><span>${t("Выбор темы")}</span>
+        <select data-ui="theme_mode">${opts([["manual", t("Вручную")], ["schedule", t("По времени")], ["sun", t("По солнцу")]], ui.theme_mode)}</select>
       </label>
-      <label class="field"><span>День с<small>В режиме «по времени» и для ночного приглушения</small></span>
+      <label class="field"><span>${t("Тема")}</span>
+        <select data-ui="theme" ${ui.theme_mode === "manual" ? "" : "disabled"}>${opts([["light", t("Светлая")], ["dark", t("Тёмная")]], ui.theme)}</select>
+      </label>
+      <label class="field"><span>${t("День с")}<small>${t("В режиме «по времени» и для ночного приглушения")}</small></span>
         <input type="time" data-ui="day_start" value="${ui.day_start}" ${sched}>
       </label>
-      <label class="field"><span>Ночь с</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${sched}></label>
-      <label class="field"><span>Широта<small>Для режима «по солнцу»</small></span>
+      <label class="field"><span>${t("Ночь с")}</span><input type="time" data-ui="night_start" value="${ui.night_start}" ${sched}></label>
+      <label class="field"><span>${t("Широта")}<small>${t("Для режима «по солнцу»")}</small></span>
         <input type="number" step="0.01" min="-90" max="90" data-ui="latitude" data-float value="${ui.latitude}">
       </label>
-      <label class="field"><span>Долгота</span>
+      <label class="field"><span>${t("Долгота")}</span>
         <input type="number" step="0.01" min="-180" max="180" data-ui="longitude" data-float value="${ui.longitude}">
       </label>
     </section>
     <section class="panel">
-      <label class="field"><span>Ночное приглушение, %<small>0 — не приглушать</small></span>
+      <label class="field"><span>${t("Ночное приглушение, %")}<small>${t("0 — не приглушать")}</small></span>
         <input type="number" min="0" max="90" step="5" data-ui="night_dim" data-int value="${ui.night_dim}">
       </label>
-      <label class="field"><span>Затемнять через, мин<small>0 — не затемнять</small></span>
+      <label class="field"><span>${t("Затемнять через, мин")}<small>${t("0 — не затемнять")}</small></span>
         <input type="number" min="0" max="240" data-ui="dim_after_min" data-int value="${ui.dim_after_min}">
       </label>
-      <label class="field"><span>Сила затемнения, %</span>
+      <label class="field"><span>${t("Сила затемнения, %")}</span>
         <input type="number" min="0" max="95" step="5" data-ui="dim_level" data-int value="${ui.dim_level}">
       </label>
-      <label class="field"><span>Гасить экран через, мин<small>0 — не гасить</small></span>
+      <label class="field"><span>${t("Гасить экран через, мин")}<small>${t("0 — не гасить")}</small></span>
         <input type="number" min="0" max="240" data-ui="blank_after_min" data-int value="${ui.blank_after_min}">
       </label>
     </section>`;
@@ -190,7 +210,7 @@ function renderDisplay() {
 let editor = null;
 
 function renderDesktops() {
-  return `<h1>Рабочие столы</h1><div id="desk-editor"></div>`;
+  return `<h1>${t("Рабочие столы")}</h1><div id="desk-editor"></div>`;
 }
 
 function mountEditor() {
@@ -225,13 +245,13 @@ async function loadWifi(rescan) {
 function renderWifi() {
   const w = state.wifi;
   let body;
-  if (!w) body = `<p class="muted">Ищу сети…</p>`;
+  if (!w) body = `<p class="muted">${t("Ищу сети…")}</p>`;
   else if (w.error) body = `<p class="error">${esc(w.error)}</p>`;
-  else if (!w.available) body = `<p class="muted">Wi‑Fi адаптер не найден</p>`;
+  else if (!w.available) body = `<p class="muted">${t("Wi‑Fi адаптер не найден")}</p>`;
   else {
     body = `
       <section class="panel">
-        <label class="field"><span>Wi‑Fi${w.connection ? `<small>Подключено к ${esc(w.connection)}</small>` : ""}</span>
+        <label class="field"><span>Wi‑Fi${w.connection ? `<small>${t("Подключено к {ssid}", { ssid: esc(w.connection) })}</small>` : ""}</span>
           <button class="switch" data-wifi-radio aria-checked="${w.radio}"></button>
         </label>
       </section>
@@ -240,26 +260,26 @@ function renderWifi() {
           <div class="item"><div class="item-main">
             ${signalBars(n.signal)}
             <div class="item-title grow">${esc(n.ssid)} ${n.secure ? icon("lock", "icon tiny") : ""}
-              <div class="muted small">${n.active ? "Подключено" : n.saved ? "Сохранена" : esc(n.security || "Открытая")}</div>
+              <div class="muted small">${n.active ? t("Подключено") : n.saved ? t("Сохранена") : esc(n.security || t("Открытая"))}</div>
             </div>
-            ${n.active ? `<button class="btn btn-small" data-wifi-disconnect>Отключиться</button>` : ""}
-            ${!n.active ? `<button class="btn btn-small btn-primary" data-wifi-connect="${i}">Подключиться</button>` : ""}
-            ${n.saved ? `<button class="btn btn-small" data-wifi-forget="${i}">Забыть</button>` : ""}
-          </div></div>`).join("") || `<p class="muted pad">Сети не найдены</p>`}
+            ${n.active ? `<button class="btn btn-small" data-wifi-disconnect>${t("Отключиться")}</button>` : ""}
+            ${!n.active ? `<button class="btn btn-small btn-primary" data-wifi-connect="${i}">${t("Подключиться")}</button>` : ""}
+            ${n.saved ? `<button class="btn btn-small" data-wifi-forget="${i}">${t("Забыть")}</button>` : ""}
+          </div></div>`).join("") || `<p class="muted pad">${t("Сети не найдены")}</p>`}
       </section>
       <form class="panel inline-form" id="hidden-form">
-        <input name="ssid" placeholder="Скрытая сеть: имя" required>
-        <input name="password" type="password" placeholder="Пароль">
-        <button class="btn" type="submit">Подключиться</button>
+        <input name="ssid" placeholder="${t("Скрытая сеть: имя")}" required>
+        <input name="password" type="password" placeholder="${t("Пароль")}">
+        <button class="btn" type="submit">${t("Подключиться")}</button>
       </form>`;
   }
-  return `<h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} Обновить</button></h1>${body}`;
+  return `<h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Обновить")}</button></h1>${body}`;
 }
 
 async function wifiConnect(body) {
-  toast(`Подключаюсь к ${body.ssid}…`);
+  toast(t("Подключаюсь к {ssid}…", { ssid: body.ssid }));
   await guarded(() => api.post("/wifi/connect", body));
-  toast(`Подключено к ${body.ssid}`);
+  toast(t("Подключено к {ssid}", { ssid: body.ssid }));
   await loadWifi(false);
 }
 
@@ -271,27 +291,27 @@ async function loadSystem() {
 }
 
 function renderSystem() {
-  const t = state.time;
+  const time = state.time;
   const info = state.info || {};
   return `
-    <h1>Система</h1>
+    <h1>${t("Система")}</h1>
     <section class="panel">
-      <div class="field"><span>Устройство</span><b>${esc(info.hostname || "—")}</b></div>
-      <div class="field"><span>Версия</span><b>${esc(versionText(info))}</b></div>
-      <label class="field"><span>Часовой пояс</span>
-        ${t ? `<select id="tz">${t.timezones.map((z) => `<option ${z === t.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>` : "…"}
+      <div class="field"><span>${t("Устройство")}</span><b>${esc(info.hostname || "—")}</b></div>
+      <div class="field"><span>${t("Версия")}</span><b>${esc(versionText(info))}</b></div>
+      <label class="field"><span>${t("Часовой пояс")}</span>
+        ${time ? `<select id="tz">${time.timezones.map((z) => `<option ${z === time.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>` : "…"}
       </label>
     </section>
-    <h1>Пароль админки</h1>
+    <h1>${t("Пароль админки")}</h1>
     <form class="panel inline-form" id="password-form">
-      <input name="current" type="password" placeholder="Текущий пароль" autocomplete="current-password" required>
-      <input name="new" type="password" placeholder="Новый пароль (от 6 символов)" autocomplete="new-password" minlength="6" required>
-      <button class="btn btn-primary" type="submit">Сменить</button>
+      <input name="current" type="password" placeholder="${t("Текущий пароль")}" autocomplete="current-password" required>
+      <input name="new" type="password" placeholder="${t("Новый пароль (от 6 символов)")}" autocomplete="new-password" minlength="6" required>
+      <button class="btn btn-primary" type="submit">${t("Сменить")}</button>
     </form>
-    <h1>Питание</h1>
+    <h1>${t("Питание")}</h1>
     <section class="panel row-buttons">
-      <button class="btn" data-power="reboot">${icon("reboot")} Перезагрузить</button>
-      <button class="btn btn-danger" data-power="poweroff">${icon("power")} Выключить</button>
+      <button class="btn" data-power="reboot">${icon("reboot")} ${t("Перезагрузить")}</button>
+      <button class="btn btn-danger" data-power="poweroff">${icon("power")} ${t("Выключить")}</button>
     </section>`;
 }
 
@@ -316,56 +336,56 @@ async function loadUpdate() {
   if (!document.activeElement || !document.activeElement.closest("#content input")) render();
 }
 
-const shortDate = (s) => (s ? new Date(s).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—");
+const shortDate = (s) => (s ? new Date(s).toLocaleString(locale(), { dateStyle: "short", timeStyle: "short" }) : "—");
 const buildText = (b) => (b && b.commit ? `${b.ref || ""} ${b.commit.slice(0, 7)} · ${shortDate(b.date)}` : "—");
 
 function renderUpdates() {
   const u = state.update;
-  if (!u) return `<h1>Обновления</h1><div class="empty">Загрузка…</div>`;
+  if (!u) return `<h1>${t("Обновления")}</h1><div class="empty">${t("Загрузка…")}</div>`;
   const st = u.status || {};
   const busy = ["checking", "installing"].includes(st.state);
   const latest = st.latest;
   const level = busy ? "busy" : st.result === "failed" ? "error" : st.available ? "new" : "";
   return `
-    <h1>Обновления</h1>
+    <h1>${t("Обновления")}</h1>
     <section class="panel">
-      <div class="field"><span>Установлена</span><b class="mono">${esc(buildText(u.build))}</b></div>
-      <div class="field"><span>Последняя в канале${latest && latest.title ? `<small>${esc(latest.title)}</small>` : ""}</span>
+      <div class="field"><span>${t("Установлена")}</span><b class="mono">${esc(buildText(u.build))}</b></div>
+      <div class="field"><span>${t("Последняя в канале")}${latest && latest.title ? `<small>${esc(latest.title)}</small>` : ""}</span>
         <b class="mono">${esc(buildText(latest))}</b></div>
-      <div class="field"><span>Проверено</span><b>${esc(shortDate(st.checked_at))}</b></div>
-      <div class="update-state ${level}">${esc(st.message || "")}</div>
+      <div class="field"><span>${t("Проверено")}</span><b>${esc(shortDate(st.checked_at))}</b></div>
+      <div class="update-state ${level}">${esc(st.message ? t(st.message, st.message_args) : "")}</div>
       <div class="row-buttons">
-        <button class="btn" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")} Проверить</button>
-        <button class="btn btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>Обновить сейчас</button>
-        <button class="btn" data-update-run="rollback" ${busy ? "disabled" : ""}>Вернуть прошлую версию</button>
+        <button class="btn" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")} ${t("Проверить")}</button>
+        <button class="btn btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>${t("Обновить сейчас")}</button>
+        <button class="btn" data-update-run="rollback" ${busy ? "disabled" : ""}>${t("Вернуть прошлую версию")}</button>
       </div>
     </section>
     <section class="panel">
-      <label class="field"><span>Канал<small>Разработка — свежие, но менее проверенные версии</small></span>
+      <label class="field"><span>${t("Канал")}<small>${t("Разработка — свежие, но менее проверенные версии")}</small></span>
         <select id="update-channel">
-          <option value="stable" ${u.settings.channel === "stable" ? "selected" : ""}>Стабильная (${esc(u.settings.branches.stable)})</option>
-          <option value="dev" ${u.settings.channel === "dev" ? "selected" : ""}>Разработка (${esc(u.settings.branches.dev)})</option>
+          <option value="stable" ${u.settings.channel === "stable" ? "selected" : ""}>${t("Стабильная")} (${esc(u.settings.branches.stable)})</option>
+          <option value="dev" ${u.settings.channel === "dev" ? "selected" : ""}>${t("Разработка")} (${esc(u.settings.branches.dev)})</option>
         </select>
       </label>
-      <label class="field"><span>Проверять обновления</span>
+      <label class="field"><span>${t("Проверять обновления")}</span>
         <select id="update-schedule">
           ${[["off", "Не проверять"], ["hourly", "Каждый час"], ["6h", "Каждые 6 часов"], ["daily", "Раз в день"]]
-            .map(([v, l]) => `<option value="${v}" ${u.settings.schedule === v ? "selected" : ""}>${l}</option>`).join("")}
+            .map(([v, l]) => `<option value="${v}" ${u.settings.schedule === v ? "selected" : ""}>${t(l)}</option>`).join("")}
         </select>
       </label>
-      <label class="field"><span>Время проверки<small>Для «раз в день»</small></span>
+      <label class="field"><span>${t("Время проверки")}<small>${t("Для «раз в день»")}</small></span>
         <input type="time" id="update-time" value="${esc(u.settings.time)}" ${u.settings.schedule === "daily" ? "" : "disabled"}>
       </label>
-      <label class="field"><span>Ставить автоматически<small>Иначе только показывать, что вышла новая версия</small></span>
+      <label class="field"><span>${t("Ставить автоматически")}<small>${t("Иначе только показывать, что вышла новая версия")}</small></span>
         <input type="checkbox" id="update-auto" ${u.settings.auto ? "checked" : ""}>
       </label>
     </section>
-    <h1>Доступ к GitHub</h1>
+    <h1>${t("Доступ к GitHub")}</h1>
     <form class="panel inline-form" id="token-form">
       <input name="token" type="password" autocomplete="off"
-        placeholder="${u.token_set ? "Токен сохранён · вставьте новый, чтобы заменить" : "Токен для приватного репозитория"}">
-      <button class="btn btn-primary" type="submit">Сохранить</button>
-      ${u.token_set ? `<button class="btn" type="button" data-token-clear>Удалить</button>` : ""}
+        placeholder="${t(u.token_set ? "Токен сохранён · вставьте новый, чтобы заменить" : "Токен для приватного репозитория")}">
+      <button class="btn btn-primary" type="submit">${t("Сохранить")}</button>
+      ${u.token_set ? `<button class="btn" type="button" data-token-clear>${t("Удалить")}</button>` : ""}
     </form>`;
 }
 
@@ -394,7 +414,7 @@ $("content").addEventListener("change", async (e) => {
     await saveUpdateSettings({ auto: el.checked }).catch(() => {});
   } else if (el.id === "tz") {
     await guarded(() => api.post("/admin/timezone", { timezone: el.value }));
-    toast(`Часовой пояс: ${el.value}`);
+    toast(t("Часовой пояс: {tz}", { tz: el.value }));
   }
 });
 
@@ -407,13 +427,13 @@ $("content").addEventListener("submit", async (e) => {
     if (!data.token.trim()) return;
     await guarded(() => api.post("/update/token", { token: data.token.trim() })).then(() => {
       e.target.reset();
-      toast("Токен сохранён");
+      toast(t("Токен сохранён"));
       return loadUpdate();
     }).catch(() => {});
   } else if (e.target.id === "password-form") {
     await guarded(() => api.post("/admin/password", data)).then(() => {
       e.target.reset();
-      toast("Пароль изменён");
+      toast(t("Пароль изменён"));
     }).catch(() => {});
   }
 });
@@ -433,7 +453,7 @@ $("content").addEventListener("click", async (e) => {
       await loadWifi(false);
     } else if (d.wifiForget !== undefined) {
       const net = state.wifi.networks[Number(d.wifiForget)];
-      if (await confirmDialog({ title: `Забыть сеть ${net.ssid}?`, ok: "Забыть", danger: true })) {
+      if (await confirmDialog({ title: t("Забыть сеть {ssid}?", { ssid: net.ssid }), ok: t("Забыть"), danger: true })) {
         await guarded(() => api.post("/wifi/forget", { ssid: net.ssid }));
         await loadWifi(false);
       }
@@ -441,27 +461,27 @@ $("content").addEventListener("click", async (e) => {
       const net = state.wifi.networks[Number(d.wifiConnect)];
       let password = "";
       if (net.secure && !net.saved) {
-        password = prompt(`Пароль для ${net.ssid}`);
+        password = prompt(t("Пароль для {ssid}", { ssid: net.ssid }));
         if (password === null) return;
       }
       await wifiConnect({ ssid: net.ssid, password });
     } else if (d.updateRun) {
       const titles = { install: "Обновить панель сейчас?", rollback: "Вернуть прошлую версию?" };
-      if (titles[d.updateRun] && !(await confirmDialog({ title: titles[d.updateRun], ok: "Да" }))) return;
+      if (titles[d.updateRun] && !(await confirmDialog({ title: t(titles[d.updateRun]), ok: t("Да") }))) return;
       await guarded(() => api.post("/update/run", { mode: d.updateRun }));
-      state.update.status = { ...state.update.status, state: d.updateRun === "check" ? "checking" : "installing", message: "Запускаю…" };
+      state.update.status = { ...state.update.status, state: d.updateRun === "check" ? "checking" : "installing", message: "Запускаю…", message_args: {} };
       render();
       setTimeout(loadUpdate, 1000);
     } else if ("tokenClear" in d) {
-      if (await confirmDialog({ title: "Удалить токен GitHub?", ok: "Удалить", danger: true })) {
+      if (await confirmDialog({ title: t("Удалить токен GitHub?"), ok: t("Удалить"), danger: true })) {
         await guarded(() => api.post("/update/token", { token: "" }));
         await loadUpdate();
       }
     } else if (d.power) {
       const reboot = d.power === "reboot";
-      if (await confirmDialog({ title: reboot ? "Перезагрузить панель?" : "Выключить панель?", ok: reboot ? "Перезагрузить" : "Выключить", danger: !reboot })) {
+      if (await confirmDialog({ title: t(reboot ? "Перезагрузить панель?" : "Выключить панель?"), ok: t(reboot ? "Перезагрузить" : "Выключить"), danger: !reboot })) {
         await guarded(() => api.post("/power", { action: d.power }));
-        toast(reboot ? "Панель перезагружается" : "Панель выключается");
+        toast(t(reboot ? "Панель перезагружается" : "Панель выключается"));
       }
     }
   } catch {

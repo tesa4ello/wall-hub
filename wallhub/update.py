@@ -76,6 +76,8 @@ class Updates:
 
     def _write(self, **fields):
         status = self.status()
+        if "message" in fields:
+            fields.setdefault("message_args", {})
         status.update(fields)
         with open(self.status_path, "w", encoding="utf-8") as f:
             json.dump(status, f, ensure_ascii=False)

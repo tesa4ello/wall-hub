@@ -15,5 +15,18 @@
          "choices": [["left", "Слева"], ["center", "По центру"], ["right", "Справа"]]}
       ]
     }
-  ]
+  ],
+  "i18n": {
+    "en": {
+      "Система": "System",
+      "Состояние самой панели": "State of the panel itself",
+      "Статусная строка": "Status bar",
+      "Wi‑Fi, загрузка, память, температура, трафик": "Wi‑Fi, load, memory, temperature, traffic",
+      "Пункты": "Items",
+      "Выравнивание": "Alignment",
+      "Слева": "Left",
+      "По центру": "Centre",
+      "Справа": "Right"
+    }
+  }
 }

@@ -10,6 +10,8 @@ import subprocess
 import threading
 import time
 
+from .i18n import tr
+
 log = logging.getLogger(__name__)
 
 
@@ -48,14 +50,14 @@ class System:
         try:
             proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
         except FileNotFoundError:
-            raise CommandError(f"Команда {args[0]} не найдена")
+            raise CommandError(tr("Команда {name} не найдена", name=args[0]))
         except subprocess.TimeoutExpired:
-            raise CommandError("Команда не успела выполниться")
+            raise CommandError(tr("Команда не успела выполниться"))
         if proc.returncode != 0:
             message = (proc.stderr or proc.stdout).strip()
             # nmcli пишет "Error: ...", оставляем суть.
             message = message.removeprefix("Error: ")
-            raise CommandError(message or f"Код ошибки {proc.returncode}")
+            raise CommandError(message or tr("Код ошибки {code}", code=proc.returncode))
         return proc.stdout
 
     # --- Wi‑Fi -----------------------------------------------------------
@@ -120,11 +122,11 @@ class System:
 
     def wifi_connect(self, ssid, password="", hidden=False):
         if not ssid:
-            raise CommandError("Не указано имя сети")
+            raise CommandError(tr("Не указано имя сети"))
         if self.dry_run:
             time.sleep(1)
             if password == "wrong":
-                raise CommandError("Неверный пароль")
+                raise CommandError(tr("Неверный пароль"))
             self._fake_active = ssid
             self._fake_saved.add(ssid)
             return
@@ -184,7 +186,7 @@ class System:
 
     def power(self, action):
         if action not in ("reboot", "poweroff"):
-            raise CommandError("Неизвестное действие")
+            raise CommandError(tr("Неизвестное действие"))
         if self.dry_run:
             log.warning("dry-run: %s", action)
             return
@@ -205,7 +207,7 @@ class System:
 
     def set_timezone(self, tz):
         if tz not in self.timezones():
-            raise CommandError("Неизвестный часовой пояс")
+            raise CommandError(tr("Неизвестный часовой пояс"))
         if self.dry_run:
             return
         self._run(["timedatectl", "set-timezone", tz])

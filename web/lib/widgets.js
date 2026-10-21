@@ -2,6 +2,7 @@
 // поэтому в редакторе виджеты выглядят ровно так же, как на панели.
 
 import { api } from "/lib/api.js";
+import { addTranslations, t } from "/lib/i18n.js";
 
 const modules = new Map();
 
@@ -46,7 +47,7 @@ export async function mountWidget(el, w, catalog) {
     return mount(el, { options: w.options || {}, api }) || {};
   } catch (e) {
     console.error("widget failed", w.type, e);
-    el.innerHTML = `<div class="widget-error">Виджет «${meta ? meta.title : w.type}» не загрузился</div>`;
+    el.innerHTML = `<div class="widget-error">${t("Виджет «{title}» не загрузился", { title: meta ? t(meta.title) : w.type })}</div>`;
     return {};
   }
 }
@@ -76,6 +77,8 @@ export function destroyAll(instances) {
 }
 
 export async function loadCatalog() {
-  const { widgets, providers } = await api.get("/catalog");
+  const { widgets, providers, i18n } = await api.get("/catalog");
+  // Переводы модулей (названия виджетов, настроек и тексты внутри виджетов).
+  addTranslations(i18n);
   return { widgets: Object.fromEntries(widgets.map((w) => [w.id, w])), providers };
 }

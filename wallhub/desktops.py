@@ -14,6 +14,8 @@ import json
 import os
 import re
 
+from .i18n import tr
+
 MAX_DESKTOPS = 10
 MAX_WIDGETS = 40
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
@@ -52,7 +54,7 @@ def size_limits(meta, cols, rows):
 def clean_options(meta, options, providers=()):
     """Оставляет только описанные в схеме настройки, приводя типы."""
     if not isinstance(options, dict):
-        raise LayoutError("Настройки виджета должны быть объектом")
+        raise LayoutError(tr("Настройки виджета должны быть объектом"))
     result = {}
     for spec in meta.get("options", []):
         key, kind = spec["key"], spec["type"]
@@ -65,7 +67,7 @@ def clean_options(meta, options, providers=()):
             try:
                 value = float(value)
             except (TypeError, ValueError):
-                raise LayoutError(f"«{spec['title']}»: нужно число")
+                raise LayoutError(tr("«{title}»: нужно число", title=tr(spec["title"])))
             value = max(spec.get("min", value), min(spec.get("max", value), value))
             if spec.get("integer"):
                 value = int(round(value))
@@ -75,7 +77,7 @@ def clean_options(meta, options, providers=()):
                 value = spec.get("default", allowed[0])
         elif kind == "providers":
             if not isinstance(value, list):
-                raise LayoutError(f"«{spec['title']}»: нужен список")
+                raise LayoutError(tr("«{title}»: нужен список", title=tr(spec["title"])))
             value = [v for v in dict.fromkeys(value) if v in providers]
         else:
             continue
@@ -90,48 +92,51 @@ def default_options(meta, providers=()):
 def validate(desktops, catalog, cols, rows, providers=()):
     """Проверяет и нормализует список столов. Возвращает чистую копию."""
     if not isinstance(desktops, list) or not desktops:
-        raise LayoutError("Нужен хотя бы один стол")
+        raise LayoutError(tr("Нужен хотя бы один стол"))
     if len(desktops) > MAX_DESKTOPS:
-        raise LayoutError(f"Не больше {MAX_DESKTOPS} столов")
+        raise LayoutError(tr("Не больше {n} столов", n=MAX_DESKTOPS))
     seen_ids = set()
     result = []
-    for d_index, desk in enumerate(desktops, 1):
+    for desk in desktops:
         if not isinstance(desk, dict):
-            raise LayoutError("Некорректный стол")
+            raise LayoutError(tr("Некорректный стол"))
         desk_id = str(desk.get("id", ""))
         if not ID_RE.match(desk_id) or desk_id in seen_ids:
-            raise LayoutError("Некорректный идентификатор стола")
+            raise LayoutError(tr("Некорректный идентификатор стола"))
         seen_ids.add(desk_id)
-        name = str(desk.get("name") or f"Стол {d_index}").strip()[:40] or f"Стол {d_index}"
+        # Пустое имя: интерфейс покажет «Стол N» на языке панели.
+        name = str(desk.get("name") or "").strip()[:40]
         widgets = desk.get("widgets", [])
         if not isinstance(widgets, list) or len(widgets) > MAX_WIDGETS:
-            raise LayoutError(f"На столе не больше {MAX_WIDGETS} виджетов")
+            raise LayoutError(tr("На столе не больше {n} виджетов", n=MAX_WIDGETS))
         occupied = {}
         clean_widgets = []
         for w in widgets:
             if not isinstance(w, dict):
-                raise LayoutError("Некорректный виджет")
+                raise LayoutError(tr("Некорректный виджет"))
             meta = catalog.get(w.get("type"))
             if meta is None:
-                raise LayoutError(f"Неизвестный виджет {w.get('type')!r}")
+                raise LayoutError(tr("Неизвестный виджет {type}", type=repr(w.get("type"))))
             w_id = str(w.get("id", ""))
             if not ID_RE.match(w_id) or w_id in seen_ids:
-                raise LayoutError("Некорректный идентификатор виджета")
+                raise LayoutError(tr("Некорректный идентификатор виджета"))
             seen_ids.add(w_id)
             try:
                 x, y, width, height = (int(w[k]) for k in ("x", "y", "w", "h"))
             except (KeyError, TypeError, ValueError):
-                raise LayoutError("У виджета должны быть x, y, w, h")
+                raise LayoutError(tr("У виджета должны быть x, y, w, h"))
             min_w, min_h, max_w, max_h = size_limits(meta, cols, rows)
+            title = tr(meta["title"])
             if not (min_w <= width <= max_w and min_h <= height <= max_h):
-                raise LayoutError(f"«{meta['title']}»: размер от {min_w}×{min_h} до {max_w}×{max_h}")
+                raise LayoutError(tr("«{title}»: размер от {min_w}×{min_h} до {max_w}×{max_h}",
+                                      title=title, min_w=min_w, min_h=min_h, max_w=max_w, max_h=max_h))
             if x < 0 or y < 0 or x + width > cols or y + height > rows:
-                raise LayoutError(f"«{meta['title']}» выходит за край экрана")
+                raise LayoutError(tr("«{title}» выходит за край экрана", title=title))
             for cx in range(x, x + width):
                 for cy in range(y, y + height):
                     if (cx, cy) in occupied:
-                        raise LayoutError(f"«{meta['title']}» перекрывает «{occupied[(cx, cy)]}»")
-                    occupied[(cx, cy)] = meta["title"]
+                        raise LayoutError(tr("«{title}» перекрывает «{other}»", title=title, other=occupied[(cx, cy)]))
+                    occupied[(cx, cy)] = title
             clean_widgets.append({
                 "id": w_id, "type": meta["id"], "x": x, "y": y, "w": width, "h": height,
                 "options": clean_options(meta, w.get("options", {}), providers),

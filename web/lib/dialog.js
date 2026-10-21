@@ -1,5 +1,7 @@
 // Простые модальные окна и всплывающие уведомления.
 
+import { t } from "./i18n.js";
+
 // choose({title, text, options: [{label, value, kind}]}) -> Promise<value|null>
 export function choose({ title, text = "", options }) {
   return new Promise((resolve) => {
@@ -31,7 +33,7 @@ export function choose({ title, text = "", options }) {
   });
 }
 
-export async function confirmDialog({ title, text = "", ok = "OK", cancel = "Отмена", danger = false }) {
+export async function confirmDialog({ title, text = "", ok = "OK", cancel = t("Отмена"), danger = false }) {
   const result = await choose({
     title,
     text,

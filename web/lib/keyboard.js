@@ -1,6 +1,7 @@
 // Экранная клавиатура для сенсорного экрана без физической клавиатуры.
 // openKeyboard({title, value, password, minLength}) -> Promise<string|null>
 
+import { t } from "./i18n.js";
 import { icon } from "./icons.js";
 
 const LAYOUTS = {
@@ -38,15 +39,15 @@ export function openKeyboard({ title = "", value = "", password = false, minLeng
         <div class="kb-head">
           <div class="kb-title"></div>
           <div class="kb-field"><span class="kb-text"></span><span class="kb-caret"></span></div>
-          ${password ? `<button class="kb-icon" data-act="reveal" aria-label="Показать">${icon("eye")}</button>` : ""}
+          ${password ? `<button class="kb-icon" data-act="reveal" aria-label="${t("Показать")}">${icon("eye")}</button>` : ""}
         </div>
         <div class="kb-rows"></div>
         <div class="kb-row kb-bottom">
           <button class="kb-key kb-wide" data-act="layout"></button>
           <button class="kb-key kb-wide" data-act="sym"></button>
-          <button class="kb-key kb-space" data-act="space">пробел</button>
-          <button class="kb-key kb-wide kb-muted" data-act="cancel">Отмена</button>
-          <button class="kb-key kb-wide kb-primary" data-act="done">Готово</button>
+          <button class="kb-key kb-space" data-act="space">${t("пробел")}</button>
+          <button class="kb-key kb-wide kb-muted" data-act="cancel">${t("Отмена")}</button>
+          <button class="kb-key kb-wide kb-primary" data-act="done">${t("Готово")}</button>
         </div>
       </div>`;
     root.querySelector(".kb-title").textContent = title;

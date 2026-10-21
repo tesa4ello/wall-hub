@@ -41,7 +41,7 @@ DEFAULTS = {
     "desktops": [
         {
             "id": "d1",
-            "name": "Стол 1",
+            "name": "",
             "widgets": [
                 {"id": "w1", "type": "system/statusbar", "x": 0, "y": 0, "w": 16, "h": 1,
                  "options": {"items": ["wifi", "load", "memory", "temp", "traffic"], "align": "left"}},

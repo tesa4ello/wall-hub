@@ -1,10 +1,14 @@
 // Экранные настройки киоска: экран, Wi‑Fi, сеть, система.
 
 import { api } from "/lib/api.js";
+import { languages, locale, t, tn } from "/lib/i18n.js";
 import { icon, signalBars } from "/lib/icons.js";
 import { choose, confirmDialog, toast } from "/lib/dialog.js";
 import { openKeyboard } from "/lib/keyboard.js";
 import { formatTime, sunTimes } from "/lib/theme.js";
+
+// Подписи в константах ниже — исходные (русские) строки, t() переводит их
+// при отрисовке.
 
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
 const versionText = (info) => [info.version, info.build && info.build.commit && info.build.commit.slice(0, 7)].filter(Boolean).join(" · ") || "—";
@@ -41,10 +45,10 @@ const UPDATE_SCHEDULES = [
 
 function ago(seconds) {
   const min = Math.round((Date.now() / 1000 - seconds) / 60);
-  if (min < 1) return "только что";
-  if (min < 60) return `${min} мин назад`;
+  if (min < 1) return t("только что");
+  if (min < 60) return t("{n} мин назад", { n: min });
   const d = new Date(seconds * 1000);
-  return d.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(locale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 const mbps = (v) => (v == null ? "—" : v >= 100 ? Math.round(v) : v.toFixed(1));
@@ -77,11 +81,11 @@ export class Settings {
 
     root.innerHTML = `
       <div class="settings-nav">
-        <div class="settings-heading">Настройки</div>
-        ${SECTIONS.map((s) => `<button class="nav-item" data-section="${s.id}">${icon(s.icon)}<span>${s.title}</span></button>`).join("")}
+        <div class="settings-heading">${t("Настройки")}</div>
+        ${SECTIONS.map((s) => `<button class="nav-item" data-section="${s.id}">${icon(s.icon)}<span>${t(s.title)}</span></button>`).join("")}
       </div>
       <div class="settings-body">
-        <button class="settings-close" aria-label="Закрыть">${icon("close")}</button>
+        <button class="settings-close" aria-label="${t("Закрыть")}">${icon("close")}</button>
         <div class="settings-content"></div>
       </div>`;
     this.content = root.querySelector(".settings-content");
@@ -169,10 +173,10 @@ export class Settings {
         <button class="btn" data-time="${key}" data-delta="30">+</button>
       </div>`;
     const themeChoice = [
-      [{ theme_mode: "manual", theme: "light" }, icon("sun") + "Светлая", ui.theme_mode === "manual" && ui.theme === "light"],
-      [{ theme_mode: "manual", theme: "dark" }, icon("moon") + "Тёмная", ui.theme_mode === "manual" && ui.theme === "dark"],
-      [{ theme_mode: "schedule" }, "По времени", ui.theme_mode === "schedule"],
-      [{ theme_mode: "sun" }, "По солнцу", ui.theme_mode === "sun"],
+      [{ theme_mode: "manual", theme: "light" }, icon("sun") + t("Светлая"), ui.theme_mode === "manual" && ui.theme === "light"],
+      [{ theme_mode: "manual", theme: "dark" }, icon("moon") + t("Тёмная"), ui.theme_mode === "manual" && ui.theme === "dark"],
+      [{ theme_mode: "schedule" }, t("По времени"), ui.theme_mode === "schedule"],
+      [{ theme_mode: "sun" }, t("По солнцу"), ui.theme_mode === "sun"],
     ];
     // Границы ночи нужны и для темы, и для ночного приглушения.
     const showSchedule = ui.theme_mode === "schedule" || (ui.theme_mode === "manual" && ui.night_dim > 0);
@@ -180,46 +184,52 @@ export class Settings {
     if (ui.theme_mode === "sun") {
       const sun = sunTimes(new Date(), ui.latitude, ui.longitude);
       const text = sun.polar
-        ? (sun.polar === "day" ? "Полярный день" : "Полярная ночь")
-        : `Восход ${formatTime(sun.sunrise)} · закат ${formatTime(sun.sunset)}`;
+        ? t(sun.polar === "day" ? "Полярный день" : "Полярная ночь")
+        : t("Восход {sunrise} · закат {sunset}", { sunrise: formatTime(sun.sunrise), sunset: formatTime(sun.sunset) });
       sunRow = `
         <div class="row">
-          <div class="row-label">Сегодня<div class="row-hint">Координаты ${ui.latitude.toFixed(2)}, ${ui.longitude.toFixed(2)} задаются в админке</div></div>
+          <div class="row-label">${t("Сегодня")}<div class="row-hint">${t("Координаты {lat}, {lon} задаются в админке", { lat: ui.latitude.toFixed(2), lon: ui.longitude.toFixed(2) })}</div></div>
           <div class="row-value">${text}</div>
         </div>`;
     }
     return `
-      <h2>Экран</h2>
+      <h2>${t("Экран")}</h2>
       <div class="card">
         <div class="row">
-          <div class="row-label">Тема</div>
+          <div class="row-label">${t("Язык")}</div>
+          ${seg("language", languages().map((l) => [l.code, l.name]))}
+        </div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div class="row-label">${t("Тема")}</div>
           <div class="segmented">${themeChoice
             .map(([patch, label, on]) => `<button data-patch='${JSON.stringify(patch)}' aria-pressed="${on}">${label}</button>`)
             .join("")}</div>
         </div>
         ${sunRow}
         ${showSchedule ? `
-          <div class="row"><div class="row-label">День с</div>${timeStepper("day_start")}</div>
-          <div class="row"><div class="row-label">Ночь с</div>${timeStepper("night_start")}</div>` : ""}
+          <div class="row"><div class="row-label">${t("День с")}</div>${timeStepper("day_start")}</div>
+          <div class="row"><div class="row-label">${t("Ночь с")}</div>${timeStepper("night_start")}</div>` : ""}
       </div>
       <div class="card">
         <div class="row">
-          <div class="row-label">Приглушать ночью<div class="row-hint">${ui.theme_mode === "sun" ? "От заката до восхода" : "По времени дня и ночи"}</div></div>
-          ${seg("night_dim", NIGHT_DIM.map((l) => [l, l ? `${l}%` : "Нет"]))}
+          <div class="row-label">${t("Приглушать ночью")}<div class="row-hint">${t(ui.theme_mode === "sun" ? "От заката до восхода" : "По времени дня и ночи")}</div></div>
+          ${seg("night_dim", NIGHT_DIM.map((l) => [l, l ? `${l}%` : t("Нет")]))}
         </div>
       </div>
       <div class="card">
         <div class="row">
-          <div class="row-label">Затемнять при простое</div>
-          ${seg("dim_after_min", DIM_AFTER.map((m) => [m, m ? `${m} мин` : "Нет"]))}
+          <div class="row-label">${t("Затемнять при простое")}</div>
+          ${seg("dim_after_min", DIM_AFTER.map((m) => [m, m ? t("{n} мин", { n: m }) : t("Нет")]))}
         </div>
         <div class="row ${ui.dim_after_min ? "" : "row-disabled"}">
-          <div class="row-label">Сила затемнения</div>
+          <div class="row-label">${t("Сила затемнения")}</div>
           ${seg("dim_level", DIM_LEVEL.map((l) => [l, `${l}%`]))}
         </div>
         <div class="row">
-          <div class="row-label">Гасить экран<div class="row-hint">Выключать подсветку при долгом простое</div></div>
-          ${seg("blank_after_min", BLANK_AFTER.map((m) => [m, m ? `${m} мин` : "Нет"]))}
+          <div class="row-label">${t("Гасить экран")}<div class="row-hint">${t("Выключать подсветку при долгом простое")}</div></div>
+          ${seg("blank_after_min", BLANK_AFTER.map((m) => [m, m ? t("{n} мин", { n: m }) : t("Нет")]))}
         </div>
       </div>`;
   }
@@ -245,18 +255,18 @@ export class Settings {
   renderWifi() {
     const w = this.wifi;
     let list;
-    if (!w || (this.wifiScanning && !(w.networks || []).length)) list = `<div class="empty">Ищу сети…</div>`;
+    if (!w || (this.wifiScanning && !(w.networks || []).length)) list = `<div class="empty">${t("Ищу сети…")}</div>`;
     else if (w.error) list = `<div class="empty">${esc(w.error)}</div>`;
-    else if (!w.available) list = `<div class="empty">Wi‑Fi адаптер не найден</div>`;
-    else if (!w.radio) list = `<div class="empty">Wi‑Fi выключен</div>`;
-    else if (!w.networks.length) list = `<div class="empty">Сети не найдены</div>`;
+    else if (!w.available) list = `<div class="empty">${t("Wi‑Fi адаптер не найден")}</div>`;
+    else if (!w.radio) list = `<div class="empty">${t("Wi‑Fi выключен")}</div>`;
+    else if (!w.networks.length) list = `<div class="empty">${t("Сети не найдены")}</div>`;
     else {
       list = `<div class="card list">${w.networks
         .map((n, i) => `
           <button class="net ${n.active ? "net-active" : ""}" data-net="${i}">
             ${signalBars(n.signal)}
             <span class="net-name">${esc(n.ssid)}</span>
-            <span class="net-meta">${n.active ? "Подключено" : n.saved ? "Сохранена" : ""}</span>
+            <span class="net-meta">${n.active ? t("Подключено") : n.saved ? t("Сохранена") : ""}</span>
             ${n.secure ? icon("lock", "icon net-lock") : ""}
           </button>`)
         .join("")}</div>`;
@@ -265,17 +275,18 @@ export class Settings {
     const setup = this.setup ? `
       <div class="setup">
         <div>
-          <div class="setup-title">Добро пожаловать!</div>
-          <div class="setup-text">Выберите сеть Wi‑Fi, к которой подключить панель. Это можно сделать и позже в настройках.</div>
+          <div class="setup-title">${t("Добро пожаловать!")}</div>
+          <div class="setup-text">${t("Выберите сеть Wi‑Fi, к которой подключить панель. Это можно сделать и позже в настройках.")}</div>
         </div>
-        <button class="btn" data-setup-skip>Пропустить</button>
+        <div class="segmented">${languages().map((l) => `<button data-set="language" data-value='${JSON.stringify(l.code)}' aria-pressed="${this.config.ui.language === l.code}">${esc(l.name)}</button>`).join("")}</div>
+        <button class="btn" data-setup-skip>${t("Пропустить")}</button>
       </div>` : "";
     return `
       ${setup}
       <h2>Wi‑Fi</h2>
       <div class="card">
         <div class="row">
-          <div class="row-label">Wi‑Fi${w && w.connection ? `<div class="row-hint">Подключено к ${esc(w.connection)}</div>` : ""}</div>
+          <div class="row-label">Wi‑Fi${w && w.connection ? `<div class="row-hint">${t("Подключено к {ssid}", { ssid: esc(w.connection) })}</div>` : ""}</div>
           ${w && !w.error
             ? `<button class="switch" data-wifi-radio aria-checked="${!!w.radio}" ${w.available ? "" : "disabled"}></button>`
             : `<span class="row-value">…</span>`}
@@ -283,9 +294,9 @@ export class Settings {
       </div>
       ${busy}
       <div class="list-head">
-        <span>Доступные сети${this.wifiScanning && w && (w.networks || []).length ? " · ищу…" : ""}</span>
+        <span>${t("Доступные сети")}${this.wifiScanning && w && (w.networks || []).length ? ` · ${t("ищу…")}` : ""}</span>
         <span class="list-actions">
-          <button class="btn btn-small" data-wifi-hidden>Скрытая сеть</button>
+          <button class="btn btn-small" data-wifi-hidden>${t("Скрытая сеть")}</button>
           <button class="btn btn-small" data-wifi-rescan>${icon("refresh")}</button>
         </span>
       </div>
@@ -311,44 +322,44 @@ export class Settings {
     if (net.active) {
       const action = await choose({
         title: net.ssid,
-        text: "Сеть подключена",
+        text: t("Сеть подключена"),
         options: [
-          { label: "Отмена", value: null },
-          { label: "Забыть", value: "forget", kind: "danger" },
-          { label: "Отключиться", value: "disconnect", kind: "primary" },
+          { label: t("Отмена"), value: null },
+          { label: t("Забыть"), value: "forget", kind: "danger" },
+          { label: t("Отключиться"), value: "disconnect", kind: "primary" },
         ],
       });
-      if (action === "disconnect") await this.wifiAction("Отключаюсь…", () => api.post("/wifi/disconnect"));
-      if (action === "forget") await this.wifiAction("Удаляю сеть…", () => api.post("/wifi/forget", { ssid: net.ssid }));
+      if (action === "disconnect") await this.wifiAction(t("Отключаюсь…"), () => api.post("/wifi/disconnect"));
+      if (action === "forget") await this.wifiAction(t("Удаляю сеть…"), () => api.post("/wifi/forget", { ssid: net.ssid }));
       return;
     }
     if (net.saved) {
       const action = await choose({
         title: net.ssid,
-        text: "Сеть сохранена",
+        text: t("Сеть сохранена"),
         options: [
-          { label: "Отмена", value: null },
-          { label: "Забыть", value: "forget", kind: "danger" },
-          { label: "Подключиться", value: "connect", kind: "primary" },
+          { label: t("Отмена"), value: null },
+          { label: t("Забыть"), value: "forget", kind: "danger" },
+          { label: t("Подключиться"), value: "connect", kind: "primary" },
         ],
       });
-      if (action === "forget") await this.wifiAction("Удаляю сеть…", () => api.post("/wifi/forget", { ssid: net.ssid }));
+      if (action === "forget") await this.wifiAction(t("Удаляю сеть…"), () => api.post("/wifi/forget", { ssid: net.ssid }));
       if (action !== "connect") return;
-      const ok = await this.wifiAction(`Подключаюсь к ${net.ssid}…`, () => api.post("/wifi/connect", { ssid: net.ssid }));
+      const ok = await this.wifiAction(t("Подключаюсь к {ssid}…", { ssid: net.ssid }), () => api.post("/wifi/connect", { ssid: net.ssid }));
       if (ok) this.connected(net.ssid);
       return;
     }
     let password = "";
     if (net.secure) {
-      password = await openKeyboard({ title: `Пароль для ${net.ssid}`, password: true, minLength: 8 });
+      password = await openKeyboard({ title: t("Пароль для {ssid}", { ssid: net.ssid }), password: true, minLength: 8 });
       if (password === null) return;
     }
-    const ok = await this.wifiAction(`Подключаюсь к ${net.ssid}…`, () => api.post("/wifi/connect", { ssid: net.ssid, password }));
+    const ok = await this.wifiAction(t("Подключаюсь к {ssid}…", { ssid: net.ssid }), () => api.post("/wifi/connect", { ssid: net.ssid, password }));
     if (ok) this.connected(net.ssid);
   }
 
   connected(ssid) {
-    toast(`Подключено к ${ssid}`);
+    toast(t("Подключено к {ssid}", { ssid }));
     // Бэкенд сам отмечает первый запуск пройденным; окно настроек закрываем.
     if (this.setup) {
       this.setup = false;
@@ -357,11 +368,11 @@ export class Settings {
   }
 
   async onHiddenNetwork() {
-    const ssid = await openKeyboard({ title: "Имя сети", minLength: 1 });
+    const ssid = await openKeyboard({ title: t("Имя сети"), minLength: 1 });
     if (!ssid) return;
-    const password = await openKeyboard({ title: `Пароль для ${ssid} (пусто — без пароля)`, password: true });
+    const password = await openKeyboard({ title: t("Пароль для {ssid} (пусто — без пароля)", { ssid }), password: true });
     if (password === null) return;
-    const ok = await this.wifiAction(`Подключаюсь к ${ssid}…`, () => api.post("/wifi/connect", { ssid, password, hidden: true }));
+    const ok = await this.wifiAction(t("Подключаюсь к {ssid}…", { ssid }), () => api.post("/wifi/connect", { ssid, password, hidden: true }));
     if (ok) this.connected(ssid);
   }
 
@@ -414,47 +425,47 @@ export class Settings {
       ? net.interfaces.map((i) => {
           const kind = IFACE_TYPES[i.type] || i.name;
           const label = i.connection ? `${kind} · ${esc(i.connection)}` : kind;
-          const value = i.addresses.length ? i.addresses.map(esc).join("<br>") : "не подключено";
+          const value = i.addresses.length ? i.addresses.map(esc).join("<br>") : t("не подключено");
           return `<div class="row"><div class="row-label">${label}<div class="row-hint">${esc(i.name)}</div></div>
             <div class="row-value ${i.addresses.length ? "mono" : ""}">${value}</div></div>`;
         }).join("")
-      : `<div class="row"><div class="row-label">Загрузка…</div></div>`;
+      : `<div class="row"><div class="row-label">${t("Загрузка…")}</div></div>`;
     const extra = net ? `
-        <div class="row"><div class="row-label">Шлюз</div><div class="row-value mono">${esc(net.gateway || "—")}</div></div>
+        <div class="row"><div class="row-label">${t("Шлюз")}</div><div class="row-value mono">${esc(net.gateway || "—")}</div></div>
         <div class="row"><div class="row-label">DNS</div><div class="row-value mono">${net.dns.length ? net.dns.map(esc).join("<br>") : "—"}</div></div>` : "";
 
     return `
-      <h2>Сеть</h2>
+      <h2>${t("Сеть")}</h2>
       <div class="card">${ifaces}${extra}</div>
-      <div class="list-head"><span>Внешний адрес</span>
+      <div class="list-head"><span>${t("Внешний адрес")}</span>
         <div class="list-actions">
-          <button class="btn btn-small" data-external-refresh ${this.externalBusy ? "disabled" : ""}>${icon("refresh")}Обновить</button>
+          <button class="btn btn-small" data-external-refresh ${this.externalBusy ? "disabled" : ""}>${icon("refresh")}${t("Обновить")}</button>
         </div>
       </div>
       ${this.renderExternal()}
-      <div class="list-head"><span>Скорость интернета</span></div>
+      <div class="list-head"><span>${t("Скорость интернета")}</span></div>
       ${this.renderSpeed()}`;
   }
 
   renderExternal() {
     const ext = this.external;
-    if (!ext) return `<div class="empty">${this.externalBusy ? "Спрашиваю сервисы…" : "Нет данных"}</div>`;
-    const failed = ext.failed.length ? `<div class="row-hint">Не ответили: ${ext.failed.map(esc).join(", ")}</div>` : "";
+    if (!ext) return `<div class="empty">${t(this.externalBusy ? "Спрашиваю сервисы…" : "Нет данных")}</div>`;
+    const failed = ext.failed.length ? `<div class="row-hint">${t("Не ответили: {services}", { services: ext.failed.map((s) => esc(t(s))).join(", ") })}</div>` : "";
     if (!ext.addresses.length) {
-      return `<div class="card"><div class="row"><div class="row-label">Ни один сервис не ответил${failed}</div></div></div>`;
+      return `<div class="card"><div class="row"><div class="row-label">${t("Ни один сервис не ответил")}${failed}</div></div></div>`;
     }
     if (ext.addresses.length === 1) {
       const a = ext.addresses[0];
       return `<div class="card"><div class="row">
-        <div class="row-label">Одинаковый у всех сервисов<div class="row-hint">${a.services.map(esc).join(", ")}</div>${failed}</div>
+        <div class="row-label">${t("Одинаковый у всех сервисов")}<div class="row-hint">${a.services.map((s) => esc(t(s))).join(", ")}</div>${failed}</div>
         <div class="row-value mono big">${esc(a.ip)}</div>
       </div></div>`;
     }
     // Адреса разошлись: показываем, какой сервис что увидел.
     return `<div class="card">
-      <div class="row"><div class="row-label ext-warn">Сервисы видят разные адреса${failed}</div></div>
+      <div class="row"><div class="row-label ext-warn">${t("Сервисы видят разные адреса")}${failed}</div></div>
       ${ext.addresses.map((a) => `<div class="row">
-        <div class="row-label">${a.services.map(esc).join(", ")}</div>
+        <div class="row-label">${a.services.map((s) => esc(t(s))).join(", ")}</div>
         <div class="row-value mono big">${esc(a.ip)}</div>
       </div>`).join("")}
     </div>`;
@@ -465,22 +476,22 @@ export class Settings {
     return `<div class="card">${SPEED_PROVIDERS.map(([id, title]) => {
       const r = sp.results[id];
       const running = sp.running === id;
-      let hint = "Ещё не запускался";
+      let hint = t("Ещё не запускался");
       let value = "";
-      if (running) hint = `<span class="speed-phase">${esc(sp.phase || "Идёт тест…")}</span>`;
-      else if (r && r.error) hint = `<span class="speed-error">${esc(r.error)}</span> · ${ago(r.at)}`;
+      if (running) hint = `<span class="speed-phase">${esc(t(sp.phase || "Идёт тест…"))}</span>`;
+      else if (r && r.error) hint = `<span class="speed-error">${esc(t(r.error, r.error_args))}</span> · ${ago(r.at)}`;
       else if (r) {
         hint = [r.server && esc(r.server), ago(r.at)].filter(Boolean).join(" · ");
         value = `<div class="speed">
           <span>${icon("down")}<b>${mbps(r.download)}</b></span>
           <span>${icon("up")}<b>${mbps(r.upload)}</b></span>
-          <small>Мбит/с${r.ping != null ? ` · ${Math.round(r.ping)} мс` : ""}</small>
+          <small>${t("Мбит/с")}${r.ping != null ? ` · ${t("{n} мс", { n: Math.round(r.ping) })}` : ""}</small>
         </div>`;
       }
       return `<div class="row">
-        <div class="row-label">${title}<div class="row-hint">${hint}</div></div>
+        <div class="row-label">${t(title)}<div class="row-hint">${hint}</div></div>
         <div class="speed-cell">${value}
-          <button class="btn btn-small" data-speedtest="${id}" ${sp.running ? "disabled" : ""}>${running ? "Идёт…" : "Запустить"}</button>
+          <button class="btn btn-small" data-speedtest="${id}" ${sp.running ? "disabled" : ""}>${t(running ? "Идёт…" : "Запустить")}</button>
         </div>
       </div>`;
     }).join("")}</div>`;
@@ -524,12 +535,12 @@ export class Settings {
 
   async runUpdate(mode) {
     const confirms = {
-      install: { title: "Обновить панель?", text: "Проверю новую версию и, если она есть, поставлю. Экран перезагрузится сам.", ok: "Обновить" },
-      rollback: { title: "Вернуть прошлую версию?", text: "Экран перезагрузится сам.", ok: "Вернуть" },
+      install: { title: t("Обновить панель?"), text: t("Проверю новую версию и, если она есть, поставлю. Экран перезагрузится сам."), ok: t("Обновить") },
+      rollback: { title: t("Вернуть прошлую версию?"), text: t("Экран перезагрузится сам."), ok: t("Вернуть") },
     };
     if (confirms[mode] && !(await confirmDialog(confirms[mode]))) return;
     await api.post("/update/run", { mode });
-    this.update.status = { ...this.update.status, state: mode === "check" ? "checking" : "installing", message: "Запускаю…" };
+    this.update.status = { ...this.update.status, state: mode === "check" ? "checking" : "installing", message: "Запускаю…", message_args: {} };
     this.render();
     this.updateTimer = setTimeout(() => this.loadUpdate(), 1000);
   }
@@ -543,50 +554,50 @@ export class Settings {
     const latest = st.latest || {};
     const seg = (key, items) =>
       `<div class="segmented">${items
-        .map(([value, label]) => `<button data-upd-set="${key}" data-value='${JSON.stringify(value)}' aria-pressed="${set[key] === value}">${label}</button>`)
+        .map(([value, label]) => `<button data-upd-set="${key}" data-value='${JSON.stringify(value)}' aria-pressed="${set[key] === value}">${t(label)}</button>`)
         .join("")}</div>`;
     const newVersion = [latest.version, latest.commit && latest.commit.slice(0, 7)].filter(Boolean).join(" · ");
     const banner = st.state === "installing"
-      ? `<div class="update-banner">${icon("refresh")}<div><div class="update-banner-title">Устанавливаю обновление…</div>
-          <div class="update-banner-text">Экран перезагрузится сам, когда новая версия запустится</div></div></div>`
+      ? `<div class="update-banner">${icon("refresh")}<div><div class="update-banner-title">${t("Устанавливаю обновление…")}</div>
+          <div class="update-banner-text">${t("Экран перезагрузится сам, когда новая версия запустится")}</div></div></div>`
       : u.available
         ? `<div class="update-banner">${icon("refresh")}<div>
-            <div class="update-banner-title">Доступна новая версия ${esc(newVersion)}</div>
+            <div class="update-banner-title">${t("Доступна новая версия {version}", { version: esc(newVersion) })}</div>
             <div class="update-banner-text">${esc(latest.title || "")}</div></div>
-            <button class="btn" data-update-run="install">Обновить</button></div>`
+            <button class="btn" data-update-run="install">${t("Обновить")}</button></div>`
         : "";
-    const checked = st.checked_at ? ` · проверено ${ago(Date.parse(st.checked_at) / 1000)}` : "";
+    const checked = st.checked_at ? ` · ${t("проверено {ago}", { ago: ago(Date.parse(st.checked_at) / 1000) })}` : "";
     const failed = st.result === "failed" && !busy;
     return `
       ${banner}
       <div class="card">
         <div class="row">
-          <div class="row-label">Версия
-            <div class="row-hint ${failed ? "speed-error" : ""}">${esc(st.message || "Ещё не проверялось")}${failed ? "" : checked}</div>
+          <div class="row-label">${t("Версия")}
+            <div class="row-hint ${failed ? "speed-error" : ""}">${esc(t(st.message || "Ещё не проверялось", st.message_args))}${failed ? "" : checked}</div>
           </div>
           <div class="speed-cell">
             <div class="row-value mono">${esc(versionText(this.info || {}))}</div>
-            <button class="btn btn-small" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")}${st.state === "checking" ? "Проверяю…" : "Проверить"}</button>
+            <button class="btn btn-small" data-update-run="check" ${busy ? "disabled" : ""}>${icon("refresh")}${t(st.state === "checking" ? "Проверяю…" : "Проверить")}</button>
           </div>
         </div>
         <div class="row">
-          <div class="row-label">Обновление вручную<div class="row-hint">Скачать и поставить последнюю версию канала прямо сейчас</div></div>
+          <div class="row-label">${t("Обновление вручную")}<div class="row-hint">${t("Скачать и поставить последнюю версию канала прямо сейчас")}</div></div>
           <div class="list-actions">
-            <button class="btn btn-small" data-update-run="rollback" ${busy ? "disabled" : ""}>Вернуть прошлую</button>
-            <button class="btn btn-small btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>${st.state === "installing" ? "Обновляю…" : "Обновить"}</button>
+            <button class="btn btn-small" data-update-run="rollback" ${busy ? "disabled" : ""}>${t("Вернуть прошлую")}</button>
+            <button class="btn btn-small btn-primary" data-update-run="install" ${busy ? "disabled" : ""}>${t(st.state === "installing" ? "Обновляю…" : "Обновить")}</button>
           </div>
         </div>
         <div class="row">
-          <div class="row-label">Канал<div class="row-hint">Разработка — свежие, но менее проверенные версии</div></div>
+          <div class="row-label">${t("Канал")}<div class="row-hint">${t("Разработка — свежие, но менее проверенные версии")}</div></div>
           ${seg("channel", UPDATE_CHANNELS)}
         </div>
         <div class="row">
-          <div class="row-label">Проверять обновления</div>
+          <div class="row-label">${t("Проверять обновления")}</div>
           ${seg("schedule", UPDATE_SCHEDULES)}
         </div>
         ${set.schedule === "daily" ? `
         <div class="row">
-          <div class="row-label">Время проверки</div>
+          <div class="row-label">${t("Время проверки")}</div>
           <div class="stepper">
             <button class="btn" data-upd-time="-30">−</button>
             <span class="stepper-value">${esc(set.time)}</span>
@@ -594,7 +605,7 @@ export class Settings {
           </div>
         </div>` : ""}
         <div class="row ${set.schedule === "off" ? "row-disabled" : ""}">
-          <div class="row-label">Ставить автоматически<div class="row-hint">Иначе только показывать, что вышла новая версия</div></div>
+          <div class="row-label">${t("Ставить автоматически")}<div class="row-hint">${t("Иначе только показывать, что вышла новая версия")}</div></div>
           <button class="switch" data-upd-auto aria-checked="${set.auto}"></button>
         </div>
       </div>`;
@@ -605,42 +616,42 @@ export class Settings {
     const admin = this.net && this.net.admin;
     const passwordSet = this.config.admin.password_set;
     return `
-      <h2>Система</h2>
+      <h2>${t("Система")}</h2>
       ${this.renderUpdate()}
       <div class="card">
-        <div class="row"><div class="row-label">Имя устройства</div><div class="row-value">${esc(info.hostname || "—")}</div></div>
-        ${this.update ? "" : `<div class="row"><div class="row-label">Версия</div><div class="row-value">${esc(versionText(info))}</div></div>`}
+        <div class="row"><div class="row-label">${t("Имя устройства")}</div><div class="row-value">${esc(info.hostname || "—")}</div></div>
+        ${this.update ? "" : `<div class="row"><div class="row-label">${t("Версия")}</div><div class="row-value">${esc(versionText(info))}</div></div>`}
       </div>
       <div class="card">
         <div class="row">
-          <div class="row-label">${icon("admin")} Админка
+          <div class="row-label">${icon("admin")} ${t("Админка")}
             ${admin ? `<div class="admin-url mono">${esc(admin.url)}</div>` : ""}
             <div class="row-hint">${admin
-              ? "Откройте адрес или наведите камеру телефона, подключённого к той же сети"
-              : "Появится после подключения к сети"}</div>
-            ${admin && !passwordSet ? `<div class="row-hint">Пароль ещё не задан: его попросят придумать при первом входе</div>` : ""}
+              ? t("Откройте адрес или наведите камеру телефона, подключённого к той же сети")
+              : t("Появится после подключения к сети")}</div>
+            ${admin && !passwordSet ? `<div class="row-hint">${t("Пароль ещё не задан: его попросят придумать при первом входе")}</div>` : ""}
           </div>
           ${admin && admin.qr ? `<div class="qr">${admin.qr}</div>` : ""}
         </div>
       </div>
       <div class="power">
-        <button class="btn power-btn" data-power="reboot">${icon("reboot")}Перезагрузить</button>
-        <button class="btn btn-danger power-btn" data-power="poweroff">${icon("power")}Выключить</button>
+        <button class="btn power-btn" data-power="reboot">${icon("reboot")}${t("Перезагрузить")}</button>
+        <button class="btn btn-danger power-btn" data-power="poweroff">${icon("power")}${t("Выключить")}</button>
       </div>`;
   }
 
   async onPower(action) {
     const reboot = action === "reboot";
     const ok = await confirmDialog({
-      title: reboot ? "Перезагрузить панель?" : "Выключить панель?",
-      text: reboot ? "Панель будет недоступна около минуты." : "Включить её снова можно будет только кнопкой или по питанию.",
-      ok: reboot ? "Перезагрузить" : "Выключить",
+      title: t(reboot ? "Перезагрузить панель?" : "Выключить панель?"),
+      text: t(reboot ? "Панель будет недоступна около минуты." : "Включить её снова можно будет только кнопкой или по питанию."),
+      ok: t(reboot ? "Перезагрузить" : "Выключить"),
       danger: !reboot,
     });
     if (!ok) return;
     try {
       await api.post("/power", { action });
-      toast(reboot ? "Перезагружаюсь…" : "Выключаюсь…");
+      toast(t(reboot ? "Перезагружаюсь…" : "Выключаюсь…"));
     } catch (e) {
       toast(e.message, "error");
     }
@@ -671,7 +682,7 @@ export class Settings {
         await this.onHiddenNetwork();
       } else if ("wifiRadio" in b.dataset) {
         const enable = !this.wifi.radio;
-        await this.wifiAction(enable ? "Включаю Wi‑Fi…" : "Выключаю Wi‑Fi…", () => api.post("/wifi/radio", { enabled: enable }));
+        await this.wifiAction(t(enable ? "Включаю Wi‑Fi…" : "Выключаю Wi‑Fi…"), () => api.post("/wifi/radio", { enabled: enable }));
       } else if (b.dataset.updSet) {
         await this.saveUpdate({ [b.dataset.updSet]: JSON.parse(b.dataset.value) });
       } else if (b.dataset.updTime) {
