@@ -10,6 +10,7 @@ PROFILE="$HOME/.config/chromium"
 xset s off
 xset s noblank
 xset -dpms
+xsetroot -solid black
 
 # Ждём, пока поднимется бэкенд, чтобы не показывать страницу ошибки.
 i=0
@@ -50,6 +51,7 @@ while true; do
         --overscroll-history-navigation=0 \
         --touch-events=enabled \
         --hide-scrollbars \
+        --default-background-color=ff0c0e11 \
         --autoplay-policy=no-user-gesture-required \
         >/dev/null 2>&1
     sleep 2
