@@ -669,5 +669,10 @@
   "Выключить модуль «{title}»?": "Turn off module “{title}”?",
   "Его серверная часть остановится, виджеты останутся на столах неактивными. Настройки сохранятся.": "Its server part will stop and its widgets will stay on the desks, inactive. Settings are kept.",
   "Модуль «{title}» включён": "Module “{title}” turned on",
-  "Модуль «{title}» выключен": "Module “{title}” turned off"
+  "Модуль «{title}» выключен": "Module “{title}” turned off",
+  "Известные сети": "Known networks",
+  "Рядом": "In range",
+  "Не в зоне": "Out of range",
+  "Панель перестанет к ней подключаться. Чтобы вернуться, понадобится пароль.": "The panel will stop connecting to it. You will need the password to connect again.",
+  "Сеть {ssid} не сохранена": "Network {ssid} is not saved"
 }
