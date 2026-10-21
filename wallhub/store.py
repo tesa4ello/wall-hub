@@ -225,7 +225,7 @@ class Store:
                     "description": m.get("description", ""), "i18n": m.get("i18n", {}),
                     "widgets": m.get("widgets", []), "backend": bool(m.get("backend")),
                     "catalog": cat["id"], "builtin": m["id"] in self.builtin_ids,
-                    "compatible": compatible(m.get("core")) and not m.get("backend"),
+                    "compatible": compatible(m.get("core")),
                     "installed": inst.get("version") if inst else None,
                     "update": bool(inst and version_key(m.get("version")) > version_key(inst.get("version"))),
                 })

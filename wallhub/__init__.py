@@ -2,10 +2,10 @@
 
 import os
 
-__version__ = "0.2.9"
+__version__ = "0.3.0"
 # Версия API ядра для модулей (поле core в module.json). Мажорная часть
 # меняется, когда старые модули перестают работать.
-CORE_API = "1.0"
+CORE_API = "1.1"
 
 
 def _read_build():
