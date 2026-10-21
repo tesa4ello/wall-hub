@@ -166,6 +166,82 @@ class ModulesTest(unittest.TestCase):
             self.assertIsNone(reg.static_file("quotes", "backend/__init__.py"))
 
 
+class StoreTest(unittest.TestCase):
+    """Установка и удаление модуля из каталога (GitHub подменён)."""
+
+    def setUp(self):
+        import io
+        import tarfile
+        from wallhub.store import Store
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = Config(os.path.join(self.tmp.name, "config.json"))
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            files = {
+                "modules/hello/module.json": json.dumps({"id": "hello", "version": "1.2.0", "core": "1",
+                                                         "title": "Привет", "widgets": []}),
+                "modules/hello/module.js": "export const widgets = {};",
+                "modules/other/module.json": "{}",
+            }
+            for name, text in files.items():
+                data = text.encode()
+                info = tarfile.TarInfo("repo-abc/" + name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+        archive = buf.getvalue()
+        catalog = {"modules": [{"id": "hello", "version": "1.2.0", "core": "1", "title": "Привет"},
+                               {"id": "clock", "version": "9.0.0", "core": "1", "title": "Часы"}]}
+
+        def fetch(url, accept=None, limit=None):
+            if "/commits/" in url:
+                return json.dumps({"sha": "abcdef1234567"}).encode()
+            if "catalog.json" in url:
+                return json.dumps(catalog).encode()
+            if "/tarball/" in url:
+                return archive
+            raise AssertionError(url)
+
+        self.changed = 0
+        self.store = Store(self.config, os.path.join(self.tmp.name, "modules"), "/nonexistent", ["clock"],
+                           on_change=self.bump, fetch=fetch)
+
+    def bump(self):
+        self.changed += 1
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_install_and_remove(self):
+        from wallhub.modules import Registry
+        rows = {m["id"]: m for m in self.store.listing()["modules"]}
+        self.assertTrue(rows["clock"]["builtin"])
+        self.store.install("hello")
+        reg = Registry(os.path.join(WEB, "modules"), installed_dir=os.path.join(self.tmp.name, "modules"))
+        self.assertEqual(reg.loaded()["hello"].meta["version"], "1.2.0")
+        self.assertTrue(reg.static_file("hello", "module.js"))
+        self.assertEqual(self.store.installed()["hello"]["commit"], "abcdef1234567")
+        desks = self.config.get("desktops")
+        desks[0]["widgets"].append({"id": "h1", "type": "hello/x", "x": 0, "y": 0, "w": 1, "h": 1, "options": {}})
+        self.config.update({"desktops": desks})
+        self.store.remove("hello")
+        self.assertNotIn("hello", reg.loaded())
+        self.assertFalse(any(w["type"] == "hello/x" for w in self.config.get("desktops")[0]["widgets"]))
+        self.assertEqual(self.changed, 2)
+
+    def test_builtin_is_not_installed(self):
+        from wallhub.store import StoreError
+        with self.assertRaises(StoreError):
+            self.store.install("clock")
+
+    def test_parse_repo(self):
+        from wallhub.store import StoreError, parse_repo
+        self.assertEqual(parse_repo("https://github.com/tesa4ello/wallhub-modules.git"), "tesa4ello/wallhub-modules")
+        self.assertEqual(parse_repo("tesa4ello/wallhub-modules"), "tesa4ello/wallhub-modules")
+        with self.assertRaises(StoreError):
+            parse_repo("https://example.com/x")
+
+
 class DesktopsTest(unittest.TestCase):
     def setUp(self):
         from wallhub.modules import Registry

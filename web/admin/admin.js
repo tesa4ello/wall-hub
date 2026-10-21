@@ -9,6 +9,7 @@ import { confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { loadCatalog } from "/lib/widgets.js";
 import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
+import { StorePanel } from "/admin/store.js";
 
 const $ = (id) => document.getElementById(id);
 // «0.1.1 · a1b2c3d»: номер версии и коммит сборки (его пишет установщик).
@@ -18,6 +19,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const TABS = [
   { id: "display", title: "Экран", icon: "display" },
   { id: "desktops", title: "Столы", icon: "grid" },
+  { id: "modules", title: "Модули", icon: "plus" },
   { id: "wifi", title: "Wi‑Fi", icon: "wifi" },
   { id: "updates", title: "Обновления", icon: "refresh" },
   { id: "system", title: "Система", icon: "info" },
@@ -138,13 +140,14 @@ function show(tab) {
   if (tab === "wifi") loadWifi(false);
   if (tab === "system") loadSystem();
   if (tab === "updates") loadUpdate();
+  if (tab === "modules") store.load().catch(() => {});
   if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
   if (tab === "display") loadLocation();
   render();
 }
 
 function render() {
-  const views = { display: renderDisplay, desktops: renderDesktops, wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   editor?.destroy();
   editor = null;
   $("content").classList.toggle("wide", state.tab === "desktops");
@@ -201,6 +204,18 @@ function renderDisplay() {
     </section>
     ${backgrounds.render(ui)}`;
 }
+
+const store = new StorePanel({
+  guarded,
+  toast,
+  confirm: confirmDialog,
+  render: () => state.tab === "modules" && render(),
+  // Набор виджетов поменялся: каталог для редактора столов перечитываем.
+  changed: async () => {
+    state.config = await api.get("/config");
+    state.catalog = await loadCatalog();
+  },
+});
 
 const backgrounds = new BackgroundPanel({
   saveUi: (patch) => saveUi(patch),
@@ -469,6 +484,7 @@ async function saveUpdateSettings(patch) {
 $("content").addEventListener("change", async (e) => {
   const el = e.target;
   if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
+  if (state.tab === "modules" && (await store.onChange(e).catch(() => true))) return;
   if (el.dataset.ui) {
     let value = el.value;
     if ("int" in el.dataset) value = parseInt(el.value, 10);
@@ -498,6 +514,7 @@ $("content").addEventListener("change", async (e) => {
 $("content").addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));
+  if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {
     await wifiConnect({ ssid: data.ssid, password: data.password, hidden: true }).catch(() => {});
   } else if (e.target.id === "place-form") {
@@ -534,6 +551,7 @@ $("content").addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b || b.disabled || b.getAttribute("type") === "submit") return;
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
+  if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
   const d = b.dataset;
   try {
     if ("locate" in d) {
