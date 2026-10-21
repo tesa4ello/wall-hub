@@ -30,6 +30,7 @@ input:disabled, select:disabled { opacity: 0.45; }
   box-shadow: var(--shadow);
 }
 .login-card p { margin: 0; font-size: 14px; line-height: 1.4; }
+.login-card input[hidden] { display: none; }
 
 /* --- каркас --- */
 

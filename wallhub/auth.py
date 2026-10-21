@@ -29,12 +29,6 @@ def check_password(password, stored):
     return hmac.compare_digest(candidate.hex(), digest)
 
 
-def generate_password():
-    # Без похожих символов, чтобы пароль было легко перепечатать с экрана.
-    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
-    return "".join(secrets.choice(alphabet) for _ in range(10))
-
-
 class Sessions:
     def __init__(self):
         self._lock = threading.Lock()

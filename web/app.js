@@ -267,7 +267,7 @@ async function loadConfig() {
 
 async function pollRevision() {
   try {
-    const { revision, build, update } = await api.get("/revision");
+    const { revision, build, update } = await api.get(`/revision?theme=${document.documentElement.dataset.theme}`);
     $("status-offline").hidden = true;
     state.updateAvailable = Boolean(update);
     $("edge-dot").hidden = !update;

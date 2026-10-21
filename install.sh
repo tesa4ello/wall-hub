@@ -63,10 +63,10 @@ case "${1:-}" in
         # Сброс пароля админки без переустановки.
         systemctl stop wallhub.service
         cd "$CURRENT"
-        PASSWORD="$(runuser -u "$SERVICE_USER" -- "$CURRENT/venv/bin/python" -m wallhub \
-            --config "$STATE_DIR/config.json" --reset-password)"
+        runuser -u "$SERVICE_USER" -- "$CURRENT/venv/bin/python" -m wallhub \
+            --config "$STATE_DIR/config.json" --reset-password
         systemctl start wallhub.service
-        echo "Новый пароль админки: $PASSWORD"
+        echo "Пароль админки сброшен. Новый задаётся при следующем входе в админку."
         exit 0
         ;;
     *)
@@ -226,10 +226,6 @@ install -d /etc/polkit-1/rules.d
 install -m 0644 "$SRC_DIR/deploy/50-wallhub.rules" /etc/polkit-1/rules.d/50-wallhub.rules
 systemctl restart polkit 2>/dev/null || true
 
-# Пароль админки: генерируется один раз, при обновлении сохраняется.
-ADMIN_PASSWORD="$(cd "$CURRENT" && runuser -u "$SERVICE_USER" -- \
-    "$CURRENT/venv/bin/python" -m wallhub --config "$STATE_DIR/config.json" --init-password)"
-
 systemctl daemon-reload
 systemctl enable wallhub.service
 systemctl enable wallhub-update-auto.timer
@@ -337,10 +333,5 @@ IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if (
 echo
 log "Готово"
 echo "  Экран:   http://localhost:8080/ (откроется на tty1)"
-echo "  Админка: http://${IP:-<адрес панели>}:8088/"
-if [ -n "$ADMIN_PASSWORD" ]; then
-    echo "  Пароль админки: $ADMIN_PASSWORD"
-    echo "  (он же виден на экране в Настройки → Система, пока его не сменят)"
-else
-    echo "  Пароль админки не менялся. Сбросить: sudo $CURRENT/install.sh --reset-password"
-fi
+echo "  Админка: http://${IP:-<адрес панели>}/"
+echo "  Пароль админки задаётся при первом входе. Сбросить: sudo $CURRENT/install.sh --reset-password"

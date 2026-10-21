@@ -22,17 +22,41 @@ const TABS = [
 
 const state = { tab: "display", config: null, catalog: null, wifi: null, time: null, info: null, update: null };
 
-// Админка следует теме компьютера, на котором её открыли.
+// Админка показывает ту же тему, что сейчас на экране панели. Пока панель
+// о ней не сообщила (киоск не запущен), следуем теме компьютера.
 const media = matchMedia("(prefers-color-scheme: light)");
-const syncTheme = () => (document.documentElement.dataset.theme = media.matches ? "light" : "dark");
+let panelTheme = null;
+const syncTheme = () =>
+  (document.documentElement.dataset.theme = panelTheme || (media.matches ? "light" : "dark"));
 media.addEventListener("change", syncTheme);
 syncTheme();
+async function pollTheme() {
+  try {
+    panelTheme = (await api.get("/theme")).theme;
+    syncTheme();
+  } catch {}
+}
+pollTheme();
+setInterval(pollTheme, 5000);
 
 // --- вход ------------------------------------------------------------------
+
+// Пока пароль не задан, форма входа превращается в форму создания пароля.
+let setupMode = false;
 
 async function boot() {
   const session = await api.get("/session");
   if (!session.authorized) {
+    setupMode = session.setup;
+    $("login-hint").textContent = setupMode
+      ? "Первый вход: придумайте пароль админки, не короче 6 символов."
+      : "Введите пароль админки. Забыли — сбросьте его на панели: sudo ./install.sh --reset-password.";
+    $("login-password").placeholder = setupMode ? "Новый пароль" : "Пароль";
+    $("login-password").autocomplete = setupMode ? "new-password" : "current-password";
+    $("login-password").minLength = setupMode ? 6 : 0;
+    $("login-repeat").hidden = !setupMode;
+    $("login-repeat").required = setupMode;
+    $("login-submit").textContent = setupMode ? "Задать пароль и войти" : "Войти";
     $("login").hidden = false;
     $("app").hidden = true;
     $("login-password").focus();
@@ -47,8 +71,15 @@ $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("login-error").textContent = "";
   try {
-    await api.post("/login", { password: $("login-password").value });
+    const password = $("login-password").value;
+    if (setupMode) {
+      if (password !== $("login-repeat").value) throw new Error("Пароли не совпадают");
+      await api.post("/setup/password", { new: password });
+    } else {
+      await api.post("/login", { password });
+    }
     $("login-password").value = "";
+    $("login-repeat").value = "";
     await boot();
   } catch (err) {
     $("login-error").textContent = err.message;
