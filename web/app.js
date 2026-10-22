@@ -8,6 +8,7 @@ import { confirmDialog, confirmWifiOff, toast } from "/lib/dialog.js";
 import { isNight, themeFor } from "/lib/theme.js";
 import { Wallpaper } from "/lib/wallpaper.js";
 import * as sound from "/lib/sound.js";
+import { alarms as alarmApi, onAlarms, setRev as setAlarmsRev } from "/lib/alarms.js";
 import { destroyAll, enableNotify, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 import * as shadeView from "/shade.js";
@@ -22,6 +23,7 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 // --- тема -----------------------------------------------------------------
 
@@ -455,8 +457,9 @@ async function pollRevision() {
   const theme = document.documentElement.dataset.theme;
   const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates, notes } = await api.get(`/revision?theme=${theme}${wait}`);
+    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates, notes, alarms: alarmsRev } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
+    if (alarmsRev !== undefined) setAlarmsRev(alarmsRev);
     if (notes) shade.onNotes(notes);
     updateBanner.show(progress, version);
     notifySounds(update, progress, soundReq, moduleUpdates);
@@ -516,6 +519,82 @@ async function revisionLoop() {
     if (!(await pollRevision())) await new Promise((r) => setTimeout(r, 3000));
   }
 }
+
+// --- звонок будильника и таймера ---------------------------------------------------
+
+// Пока сервер держит звонок (ringing), поверх всего экран со временем и
+// кнопками «Отложить» и «Выключить», звук повторяется. Звонит и в «Не
+// беспокоить», и в тихие часы: будильник поставили сами.
+const ringer = {
+  el: null,
+  timer: null,
+  ringing: [],
+  settings: {},
+
+  update(st) {
+    this.ringing = st.ringing || [];
+    this.settings = st.settings || {};
+    if (!this.ringing.length) return this.stop();
+    this.render();
+    if (dimmer.dimmed) dimmer.wake();
+    else dimmer.reset();
+    if (!this.timer) {
+      this.ring();
+      this.timer = setInterval(() => this.ring(), 3000);
+    }
+  },
+
+  ring() {
+    sound.play(this.settings.sound || "bell", { force: true, volume: this.settings.volume ?? 80 });
+  },
+
+  render() {
+    if (!this.el) {
+      this.el = document.createElement("div");
+      this.el.className = "ring";
+      this.el.addEventListener("click", (e) => this.onClick(e));
+      document.body.appendChild(this.el);
+    }
+    const r = this.ringing[0];
+    const alarm = r.kind === "alarm";
+    const more = this.ringing.length > 1 ? `<div class="ring-more">${t("И ещё {n}", { n: this.ringing.length - 1 })}</div>` : "";
+    this.el.innerHTML = `
+      <div class="ring-icon">${icon(alarm ? "alarm" : "timer")}</div>
+      <div class="ring-time">${alarm ? esc(r.time) : t("Время вышло")}</div>
+      <div class="ring-label">${esc(r.label || (alarm ? t("Будильник") : t("Таймер {time}", { time: r.time })))}</div>
+      ${more}
+      <div class="ring-actions">
+        ${alarm ? `<button class="btn ring-btn" data-ring="snooze">${t("Отложить на {n} мин", { n: this.settings.snooze || 10 })}</button>` : ""}
+        <button class="btn btn-primary ring-btn" data-ring="dismiss">${t("Выключить")}</button>
+      </div>`;
+  },
+
+  async onClick(e) {
+    const b = e.target.closest("[data-ring]");
+    if (!b) return;
+    const r = this.ringing[0];
+    // Звук стихает сразу, не дожидаясь ответа сервера.
+    this.stopSound();
+    try {
+      await alarmApi.ring(b.dataset.ring, r.key);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  },
+
+  stopSound() {
+    clearInterval(this.timer);
+    this.timer = null;
+  },
+
+  stop() {
+    this.stopSound();
+    this.el?.remove();
+    this.el = null;
+  },
+};
+
+onAlarms((st) => ringer.update(st));
 
 // --- ход обновления -----------------------------------------------------------
 

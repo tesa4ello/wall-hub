@@ -86,6 +86,11 @@ DEFAULTS = {
         "cols": 16, "rows": 10, "home_after_min": 5,
         "carousel": {"enabled": False, "interval": 30, "resume": 2},
     },
+    # Будильники (wallhub/alarms.py): {"id", "time": "ЧЧ:ММ", "days": [0..6],
+    # "label", "enabled"}; days пусто — один раз. alarm — общие настройки
+    # звонка: snooze (мин), ring_minutes (сколько звонить), volume, sound.
+    "alarms": [],
+    "alarm": {"snooze": 10, "ring_minutes": 10, "volume": 80, "sound": "bell"},
     # Рабочие столы: виджеты в клетках сетки (см. wallhub.desktops).
     "desktops": [
         {

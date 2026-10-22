@@ -399,6 +399,86 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class AlarmsTest(unittest.TestCase):
+    def setUp(self):
+        import datetime
+        from wallhub.alarms import Alarms
+        from wallhub.notifications import Notifications, Tiles
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = Config(os.path.join(self.tmp.name, "c.json"))
+        # Понедельник 2030-01-07 06:58:30 по «местному» времени (UTC в тесте).
+        self.now = [datetime.datetime(2030, 1, 7, 6, 58, 30, tzinfo=datetime.timezone.utc).timestamp()]
+        self.n = Notifications(os.path.join(self.tmp.name, "n.json"))
+        self.tiles = Tiles()
+        self.a = Alarms(self.config, self.tmp.name, notifications=self.n, tiles=self.tiles, clock=lambda: self.now[0],
+                        local=lambda ts: datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def advance(self, seconds):
+        for _ in range(int(seconds)):
+            self.now[0] += 1
+            self.a.tick()
+
+    def test_alarm_rings_snoozes_and_once_disables(self):
+        from wallhub.alarms import AlarmError
+        self.a.save_alarm({"time": "07:00", "days": [], "label": "Работа"})
+        self.a.save_alarm({"time": "07:00", "days": [5, 6]})  # только выходные
+        self.assertEqual(self.a.state()["next"]["time"], "07:00")
+        self.assertEqual(self.tiles.listing(lambda t, p: t.format(**p))[0]["title"], "Будильник 07:00")
+        self.advance(100)
+        ringing = self.a.state()["ringing"]
+        self.assertEqual([r["label"] for r in ringing], ["Работа"])
+        # Разовый будильник после звонка выключен.
+        self.assertFalse(self.config.get("alarms")[0]["enabled"])
+        self.a.ring_action("snooze", ringing[0]["key"])
+        self.assertEqual(self.a.state()["ringing"], [])
+        self.advance(10 * 60)
+        self.assertEqual(len(self.a.state()["ringing"]), 1)
+        self.a.ring_action("dismiss")
+        self.assertEqual(self.a.state()["ringing"], [])
+        with self.assertRaises(AlarmError):
+            self.a.save_alarm({"time": "25:00"})
+        with self.assertRaises(AlarmError):
+            self.a.save_alarm({"time": "07:00", "days": [7]})
+
+    def test_unanswered_ring_becomes_missed(self):
+        self.a.save_alarm({"time": "07:00", "days": [0]})
+        self.advance(100)
+        self.assertEqual(len(self.a.state()["ringing"]), 1)
+        self.advance(10 * 60)
+        self.assertEqual(self.a.state()["ringing"], [])
+        self.assertEqual(self.n.listing(lambda t, p: t.format(**p))[0]["title"], "Пропущен будильник 07:00")
+        # Повторяющийся остаётся включённым.
+        self.assertTrue(self.config.get("alarms")[0]["enabled"])
+
+    def test_clock_jump_does_not_ring_old_alarms(self):
+        self.a.save_alarm({"time": "07:00", "days": []})
+        self.now[0] += 3600  # часы ушли на час вперёд
+        self.a.tick()
+        self.assertEqual(self.a.state()["ringing"], [])
+
+    def test_timer(self):
+        t = self.a.timer_action("start", seconds=90, label="Чай")
+        self.advance(30)
+        self.a.timer_action("pause", t["id"])
+        self.advance(100)
+        self.assertEqual(self.a.state()["timers"][0]["remaining"], 60)
+        self.a.timer_action("resume", t["id"])
+        self.a.timer_action("add", t["id"], seconds=60)
+        self.advance(119)
+        self.assertEqual(self.a.state()["ringing"], [])
+        self.advance(1)
+        self.assertEqual(self.a.state()["ringing"][0]["label"], "Чай")
+        self.assertEqual(self.a.state()["timers"], [])
+        # Таймеры переживают перезапуск.
+        from wallhub.alarms import Alarms
+        self.a.timer_action("start", seconds=300)
+        again = Alarms(self.config, self.tmp.name, clock=lambda: self.now[0])
+        self.assertEqual(len(again.state()["timers"]), 1)
+
+
 class TimeSettingsTest(unittest.TestCase):
     def test_ntp_and_manual_time(self):
         from wallhub.system import CommandError, System
