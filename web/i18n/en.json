@@ -674,5 +674,6 @@
   "Рядом": "In range",
   "Не в зоне": "Out of range",
   "Панель перестанет к ней подключаться. Чтобы вернуться, понадобится пароль.": "The panel will stop connecting to it. You will need the password to connect again.",
-  "Сеть {ssid} не сохранена": "Network {ssid} is not saved"
+  "Сеть {ssid} не сохранена": "Network {ssid} is not saved",
+  "Модуль выключен. Включите его, чтобы настроить.": "The module is turned off. Turn it on to configure it."
 }
