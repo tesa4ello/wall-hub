@@ -1,6 +1,6 @@
 {
   "id": "clock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "core": "1",
   "title": "Часы",
   "description": "Время и дата",
@@ -11,10 +11,71 @@
       "description": "Крупные часы с датой и днём недели",
       "icon": "clock",
       "card": true,
-      "size": {"default": [8, 5], "min": [3, 2], "max": [16, 10]},
+      "size": {
+        "default": [
+          8,
+          5
+        ],
+        "min": [
+          3,
+          2
+        ],
+        "max": [
+          16,
+          10
+        ]
+      },
       "options": [
-        {"key": "seconds", "type": "bool", "title": "Показывать секунды", "default": true},
-        {"key": "date", "type": "bool", "title": "Показывать дату и день недели", "default": true}
+        {
+          "key": "face",
+          "type": "select",
+          "title": "Циферблат",
+          "default": "digital",
+          "choices": [
+            [
+              "digital",
+              "Классический"
+            ],
+            [
+              "bold",
+              "Крупный"
+            ],
+            [
+              "stacked",
+              "Столбиком"
+            ],
+            [
+              "cards",
+              "Карточки"
+            ],
+            [
+              "analog",
+              "Стрелочный"
+            ],
+            [
+              "minimal",
+              "Стрелочный без цифр"
+            ]
+          ]
+        },
+        {
+          "key": "seconds",
+          "type": "bool",
+          "title": "Показывать секунды",
+          "default": true
+        },
+        {
+          "key": "date",
+          "type": "bool",
+          "title": "Показывать дату и день недели",
+          "default": true
+        },
+        {
+          "key": "h12",
+          "type": "bool",
+          "title": "12-часовой формат",
+          "default": false
+        }
       ]
     }
   ],
@@ -24,7 +85,15 @@
       "Время и дата": "Time and date",
       "Крупные часы с датой и днём недели": "Large clock with date and weekday",
       "Показывать секунды": "Show seconds",
-      "Показывать дату и день недели": "Show date and weekday"
+      "Показывать дату и день недели": "Show date and weekday",
+      "Циферблат": "Clock face",
+      "Классический": "Classic",
+      "Крупный": "Bold",
+      "Столбиком": "Stacked",
+      "Карточки": "Cards",
+      "Стрелочный": "Analog",
+      "Стрелочный без цифр": "Analog, no numbers",
+      "12-часовой формат": "12-hour format"
     }
   }
 }
