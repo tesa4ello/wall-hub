@@ -272,6 +272,9 @@ class System:
             self._fake_ntp["tz"] = tz
             return
         self._run(["timedatectl", "set-timezone", tz])
+        # Процесс сервиса запомнил пояс при старте: без tzset будильники и
+        # напоминания считали бы местное время по старому поясу.
+        time.tzset()
 
     def time_state(self):
         """Время панели: пояс, синхронизация по сети и её серверы."""
@@ -306,8 +309,9 @@ class System:
             return
         self._run(["timedatectl", "set-ntp", "true" if enabled else "false"])
 
-    def set_time(self, value):
-        """Ручная установка «ГГГГ-ММ-ДД ЧЧ:ММ[:СС]» (местное время). Только без NTP."""
+    @staticmethod
+    def parse_time(value):
+        """«ГГГГ-ММ-ДД ЧЧ:ММ[:СС]» -> datetime или CommandError."""
         import datetime
         try:
             when = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S" if value.count(":") == 2 else "%Y-%m-%d %H:%M")
@@ -315,6 +319,11 @@ class System:
             raise CommandError(tr("Неверные дата или время"))
         if not 2020 <= when.year <= 2099:
             raise CommandError(tr("Неверные дата или время"))
+        return when
+
+    def set_time(self, value):
+        """Ручная установка «ГГГГ-ММ-ДД ЧЧ:ММ[:СС]» (местное время). Только без NTP."""
+        when = self.parse_time(value)
         if self.dry_run:
             if self._fake_ntp["enabled"]:
                 raise CommandError(tr("Сначала выключите синхронизацию по сети"))
