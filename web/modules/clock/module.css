@@ -10,27 +10,77 @@
   align-items: center;
   font-variant-numeric: tabular-nums;
 }
-.clock-time {
-  display: flex;
-  align-items: flex-start;
-  line-height: 1;
-}
-.clock-hm {
-  font-size: min(62cqh, 30cqw);
-  font-weight: 300;
-  letter-spacing: -0.03em;
-}
-.clock-s {
-  margin: 0.22em 0 0 0.25em;
-  font-size: min(20cqh, 9cqw);
-  font-weight: 400;
-  color: var(--muted);
-}
 .clock-date {
   margin-top: min(4cqh, 18px);
   font-size: min(11cqh, 5.5cqw);
   color: var(--muted);
 }
 .clock-date::first-letter { text-transform: uppercase; }
-/* Без даты часы могут занять больше высоты. */
-.clock.no-date .clock-hm { font-size: min(80cqh, 30cqw); }
+
+/* Классический и крупный: ЧЧ:ММ и секунды справа сверху. */
+.clock-time {
+  display: flex;
+  align-items: flex-start;
+  line-height: 1;
+  font-size: min(62cqh, 30cqw);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+.clock.no-date .clock-time { font-size: min(80cqh, 30cqw); }
+.clock-time .clock-s {
+  margin: 0.22em 0 0 0.25em;
+  font-size: 0.32em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.clock-bold .clock-time { font-weight: 700; letter-spacing: -0.05em; font-size: min(66cqh, 32cqw); }
+.clock-bold.no-date .clock-time { font-size: min(84cqh, 32cqw); }
+.clock-bold .clock-colon { color: var(--accent); }
+.clock-bold .clock-time .clock-s { font-weight: 600; color: var(--accent); }
+
+/* Столбиком: часы над минутами, для узких высоких виджетов. */
+.clock-stacked .clock-face { display: flex; align-items: center; gap: min(3cqw, 3cqh); }
+.clock-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.86;
+  font-size: min(40cqh, 44cqw);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.clock-stacked.no-date .clock-stack { font-size: min(48cqh, 44cqw); }
+.clock-stack .clock-m { color: var(--accent); }
+.clock-stacked .clock-s { font-size: min(12cqh, 10cqw); color: var(--muted); writing-mode: vertical-rl; }
+
+/* Карточки: каждая пара цифр на своей плитке. */
+.clock-cards { display: flex; align-items: center; gap: min(2.5cqw, 3cqh); }
+.clock-card {
+  padding: 0.06em 0.12em;
+  border-radius: 0.14em;
+  background: var(--surface-2);
+  line-height: 1;
+  font-size: min(48cqh, 22cqw);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.no-date .clock-card { font-size: min(62cqh, 24cqw); }
+.clock-cards .clock-s { font-size: min(24cqh, 11cqw); color: var(--muted); align-self: flex-end; }
+
+/* Стрелочные. Размер — от меньшей стороны виджета. */
+.clock-analog .clock-face, .clock-minimal .clock-face { width: min(78cqh, 90cqw); aspect-ratio: 1; }
+.no-date.clock-analog .clock-face, .no-date.clock-minimal .clock-face { width: min(94cqh, 94cqw); }
+.clock-dial { display: block; width: 100%; height: 100%; overflow: visible; }
+.clock-rim { fill: none; stroke: var(--muted); stroke-opacity: 0.35; stroke-width: 1; }
+.clock-minimal .clock-rim { stroke-opacity: 0; }
+.clock-mark { stroke: var(--muted); stroke-width: 0.8; stroke-linecap: round; }
+.clock-mark.major { stroke: var(--text); stroke-width: 1.6; }
+.clock-minimal .clock-mark.major { stroke-width: 2.4; }
+.clock-num { fill: var(--text); font-size: 10px; font-weight: 500; text-anchor: middle; }
+.clock-hand-h, .clock-hand-m { stroke: var(--text); stroke-linecap: round; }
+.clock-hand-h { stroke-width: 4; }
+.clock-hand-m { stroke-width: 2.6; }
+.clock-hand-s { stroke: var(--accent); stroke-width: 1; stroke-linecap: round; }
+.clock-pin { fill: var(--accent); }
+.clock-analog .clock-date, .clock-minimal .clock-date { margin-top: min(2cqh, 10px); font-size: min(9cqh, 5.5cqw); }
