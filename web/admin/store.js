@@ -40,6 +40,10 @@ export class StorePanel {
     const el = document.getElementById("module-admin");
     const id = this.settingsFor;
     if (!el || !id) return;
+    if (this.loadedModule(id)?.disabled) {
+      el.innerHTML = `<div class="panel"><div class="item muted">${esc(t("Модуль выключен. Включите его, чтобы настроить."))}</div></div>`;
+      return;
+    }
     try {
       const mod = await import(`/modules/${id}/admin.js`);
       if (this.settingsFor !== id || !el.isConnected) return;
@@ -172,7 +176,8 @@ export class StorePanel {
     if (m.local) {
       state = t("Из папки модулей");
       const loaded = this.loadedModule(m.id);
-      if (loaded?.admin) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
+      // У выключенного модуля серверная часть остановлена: настраивать нечего.
+      if (loaded?.admin && !loaded.disabled) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
       if (loaded?.backend_error) state += ` · ${t("серверная часть не запустилась: {error}", { error: loaded.backend_error })}`;
     } else if (m.builtin) {
       state = t("Входит в ядро");
@@ -186,7 +191,8 @@ export class StorePanel {
       if (!m.installed) actions += `<button class="btn btn-primary btn-small" data-store-install="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${busy ? t("Ставлю…") : t("Установить")}</button>`;
       if (m.update) actions += `<button class="btn btn-primary btn-small" data-store-install="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${busy ? t("Обновляю…") : t("Обновить")}</button>`;
       const loaded = this.loadedModule(m.id);
-      if (loaded?.admin) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
+      // У выключенного модуля серверная часть остановлена: настраивать нечего.
+      if (loaded?.admin && !loaded.disabled) actions += `<button class="btn btn-small" data-store-settings="${esc(m.id)}">${t("Настроить")}</button>`;
       if (loaded?.backend_error) state += ` · ${t("серверная часть не запустилась: {error}", { error: loaded.backend_error })}`;
       if (m.installed) actions += `<button class="btn btn-small" data-store-remove="${esc(m.id)}" ${this.busy ? "disabled" : ""}>${t("Удалить")}</button>`;
     }
