@@ -526,6 +526,119 @@ class RemindersTest(unittest.TestCase):
         self.assertEqual(len(self.r.items()), 2)
 
 
+class BackupTest(unittest.TestCase):
+    def make(self, root):
+        from wallhub.backup import Backups
+        state = os.path.join(root, "state")
+        os.makedirs(state)
+        config = Config(os.path.join(state, "config.json"))
+        events = []
+        b = Backups(config, state, os.path.join(state, "backgrounds"), os.path.join(state, "modules"),
+                    os.path.join(state, "module-data"), os.path.join(state, "github-token"),
+                    os.path.join(state, "store-tokens"), before_restore=lambda p: events.append(("before", p)),
+                    on_restore=lambda p: events.append(("after", p)))
+        return state, config, b, events
+
+    def put(self, path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_export_and_restore_on_other_panel(self):
+        import json
+        import shutil
+        import zipfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        a_state, a_cfg, a, _ = self.make(os.path.join(tmp.name, "a"))
+        a_cfg.update({"ui": {"theme": "light", "background": "0123456789ab"}, "alarms": [{"id": "a1", "time": "07:00", "days": [], "label": "", "enabled": True}],
+                      "admin": {"password_hash": "HASH-A"}, "location": {"yandex_key": "KEY-A"},
+                      "setup": {"wifi_done": True}})
+        self.put(os.path.join(a_state, "backgrounds", "0123456789ab.jpg"), "img")
+        self.put(os.path.join(a_state, "github-token"), "ghp_a")
+        self.put(os.path.join(a_state, "module-data", "ping", "id_ed25519"), "SECRET")
+        mod = os.path.join(a_state, "modules", "ping", "1.0.0-abc")
+        self.put(os.path.join(mod, "module.json"), json.dumps({"id": "ping", "version": "1.0.0", "core": "1", "title": "Ping", "widgets": []}))
+        self.put(os.path.join(mod, "module.js"), "export const widgets = {};")
+        os.symlink("1.0.0-abc", os.path.join(a_state, "modules", "ping", "current"))
+        self.put(os.path.join(a_state, "modules", "installed.json"), json.dumps({"ping": {"version": "1.0.0", "catalog": "main"}}))
+
+        path, name = a.export(["settings", "backgrounds", "modules"])
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        self.assertTrue(name.startswith("wallhub-") and name.endswith(".zip"))
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            self.assertNotIn("secrets.json", names)
+            self.assertFalse(any(n.startswith(("module-data/", "tokens/")) for n in names))
+            self.assertNotIn("HASH-A", zf.read("config.json").decode())
+            self.assertIn("modules/ping/module.json", names)
+
+        b_state, b_cfg, b, events = self.make(os.path.join(tmp.name, "b"))
+        b_cfg.update({"admin": {"password_hash": "HASH-B"}, "setup": {"wifi_done": False}})
+        with open(path, "rb") as f:
+            info = b.save_upload(f, os.path.getsize(path))
+        self.assertEqual(info["parts"], ["settings", "backgrounds", "modules"])
+        result = b.restore("upload", ["settings", "backgrounds", "modules", "secrets"])
+        self.assertEqual(result["parts"], ["settings", "backgrounds", "modules"])
+        self.assertTrue(result["snapshot"].startswith("auto-"))
+        self.assertEqual([e[0] for e in events], ["before", "after"])
+        self.assertEqual(b_cfg.get("ui", "theme"), "light")
+        self.assertEqual(b_cfg.get("ui", "background"), "0123456789ab")
+        self.assertEqual(len(b_cfg.get("alarms")), 1)
+        # Пароль и устройство — свои.
+        self.assertEqual(b_cfg.get("admin", "password_hash"), "HASH-B")
+        self.assertFalse(b_cfg.get("setup", "wifi_done"))
+        self.assertTrue(os.path.isfile(os.path.join(b_state, "modules", "ping", "current", "module.js")))
+        self.assertFalse(os.path.exists(os.path.join(b_state, "module-data", "ping")))
+
+        # Полная копия переносит и секреты.
+        full, _ = a.export(["settings", "secrets"])
+        self.addCleanup(lambda: os.path.exists(full) and os.remove(full))
+        shutil.copy(full, b.upload_path())
+        b.restore("upload", ["secrets"])
+        self.assertEqual(b_cfg.get("admin", "password_hash"), "HASH-A")
+        self.assertEqual(b_cfg.get("location", "yandex_key"), "KEY-A")
+        with open(os.path.join(b_state, "module-data", "ping", "id_ed25519")) as f:
+            self.assertEqual(f.read(), "SECRET")
+        with open(os.path.join(b_state, "github-token")) as f:
+            self.assertEqual(f.read(), "ghp_a")
+
+    def test_snapshots_and_bad_files(self):
+        import io
+        import zipfile
+        from wallhub.backup import KEEP_AUTO, BackupError
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        state, cfg, b, _ = self.make(tmp.name)
+        now = [1_900_000_000]
+        b.clock = lambda: now[0]
+        for _ in range(KEEP_AUTO + 2):
+            b.snapshot("daily")
+            now[0] += 10
+        snaps = b.snapshots()
+        self.assertEqual(len(snaps), KEEP_AUTO)
+        self.assertEqual(snaps[0]["reason"], "daily")
+        self.assertEqual(os.stat(os.path.join(state, "backups")).st_mode & 0o777, 0o700)
+        # Восстановление из самой старой автокопии её не теряет.
+        cfg.update({"ui": {"theme": "light"}})
+        b.restore(snaps[-1]["name"], ["settings"])
+        self.assertEqual(cfg.get("ui", "theme"), "dark")
+        with self.assertRaises(BackupError):
+            b.snapshot_path("../config.json")
+        bad = io.BytesIO()
+        with zipfile.ZipFile(bad, "w") as zf:
+            zf.writestr("manifest.json", '{"app": "wall-hub", "format": 1}')
+            zf.writestr("../evil", "x")
+        for data in (b"not a zip", bad.getvalue()):
+            with self.assertRaises(BackupError):
+                b.save_upload(io.BytesIO(data), len(data))
+        newer = io.BytesIO()
+        with zipfile.ZipFile(newer, "w") as zf:
+            zf.writestr("manifest.json", '{"app": "wall-hub", "format": 99}')
+        with self.assertRaises(BackupError):
+            b.save_upload(io.BytesIO(newer.getvalue()), len(newer.getvalue()))
+
+
 class TimeSettingsTest(unittest.TestCase):
     def test_ntp_and_manual_time(self):
         from wallhub.system import CommandError, System
