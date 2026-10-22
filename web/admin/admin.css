@@ -140,7 +140,13 @@ input[type="time"] { font-variant-numeric: tabular-nums; }
 .login-card p { margin: 0 0 4px; font-size: 14px; line-height: 1.45; }
 .login-card input { min-height: 46px; }
 .login-card .btn { min-height: 46px; font-weight: 600; }
-.login-card input[hidden] { display: none; }
+.login-card input[hidden], .login-card[hidden], .login-card .btn[hidden] { display: none; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--accent); font-weight: 500; }
+.transfer-head { font-size: 18px; font-weight: 600; }
+.transfer-form { display: flex; flex-direction: column; gap: 10px; }
+.transfer-or { text-align: center; font-size: 13px; }
+.transfer-info { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: 14px; }
+.login-card .check { display: flex; align-items: center; gap: 10px; min-height: 32px; }
 
 /* --- каркас ----------------------------------------------------------------- */
 
@@ -594,3 +600,8 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
 }
 .alarm-day input:checked + span { background: var(--accent); color: #fff; }
 .alarm-day input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Резервная копия */
+.backup-info { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--border); }
+a.btn { text-decoration: none; }
+a.btn.disabled { opacity: 0.5; pointer-events: none; }

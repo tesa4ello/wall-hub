@@ -11,6 +11,8 @@ import { BackgroundPanel } from "/admin/background.js";
 import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
 import { AlarmsPanel } from "/admin/alarms.js";
+import { BackupPanel } from "/admin/backup.js";
+import { Transfer } from "/admin/transfer.js";
 import { ScreenView } from "/admin/screen.js";
 import { NetworkPanel } from "/admin/network.js";
 import { WeatherPanel } from "/admin/weather.js";
@@ -31,6 +33,7 @@ const TABS = [
   { id: "weather", title: "Погода", icon: "sun", group: "Расширения", sub: "Источники прогноза и место для виджетов погоды" },
   { id: "wifi", title: "Сеть", icon: "wifi", group: "Устройство", sub: "Wi‑Fi, Ethernet и IP-адреса" },
   { id: "updates", title: "Обновления", icon: "refresh", group: "Устройство", sub: "Версия панели и автоматические обновления" },
+  { id: "backup", title: "Резервная копия", icon: "archive", group: "Устройство", sub: "Перенос настроек на другую панель и откат" },
   { id: "system", title: "Система", icon: "info", group: "Устройство", sub: "Часовой пояс, пароль и питание" },
 ];
 
@@ -81,6 +84,8 @@ async function boot() {
     $("login-repeat").hidden = !setupMode;
     $("login-repeat").required = setupMode;
     $("login-submit").textContent = t(setupMode ? "Задать пароль и войти" : "Войти");
+    $("login-transfer").hidden = !setupMode;
+    $("login-form").hidden = false;
     $("login").hidden = false;
     $("app").hidden = true;
     $("login-password").focus();
@@ -108,6 +113,17 @@ $("login-form").addEventListener("submit", async (e) => {
   } catch (err) {
     $("login-error").textContent = err.message;
   }
+});
+
+// Перенос на новую панель вместо нового пароля (только при первом входе).
+const transfer = new Transfer($("transfer"), {
+  // Сменились настройки, а может, и язык: начинаем со свежей страницы.
+  onDone: () => location.reload(),
+  onBack: () => { $("login-form").hidden = false; },
+});
+$("login-transfer").addEventListener("click", () => {
+  $("login-form").hidden = true;
+  transfer.show();
 });
 
 $("logout").addEventListener("click", async () => {
@@ -173,13 +189,14 @@ function show(tab) {
   if (tab === "modules") store.load().catch(() => {});
   if (tab === "weather") weather.load().catch(() => {});
   if (tab === "alarms") alarmsPanel.load();
+  if (tab === "backup") backupPanel.load().catch(() => {});
   if (tab === "display" && !backgrounds.items) backgrounds.load().then(() => state.tab === "display" && render()).catch(() => {});
   if (tab === "display") loadLocation();
   render();
 }
 
 function render() {
-  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), alarms: () => alarmsPanel.render(), weather: () => weather.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
+  const views = { display: renderDisplay, desktops: renderDesktops, modules: () => store.render(), alarms: () => alarmsPanel.render(), backup: () => backupPanel.render(), weather: () => weather.render(), screen: () => screenView.render(), wifi: renderWifi, updates: renderUpdates, system: renderSystem };
   editor?.destroy();
   editor = null;
   screenView.destroy();
@@ -345,6 +362,13 @@ const alarmsPanel = new AlarmsPanel({
   toast,
   confirm: confirmDialog,
   render: () => state.tab === "alarms" && render(),
+});
+
+const backupPanel = new BackupPanel({
+  guarded,
+  toast,
+  confirm: confirmDialog,
+  render: () => state.tab === "backup" && render(),
 });
 
 const backgrounds = new BackgroundPanel({
@@ -680,6 +704,7 @@ async function saveUpdateSettings(patch) {
 $("content").addEventListener("change", async (e) => {
   const el = e.target;
   if (state.tab === "alarms" && (await alarmsPanel.onChange(e).catch(() => true))) return;
+  if (state.tab === "backup" && (await backupPanel.onChange(e).catch(() => true))) return;
   if (state.tab === "display" && (await backgrounds.onChange(e, state.config.ui).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onChange(e).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onChange(e).catch(() => true))) return;
@@ -728,6 +753,7 @@ $("content").addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "alarms" && (await alarmsPanel.onSubmit(e, data).catch(() => true))) return;
+  if (state.tab === "backup" && (await backupPanel.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {
@@ -780,6 +806,7 @@ $("content").addEventListener("click", async (e) => {
   if (state.tab === "display" && (await backgrounds.onClick(e).catch(() => true))) return;
   if (state.tab === "modules" && (await store.onClick(e).catch(() => true))) return;
   if (state.tab === "alarms" && (await alarmsPanel.onClick(e).catch(() => true))) return;
+  if (state.tab === "backup" && (await backupPanel.onClick(e).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onClick(e).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onClick(e).catch(() => true))) return;
   if ("screenReconnect" in b.dataset) return screenView.mount();
