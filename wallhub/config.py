@@ -91,6 +91,8 @@ DEFAULTS = {
     # звонка: snooze (мин), ring_minutes (сколько звонить), volume, sound.
     "alarms": [],
     "alarm": {"snooze": 10, "ring_minutes": 10, "volume": 80, "sound": "bell"},
+    # Напоминания календаря (см. wallhub.reminders).
+    "reminders": [],
     # Рабочие столы: виджеты в клетках сетки (см. wallhub.desktops).
     "desktops": [
         {

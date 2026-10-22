@@ -479,6 +479,53 @@ class AlarmsTest(unittest.TestCase):
         self.assertEqual(len(again.state()["timers"]), 1)
 
 
+class RemindersTest(unittest.TestCase):
+    def setUp(self):
+        import datetime
+        from wallhub.notifications import Notifications
+        from wallhub.reminders import Reminders
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = Config(os.path.join(self.tmp.name, "c.json"))
+        self.now = [datetime.datetime(2030, 1, 7, 8, 58, 30, tzinfo=datetime.timezone.utc).timestamp()]
+        self.n = Notifications(os.path.join(self.tmp.name, "n.json"))
+        self.r = Reminders(self.config, notifications=self.n, clock=lambda: self.now[0],
+                           local=lambda ts: datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def titles(self):
+        return [(i["title"], i["text"]) for i in self.n.listing(lambda t, p: t.format(**p))]
+
+    def test_validation(self):
+        from wallhub.reminders import ReminderError
+        for bad in ({"date": "2030-02-30", "text": "x"}, {"date": "2030-01-07", "text": "  "},
+                    {"date": "2030-01-07", "time": "25:00", "text": "x"}, "x"):
+            with self.assertRaises(ReminderError):
+                self.r.save(bad)
+        a = self.r.save({"date": "2030-01-08", "text": "  Полить   цветы ", "source": "icloud"})
+        self.assertEqual((a["id"], a["text"], a["time"], a["source"]), ("r1", "Полить цветы", "", "panel"))
+        b = self.r.save({"date": "2030-01-07", "time": "18:00", "text": "Б"})
+        self.assertEqual([x["id"] for x in self.r.items()], [b["id"], a["id"]])
+
+    def test_notifies_at_time_and_done_clears(self):
+        r = self.r.save({"date": "2030-01-07", "time": "09:00", "text": "Звонок {маме}"})
+        self.r.save({"date": "2030-01-07", "text": "Без времени"})
+        self.r.save({"date": "2030-01-08", "time": "09:00", "text": "Завтра"})
+        rev = self.r.rev
+        self.now[0] += 20
+        self.r.tick()
+        self.assertEqual(self.titles(), [])
+        self.now[0] += 90
+        self.r.tick()
+        self.assertEqual(self.titles(), [("Напоминание 09:00", "Звонок {маме}")])
+        self.r.set_done(r["id"], True)
+        self.assertEqual(self.titles(), [])
+        self.assertGreater(self.r.rev, rev)
+        self.r.delete(r["id"])
+        self.assertEqual(len(self.r.items()), 2)
+
+
 class TimeSettingsTest(unittest.TestCase):
     def test_ntp_and_manual_time(self):
         from wallhub.system import CommandError, System

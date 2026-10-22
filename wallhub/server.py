@@ -28,6 +28,7 @@ from . import screen
 from . import display
 from .backends import Backends, ModuleError
 from .alarms import AlarmError, Alarms
+from .reminders import ReminderError, Reminders
 from .notifications import Notifications, Tiles
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .modules import Registry
@@ -217,6 +218,8 @@ class App:
         # Будильники и таймеры: звонит экран, срабатывания считает сервер.
         self.alarms = Alarms(config, state_dir, notifications=self.notifications, tiles=self.tiles)
         self.alarms.start()
+        self.reminders = Reminders(config, notifications=self.notifications)
+        self.reminders.start()
         # Серверные части модулей: запускаются здесь и при каждой смене модулей.
         self.backends = Backends(config, os.path.join(state_dir, "module-data"),
                                  notifications=self.notifications, tiles=self.tiles)
@@ -652,9 +655,11 @@ def make_handler(app, trusted, port):
                 sound = app.sound["seq"]
                 notes = app.notes_rev()
                 alarms = app.alarms.rev
+                calendar = app.reminders.rev
                 app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen
                                 or app.update_started != started or app.sound["seq"] != sound
-                                or app.notes_rev() != notes or app.alarms.rev != alarms,
+                                or app.notes_rev() != notes or app.alarms.rev != alarms
+                                or app.reminders.rev != calendar,
                                 LONG_POLL_BUSY if busy else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
@@ -675,6 +680,8 @@ def make_handler(app, trusted, port):
                 "notes": {"seq": app.notifications.seq, "rev": app.notes_rev()},
                 # alarms: счётчик изменений будильников, таймеров и звонков.
                 "alarms": app.alarms.rev,
+                # calendar: счётчик изменений напоминаний.
+                "calendar": app.reminders.rev,
             }
 
         # Будильники и таймеры
@@ -709,6 +716,27 @@ def make_handler(app, trusted, port):
             if body.get("action") not in ("snooze", "dismiss"):
                 raise ApiError(tr("Неизвестное действие"))
             return self.alarm_call(app.alarms.ring_action, body["action"], body.get("key"))
+
+        # Календарь и напоминания
+
+        def api_calendar(self, **_):
+            return app.reminders.state()
+
+        def api_calendar_action(self, body, **_):
+            action = body.get("action")
+            rid = str(body.get("id", ""))
+            try:
+                if action == "save":
+                    app.reminders.save(body.get("item"))
+                elif action == "delete":
+                    app.reminders.delete(rid)
+                elif action in ("done", "undone"):
+                    app.reminders.set_done(rid, action == "done")
+                else:
+                    raise ApiError(tr("Неизвестное действие"))
+            except ReminderError as e:
+                raise ApiError(tr(e.text, **e.params))
+            return app.reminders.state()
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
@@ -1249,6 +1277,8 @@ def make_handler(app, trusted, port):
         ("GET", "/alarms"): (H.api_alarms, False),
         ("POST", "/alarms"): (H.api_alarms_action, False),
         ("POST", "/alarms/ring"): (H.api_alarms_ring, False),
+        ("GET", "/calendar"): (H.api_calendar, False),
+        ("POST", "/calendar"): (H.api_calendar_action, False),
         ("POST", "/timers"): (H.api_timers, False),
         ("POST", "/notifications/dismiss"): (H.api_notify_dismiss, False),
         ("POST", "/notifications/action"): (H.api_notify_action, False),
