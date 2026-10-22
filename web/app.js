@@ -9,6 +9,7 @@ import { isNight, themeFor } from "/lib/theme.js";
 import { Wallpaper } from "/lib/wallpaper.js";
 import * as sound from "/lib/sound.js";
 import { alarms as alarmApi, onAlarms, setRev as setAlarmsRev } from "/lib/alarms.js";
+import { setRev as setCalendarRev } from "/lib/calendar.js";
 import { destroyAll, enableNotify, loadCatalog, renderDesktop, setSound } from "/lib/widgets.js";
 import { Settings } from "/settings.js";
 import * as shadeView from "/shade.js";
@@ -457,9 +458,10 @@ async function pollRevision() {
   const theme = document.documentElement.dataset.theme;
   const wait = state.modules === undefined ? "" : `&wait=${state.revision}&modules=${state.modules}`;
   try {
-    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates, notes, alarms: alarmsRev } = await api.get(`/revision?theme=${theme}${wait}`);
+    const { revision, build, update, progress, version, modules, sound: soundReq, module_updates: moduleUpdates, notes, alarms: alarmsRev, calendar: calendarRev } = await api.get(`/revision?theme=${theme}${wait}`);
     $("status-offline").hidden = true;
     if (alarmsRev !== undefined) setAlarmsRev(alarmsRev);
+    if (calendarRev !== undefined) setCalendarRev(calendarRev);
     if (notes) shade.onNotes(notes);
     updateBanner.show(progress, version);
     notifySounds(update, progress, soundReq, moduleUpdates);

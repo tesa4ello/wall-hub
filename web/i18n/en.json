@@ -731,5 +731,11 @@
   "Потом звонок снимется и останется в шторке пропущенным": "Then it stops and stays in the shade as missed",
   "Проверить звук": "Test sound",
   "Удалить будильник {time}?": "Delete the {time} alarm?",
-  "Звук сыграет на панели": "The sound will play on the panel"
+  "Звук сыграет на панели": "The sound will play on the panel",
+  "Некорректное напоминание": "Invalid reminder",
+  "Дата напоминания — ГГГГ-ММ-ДД": "Reminder date must be YYYY-MM-DD",
+  "Время напоминания — ЧЧ:ММ": "Reminder time must be HH:MM",
+  "Напишите текст напоминания": "Enter the reminder text",
+  "Не больше {n} напоминаний": "No more than {n} reminders",
+  "Напоминание {time}": "Reminder {time}"
 }

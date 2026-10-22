@@ -56,6 +56,7 @@ def main():
         server.shutdown()
     app.backends.stop_all()
     app.alarms.stop()
+    app.reminders.stop()
 
 
 if __name__ == "__main__":

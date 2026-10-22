@@ -13,8 +13,9 @@ import { locale, t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 import { openKeyboard } from "/lib/keyboard.js";
 import { alarms as alarmApi, formatDuration, onAlarms, remaining } from "/lib/alarms.js";
+import { openCalendar } from "./calendar.js";
+import { dayNames, esc, holdRepeat, pad } from "./util.js";
 
-const pad = (n) => String(n).padStart(2, "0");
 const FACES = ["digital", "bold", "stacked", "cards", "analog", "minimal"];
 
 function hours(now, h12) {
@@ -106,23 +107,29 @@ function mountClock(el, { options }) {
   }
   tick();
 
+  // Нажатие открывает календарь. Свайп между столами и долгое нажатие
+  // (настройки экрана) тоже кончаются click, их отсекаем.
+  let press = null;
+  const down = (e) => { press = { x: e.clientX, y: e.clientY, at: Date.now() }; };
+  const click = (e) => {
+    if (!press || Math.hypot(e.clientX - press.x, e.clientY - press.y) > 16 || Date.now() - press.at > 700) return;
+    openCalendar();
+  };
+  if (options.calendar !== false) {
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("click", click);
+  }
+
   return {
     destroy() {
       clearTimeout(timer);
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("click", click);
     },
   };
 }
 
 // --- будильник ---------------------------------------------------------------
-
-const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-
-// Короткие имена дней недели: 0 — понедельник, как в сервере.
-function dayNames() {
-  const fmt = new Intl.DateTimeFormat(locale(), { weekday: "short" });
-  // 2024-01-01 — понедельник.
-  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)));
-}
 
 function daysText(days) {
   if (!days.length) return t("Один раз");
@@ -140,18 +147,6 @@ function whenText(next) {
   const days = Math.round((new Date(at.getFullYear(), at.getMonth(), at.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
   const day = days === 0 ? t("сегодня") : days === 1 ? t("завтра") : new Intl.DateTimeFormat(locale(), { weekday: "long" }).format(at);
   return next.label ? `${day} · ${next.label}` : day;
-}
-
-// Кнопка, которая при удержании повторяет действие (перебор часов и минут).
-function holdRepeat(button, fn) {
-  let timer = null;
-  const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
-  button.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    fn();
-    timer = setTimeout(() => { timer = setInterval(fn, 110); }, 450);
-  });
-  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) button.addEventListener(ev, stop);
 }
 
 // Редактор будильника поверх экрана. Возвращает Promise, который

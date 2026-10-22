@@ -3,7 +3,7 @@
   "version": "1.2.0",
   "core": "1",
   "title": "Часы",
-  "description": "Время и дата, будильник и таймер",
+  "description": "Время и дата, календарь, будильник и таймер",
   "widgets": [
     {
       "id": "clock",
@@ -75,6 +75,12 @@
           "type": "bool",
           "title": "12-часовой формат",
           "default": false
+        },
+        {
+          "key": "calendar",
+          "type": "bool",
+          "title": "Открывать календарь по нажатию",
+          "default": true
         }
       ]
     },
@@ -138,7 +144,6 @@
       "Стрелочный": "Analog",
       "Стрелочный без цифр": "Analog, no numbers",
       "12-часовой формат": "12-hour format",
-      "Время и дата, будильник и таймер": "Time and date, alarm and timer",
       "Будильник": "Alarm",
       "Ближайший будильник и список будильников": "Next alarm and the list of alarms",
       "Таймер": "Timer",
@@ -160,7 +165,16 @@
       "Свой…": "Custom…",
       "Ещё таймер": "Another timer",
       "Отмена": "Cancel",
-      "Сохранить": "Save"
+      "Сохранить": "Save",
+      "Открывать календарь по нажатию": "Open calendar on tap",
+      "Время и дата, календарь, будильник и таймер": "Time and date, calendar, alarm and timer",
+      "Предыдущий месяц": "Previous month",
+      "Следующий месяц": "Next month",
+      "Закрыть": "Close",
+      "Напоминание": "Reminder",
+      "Новое напоминание": "New reminder",
+      "Напоминаний нет": "No reminders",
+      "Напомнить в определённое время": "Remind at a set time"
     }
   }
 }
