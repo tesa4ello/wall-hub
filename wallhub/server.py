@@ -463,13 +463,22 @@ def make_handler(app, trusted, port):
             защищает от CSRF. Тело читает сам обработчик."""
             if self.headers.get_content_type() != "application/octet-stream":
                 raise ApiError(tr("Ожидается application/octet-stream"), HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
-            return {"stream": self.rfile, "length": int(self.headers.get("Content-Length") or 0)}
+            return {"stream": self.rfile, "length": self.content_length()}
+
+        def content_length(self):
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:
+                raise ApiError(tr("Неверная длина запроса"), HTTPStatus.BAD_REQUEST)
+            return length
 
         def read_json(self, limit=MAX_BODY):
             if self.headers.get_content_type() != "application/json":
                 # Заодно защищает от CSRF: обычная HTML-форма так не отправит.
                 raise ApiError(tr("Ожидается application/json"), HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
-            length = int(self.headers.get("Content-Length") or 0)
+            length = self.content_length()
             if length > limit:
                 raise ApiError(tr("Слишком большой запрос"), HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             raw = self.rfile.read(length) if length else b"{}"
