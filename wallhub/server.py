@@ -308,7 +308,7 @@ class App:
         """Перевод уведомления; подстановки от модуля могут не совпасть с текстом."""
         try:
             return tr(text, **params)
-        except (KeyError, IndexError, ValueError):
+        except (KeyError, IndexError, ValueError, TypeError):
             return tr(text)
 
     def system_notes(self):
@@ -979,6 +979,10 @@ def make_handler(app, trusted, port):
 
         def api_admin_time(self, body, **_):
             """Синхронизация по сети, свои NTP-серверы, ручная установка времени."""
+            # Время проверяем до любых изменений: ошибка в нём не должна
+            # успеть выключить синхронизацию по сети.
+            if body.get("time"):
+                app.system.parse_time(str(body["time"]))
             if "servers" in body:
                 servers = body["servers"]
                 if isinstance(servers, str):
@@ -994,6 +998,8 @@ def make_handler(app, trusted, port):
 
         def api_admin_timezone(self, body, **_):
             app.system.set_timezone(str(body.get("timezone", "")))
+            # Ближайший будильник и плитка в шторке — уже по новому поясу.
+            app.alarms.refresh()
 
         def api_admin_desktops(self, body, **_):
             layout = app.config.get("layout")

@@ -567,9 +567,19 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
 
 /* Будильники: строка — время, дни недели, подпись, выключатель, удаление. */
 .alarm-row .item-main { flex-wrap: wrap; gap: 10px; }
-.alarm-row input[type="time"] { width: 140px; font-variant-numeric: tabular-nums; }
-.alarm-row input[name="label"] { flex: 1; min-width: 140px; }
+.alarm-row input[type="time"] { flex: none; width: 140px; font-variant-numeric: tabular-nums; }
+.alarm-row input[name="label"] { flex: 1 1 140px; min-width: 0; }
 .alarm-days { display: flex; gap: 4px; }
+/* Перебиваем .item-main > div:nth-child(2), который сжал бы дни. */
+.alarm-row .item-main > .alarm-days { flex: none; min-width: auto; }
+/* На телефоне дни недели — отдельной строкой на всю ширину. */
+@media (max-width: 760px) {
+  .alarm-row .item-main > .alarm-days { flex: 1 1 100%; order: 1; }
+  .alarm-day { flex: 1; }
+  .alarm-day span { display: grid; min-width: 0; padding: 0; }
+  .alarm-row input[name="label"] { order: 2; }
+  .alarm-row .switch, .alarm-row [data-alarm-delete] { order: 3; }
+}
 .alarm-day input { position: absolute; opacity: 0; pointer-events: none; }
 .alarm-day span {
   display: inline-grid;

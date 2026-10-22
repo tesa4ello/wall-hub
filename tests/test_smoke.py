@@ -36,6 +36,8 @@ class SmokeTest(unittest.TestCase):
         cls.server.shutdown()
         cls.app.backends.stop_all()
         cls.app.module_updates.stop()
+        cls.app.alarms.stop()
+        cls.app.reminders.stop()
         cls.tmp.cleanup()
 
     def request(self, path, body=None):
@@ -83,3 +85,17 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(shade["brightness"], 70)
         self.assertNotIn(note_id, [n["id"] for n in shade["notifications"]])
         self.assertEqual(self.request("/api/shade", {"brightness": 5})[0], 400)
+
+    def test_reminder_in_shade(self):
+        # Подстановка «text» в уведомлении напоминания не должна ломать шторку.
+        self.app.reminders._notify({"id": "r99", "date": "2030-01-01", "time": "09:00", "text": "Позвонить {маме}"})
+        status, body = self.request("/api/shade")
+        self.assertEqual(status, 200, body)
+        texts = [n["text"] for n in json.loads(body)["notifications"]]
+        self.assertIn("Позвонить {маме}", texts)
+
+    def test_timer_bad_seconds(self):
+        status, body = self.request("/api/timers", {"action": "start", "seconds": 60})
+        timer = json.loads(body)["timers"][-1]["id"]
+        self.assertEqual(self.request("/api/timers", {"action": "add", "id": timer, "seconds": "abc"})[0], 400)
+        self.assertEqual(self.request("/api/timers", {"action": "cancel", "id": timer})[0], 200)

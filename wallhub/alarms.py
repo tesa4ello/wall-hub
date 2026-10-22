@@ -122,6 +122,10 @@ class Alarms:
     def alarms(self):
         return self.config.get("alarms")
 
+    def refresh(self):
+        """Пересчитать «ближайший» и плитку (сменился часовой пояс)."""
+        self._changed()
+
     def _changed(self):
         self.rev += 1
         self._update_tiles()
@@ -206,7 +210,10 @@ class Alarms:
                 timer["ends_at"] = now + (timer["remaining"] or 0)
                 timer["remaining"] = None
             elif action == "add":
-                extra = int(seconds or 60)
+                try:
+                    extra = min(max(int(seconds or 60), 1), MAX_TIMER)
+                except (TypeError, ValueError):
+                    raise AlarmError("Некорректная длительность")
                 if timer["ends_at"]:
                     timer["ends_at"] = min(timer["ends_at"] + extra, now + MAX_TIMER)
                 else:
