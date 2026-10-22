@@ -48,7 +48,8 @@ log = logging.getLogger(__name__)
 COOKIE = "wallhub_session"
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_BODY = 64 * 1024
-BACKUP_UPLOAD = "/admin/backup/upload"
+# Маршруты, куда файл копии приходит как есть (application/octet-stream).
+UPLOAD_PATHS = ("/admin/backup/upload", "/setup/transfer/upload")
 # Сколько секунд /api/revision?wait=… держит запрос без изменений.
 LONG_POLL = 20
 LONG_POLL_BUSY = 2
@@ -591,7 +592,7 @@ def make_handler(app, trusted, port):
                 self.send_error_json(tr("Нужно войти"), HTTPStatus.UNAUTHORIZED)
                 return
             try:
-                if path == BACKUP_UPLOAD:
+                if path in UPLOAD_PATHS:
                     body = self.read_upload()
                 else:
                     limit = MAX_UPLOAD if path == "/admin/background" else MAX_BODY
@@ -1077,6 +1078,39 @@ def make_handler(app, trusted, port):
         def api_admin_backup_upload(self, body, **_):
             return self.backup_call(app.backups.save_upload, body["stream"], body["length"])
 
+        def api_admin_backup_pull(self, body, **_):
+            return self.backup_call(app.backups.pull, body.get("address"), body.get("password", ""))
+
+        # Перенос на новую панель: пока пароль админки не задан, восстановить
+        # копию может тот, кто первым открыл админку (как и задать пароль).
+
+        def setup_only(self):
+            if app.config.get("admin", "password_hash"):
+                raise ApiError(tr("Пароль уже задан, войдите с ним"), HTTPStatus.CONFLICT)
+
+        def api_setup_transfer_upload(self, body, **_):
+            self.setup_only()
+            return self.backup_call(app.backups.save_upload, body["stream"], body["length"])
+
+        def api_setup_transfer_pull(self, body, **_):
+            self.setup_only()
+            with app.login_lock:
+                return self.backup_call(app.backups.pull, body.get("address"), body.get("password", ""))
+
+        def api_setup_transfer_restore(self, body, **_):
+            parts = body.get("parts")
+            if not isinstance(parts, list):
+                raise ApiError(tr("Выберите, что восстановить"))
+            with app.login_lock:
+                self.setup_only()
+                self.backup_call(app.backups.restore, "upload", [str(p) for p in parts])
+            # Пароль пришёл из копии: тот, кто переносил, сразу входит.
+            # Без пароля в копии его, как обычно, придумывают при входе.
+            if app.config.get("admin", "password_hash"):
+                app.sessions.clear()
+                return self.start_session()
+            return {"ok": True}
+
         def api_admin_backup_inspect(self, body, **_):
             path = self.backup_call(app.backups.source, str(body.get("source", "")))
             return self.backup_call(app.backups.inspect, path)
@@ -1397,7 +1431,11 @@ def make_handler(app, trusted, port):
         ("GET", "/admin/backup/export"): (H.api_admin_backup_export, False),
         ("GET", "/admin/backup/snapshot"): (H.api_admin_backup_snapshot, False),
         ("POST", "/admin/backup/create"): (H.api_admin_backup_create, False),
-        ("POST", BACKUP_UPLOAD): (H.api_admin_backup_upload, False),
+        ("POST", "/admin/backup/upload"): (H.api_admin_backup_upload, False),
+        ("POST", "/admin/backup/pull"): (H.api_admin_backup_pull, False),
+        ("POST", "/setup/transfer/upload"): (H.api_setup_transfer_upload, True),
+        ("POST", "/setup/transfer/pull"): (H.api_setup_transfer_pull, True),
+        ("POST", "/setup/transfer/restore"): (H.api_setup_transfer_restore, True),
         ("POST", "/admin/backup/inspect"): (H.api_admin_backup_inspect, False),
         ("POST", "/admin/backup/restore"): (H.api_admin_backup_restore, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),

@@ -1,7 +1,8 @@
 // Вкладка «Резервная копия»: скачать настройки файлом, восстановить из
 // файла или из автокопии (см. wallhub/backup.py).
 
-import { api, ApiError } from "/lib/api.js";
+import { api } from "/lib/api.js";
+import { backupSummary, uploadBackup } from "/admin/transfer.js";
 import { locale, t } from "/lib/i18n.js";
 import { icon } from "/lib/icons.js";
 
@@ -68,9 +69,8 @@ export class BackupPanel {
       <section class="panel">
         ${p ? `
           <div class="pad backup-info">
-            <b>${esc(p.source === "upload" ? t("Файл копии") : t("Автокопия"))}</b>
-            <div class="muted small">${esc(t("Панель «{panel}», {date}, версия {version}", { panel: p.info.panel || "—", date: date(p.info.created), version: p.info.version || "?" }))}</div>
-            <div class="muted small">${esc(t("Столов: {d}, будильников: {a}, модулей: {m}", { d: p.info.desktops ?? 0, a: p.info.alarms ?? 0, m: Object.keys(p.info.modules || {}).length }))}</div>
+            <b>${esc(p.source === "upload" ? (p.pulled ? t("Копия с другой панели") : t("Файл копии")) : t("Автокопия"))}</b>
+            ${backupSummary(p.info).map((line) => `<div class="muted small">${esc(line)}</div>`).join("")}
           </div>
           ${p.info.parts.map((part) => check(part, p.parts.has(part), "data-restore-part")).join("")}
           <div class="row-buttons">
@@ -81,7 +81,14 @@ export class BackupPanel {
             <label class="btn btn-small ${this.busy ? "disabled" : ""}">${icon("plus")}<span>${this.busy ? t("Загружаю…") : t("Выбрать файл…")}</span>
               <input type="file" accept=".zip,application/zip" data-backup-file hidden ${this.busy ? "disabled" : ""}>
             </label>
-          </div>`}
+          </div>
+          <form class="field" id="backup-pull"><span>${t("С другой панели по сети")}<small>${t("Её адрес и пароль админки, нужна версия 1.1.0 или новее")}</small></span>
+            <div class="field-controls">
+              <input name="address" placeholder="192.168.1.20" autocomplete="off" required ${this.busy ? "disabled" : ""}>
+              <input type="password" name="password" placeholder="${t("Пароль")}" autocomplete="off" required ${this.busy ? "disabled" : ""}>
+              <button class="btn btn-small" type="submit" ${this.busy ? "disabled" : ""}>${t("Забрать")}</button>
+            </div>
+          </form>`}
       </section>
       <p class="muted small panel-inset">${t("Перед восстановлением панель сама сохранит текущие настройки в автокопию. Восстанавливайте только свои копии: в них есть код модулей.")}</p>
 
@@ -103,36 +110,33 @@ export class BackupPanel {
     this.ctx.render();
   }
 
-  async upload(file) {
+  // Загрузка файла или копия с другой панели: потом тот же предпросмотр.
+  async fetchUpload(fn, pulled = false) {
     this.busy = true;
     this.ctx.render();
     try {
-      const info = await this.ctx.guarded(async () => {
-        let response;
-        try {
-          response = await fetch("/api/admin/backup/upload", {
-            method: "POST", credentials: "same-origin",
-            headers: { "Content-Type": "application/octet-stream" }, body: file,
-          });
-        } catch {
-          throw new ApiError(t("Нет связи с панелью"), 0);
-        }
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new ApiError(data.error || t("Ошибка {status}", { status: response.status }), response.status);
-        return data;
-      });
+      const info = await this.ctx.guarded(fn);
       this.busy = false;
       this.preview("upload", info);
+      this.pending.pulled = pulled;
+      this.ctx.render();
     } catch {
       this.busy = false;
       this.ctx.render();
     }
   }
 
+  async onSubmit(e, data) {
+    if (e.target.id !== "backup-pull") return false;
+    await this.fetchUpload(() => api.post("/admin/backup/pull", data), true);
+    return true;
+  }
+
   async onChange(e) {
     const el = e.target;
     if ("backupFile" in el.dataset) {
-      if (el.files[0]) await this.upload(el.files[0]);
+      const file = el.files[0];
+      if (file) await this.fetchUpload(() => uploadBackup("/admin/backup/upload", file));
       return true;
     }
     const set = el.dataset.export ? this.parts : el.dataset.restorePart ? this.pending?.parts : null;
