@@ -28,6 +28,7 @@ from . import screen
 from . import display
 from .backends import Backends, ModuleError
 from .alarms import AlarmError, Alarms
+from .backup import BackupError, Backups, EXPORT_DEFAULT, PARTS as BACKUP_PARTS
 from .reminders import ReminderError, Reminders
 from .notifications import Notifications, Tiles
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
@@ -47,6 +48,7 @@ log = logging.getLogger(__name__)
 COOKIE = "wallhub_session"
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_BODY = 64 * 1024
+BACKUP_UPLOAD = "/admin/backup/upload"
 # Сколько секунд /api/revision?wait=… держит запрос без изменений.
 LONG_POLL = 20
 LONG_POLL_BUSY = 2
@@ -65,6 +67,15 @@ class ApiError(Exception):
     def __init__(self, message, code=HTTPStatus.BAD_REQUEST):
         super().__init__(message)
         self.code = code
+
+
+class FileResponse:
+    """Ответ API файлом для скачивания (копия настроек). delete — удалить после отправки."""
+
+    def __init__(self, path, filename, delete=False):
+        self.path = path
+        self.filename = filename
+        self.delete = delete
 
 
 def _int(v):
@@ -230,6 +241,12 @@ class App:
         self.module_updates = ModuleUpdater(self.store, config, state_dir, backend_error=self.backends.errors.get,
                                             notify=config.notify)
         self.module_updates.start()
+        # Резервные копии настроек: экспорт, восстановление, автокопии.
+        self.backups = Backups(config, state_dir, self.backgrounds.path, os.path.join(state_dir, "modules"),
+                               os.path.join(state_dir, "module-data"), self.updates.token_path, self.store.tokens_dir,
+                               before_restore=lambda parts: self.backends.stop_all(),
+                               on_restore=self.restored)
+        self.backups.start()
         i18n.set_language(config.get("ui", "language"))
         status.load_all()
         self.collector = StatusCollector(config)
@@ -255,6 +272,12 @@ class App:
         self.backends.sync(self.active_modules())
         self.modules_rev += 1
         self.config.notify()
+
+    def restored(self, parts):
+        """После восстановления из копии: язык, модули, будильники — заново."""
+        i18n.set_language(self.config.get("ui", "language"))
+        self.modules_changed()
+        self.alarms.refresh()
 
     def disabled_modules(self):
         return set(self.config.get("modules_disabled"))
@@ -415,7 +438,31 @@ def make_handler(app, trusted, port):
             if self.command != "HEAD":
                 self.wfile.write(body)
 
+        def send_download(self, result):
+            try:
+                size = os.path.getsize(result.path)
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Length", str(size))
+                self.send_header("Content-Disposition", f'attachment; filename="{result.filename}"')
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                with open(result.path, "rb") as f:
+                    while chunk := f.read(1 << 20):
+                        self.wfile.write(chunk)
+            finally:
+                if result.delete:
+                    os.remove(result.path)
+
         # --- запрос ----------------------------------------------------
+
+        def read_upload(self):
+            """Файл копии как есть (application/octet-stream). Обычная HTML-форма
+            так не отправит, а чужой сайт упрётся в CORS: как и с JSON, это
+            защищает от CSRF. Тело читает сам обработчик."""
+            if self.headers.get_content_type() != "application/octet-stream":
+                raise ApiError(tr("Ожидается application/octet-stream"), HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+            return {"stream": self.rfile, "length": int(self.headers.get("Content-Length") or 0)}
 
         def read_json(self, limit=MAX_BODY):
             if self.headers.get_content_type() != "application/json":
@@ -544,8 +591,11 @@ def make_handler(app, trusted, port):
                 self.send_error_json(tr("Нужно войти"), HTTPStatus.UNAUTHORIZED)
                 return
             try:
-                limit = MAX_UPLOAD if path == "/admin/background" else MAX_BODY
-                body = self.read_json(limit) if method == "POST" else None
+                if path == BACKUP_UPLOAD:
+                    body = self.read_upload()
+                else:
+                    limit = MAX_UPLOAD if path == "/admin/background" else MAX_BODY
+                    body = self.read_json(limit) if method == "POST" else None
                 result = func(self, body=body, query=query)
             except ApiError as e:
                 self.send_error_json(str(e), e.code)
@@ -557,7 +607,9 @@ def make_handler(app, trusted, port):
                 log.exception("API %s %s failed", method, path)
                 self.send_error_json(tr("Внутренняя ошибка"), HTTPStatus.INTERNAL_SERVER_ERROR)
                 return
-            if isinstance(result, tuple):
+            if isinstance(result, FileResponse):
+                self.send_download(result)
+            elif isinstance(result, tuple):
                 self.send_json(*result)
             else:
                 self.send_json(result if result is not None else {"ok": True})
@@ -996,6 +1048,46 @@ def make_handler(app, trusted, port):
                 app.system.set_time(str(body["time"]))
             return self.api_time()
 
+        # Резервная копия
+
+        def backup_call(self, fn, *args):
+            try:
+                return fn(*args)
+            except BackupError as e:
+                raise ApiError(tr(e.text, **e.params))
+
+        def api_admin_backup(self, **_):
+            return {"snapshots": app.backups.snapshots(), "parts": list(BACKUP_PARTS),
+                    "export_default": list(EXPORT_DEFAULT)}
+
+        def api_admin_backup_export(self, query, **_):
+            parts = (query.get("parts") or [",".join(EXPORT_DEFAULT)])[0].split(",")
+            path, name = self.backup_call(app.backups.export, parts)
+            return FileResponse(path, name, delete=True)
+
+        def api_admin_backup_snapshot(self, query, **_):
+            name = (query.get("name") or [""])[0]
+            path = self.backup_call(app.backups.snapshot_path, name)
+            return FileResponse(path, name)
+
+        def api_admin_backup_create(self, **_):
+            self.backup_call(app.backups.snapshot, "manual")
+            return self.api_admin_backup()
+
+        def api_admin_backup_upload(self, body, **_):
+            return self.backup_call(app.backups.save_upload, body["stream"], body["length"])
+
+        def api_admin_backup_inspect(self, body, **_):
+            path = self.backup_call(app.backups.source, str(body.get("source", "")))
+            return self.backup_call(app.backups.inspect, path)
+
+        def api_admin_backup_restore(self, body, **_):
+            parts = body.get("parts")
+            if not isinstance(parts, list):
+                raise ApiError(tr("Выберите, что восстановить"))
+            result = self.backup_call(app.backups.restore, str(body.get("source", "")), [str(p) for p in parts])
+            return dict(result, revision=app.config.revision)
+
         def api_admin_timezone(self, body, **_):
             app.system.set_timezone(str(body.get("timezone", "")))
             # Ближайший будильник и плитка в шторке — уже по новому поясу.
@@ -1301,6 +1393,13 @@ def make_handler(app, trusted, port):
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
         ("POST", "/admin/time"): (H.api_admin_time, False),
+        ("GET", "/admin/backup"): (H.api_admin_backup, False),
+        ("GET", "/admin/backup/export"): (H.api_admin_backup_export, False),
+        ("GET", "/admin/backup/snapshot"): (H.api_admin_backup_snapshot, False),
+        ("POST", "/admin/backup/create"): (H.api_admin_backup_create, False),
+        ("POST", BACKUP_UPLOAD): (H.api_admin_backup_upload, False),
+        ("POST", "/admin/backup/inspect"): (H.api_admin_backup_inspect, False),
+        ("POST", "/admin/backup/restore"): (H.api_admin_backup_restore, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),
         ("GET", "/backgrounds"): (H.api_backgrounds, False),
         ("POST", "/admin/background"): (H.api_admin_background, False),

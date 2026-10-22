@@ -264,6 +264,19 @@ class Config:
             self._changed.notify_all()
             return self.revision
 
+    def replace(self, data):
+        """Заменяет все настройки (восстановление из копии). Старые версии
+        приводятся к текущему виду, недостающее берётся из DEFAULTS."""
+        data = copy.deepcopy(data)
+        data.pop("_revision", None)
+        _migrate(data)
+        with self._lock:
+            self._data = _merge(DEFAULTS, data)
+            self.revision += 1
+            self._save_locked()
+            self._changed.notify_all()
+            return self.revision
+
     def set(self, path, value):
         with self._lock:
             node = self._data

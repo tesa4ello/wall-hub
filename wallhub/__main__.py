@@ -57,6 +57,7 @@ def main():
     app.backends.stop_all()
     app.alarms.stop()
     app.reminders.stop()
+    app.backups.stop()
 
 
 if __name__ == "__main__":
