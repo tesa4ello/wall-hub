@@ -907,7 +907,22 @@ def make_handler(app, trusted, port):
             return self.start_session()
 
         def api_time(self, **_):
-            return {"timezone": app.system.timezone(), "timezones": app.system.timezones()}
+            return dict(app.system.time_state(), timezones=app.system.timezones())
+
+        def api_admin_time(self, body, **_):
+            """Синхронизация по сети, свои NTP-серверы, ручная установка времени."""
+            if "servers" in body:
+                servers = body["servers"]
+                if isinstance(servers, str):
+                    servers = servers.replace(",", " ").split()
+                if not isinstance(servers, list):
+                    raise ApiError(tr("Некорректный адрес NTP-сервера"))
+                app.system.set_ntp_servers(servers)
+            if "ntp" in body:
+                app.system.set_ntp(bool(body["ntp"]))
+            if body.get("time"):
+                app.system.set_time(str(body["time"]))
+            return self.api_time()
 
         def api_admin_timezone(self, body, **_):
             app.system.set_timezone(str(body.get("timezone", "")))
@@ -1205,6 +1220,7 @@ def make_handler(app, trusted, port):
         ("POST", "/m/weather/test"): (H.api_weather_test, False),
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
+        ("POST", "/admin/time"): (H.api_admin_time, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),
         ("GET", "/backgrounds"): (H.api_backgrounds, False),
         ("POST", "/admin/background"): (H.api_admin_background, False),
