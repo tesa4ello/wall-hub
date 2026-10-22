@@ -1,9 +1,9 @@
 {
   "id": "clock",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "core": "1",
   "title": "Часы",
-  "description": "Время и дата",
+  "description": "Время и дата, будильник и таймер",
   "widgets": [
     {
       "id": "clock",
@@ -77,6 +77,50 @@
           "default": false
         }
       ]
+    },
+    {
+      "id": "alarm",
+      "title": "Будильник",
+      "description": "Ближайший будильник и список будильников",
+      "icon": "alarm",
+      "card": true,
+      "size": {
+        "default": [
+          5,
+          5
+        ],
+        "min": [
+          3,
+          3
+        ],
+        "max": [
+          8,
+          10
+        ]
+      },
+      "options": []
+    },
+    {
+      "id": "timer",
+      "title": "Таймер",
+      "description": "Таймеры кухонные и не только",
+      "icon": "timer",
+      "card": true,
+      "size": {
+        "default": [
+          5,
+          4
+        ],
+        "min": [
+          3,
+          3
+        ],
+        "max": [
+          8,
+          10
+        ]
+      },
+      "options": []
     }
   ],
   "i18n": {
@@ -93,7 +137,30 @@
       "Карточки": "Cards",
       "Стрелочный": "Analog",
       "Стрелочный без цифр": "Analog, no numbers",
-      "12-часовой формат": "12-hour format"
+      "12-часовой формат": "12-hour format",
+      "Время и дата, будильник и таймер": "Time and date, alarm and timer",
+      "Будильник": "Alarm",
+      "Ближайший будильник и список будильников": "Next alarm and the list of alarms",
+      "Таймер": "Timer",
+      "Таймеры кухонные и не только": "Kitchen timers and more",
+      "Один раз": "Once",
+      "Каждый день": "Every day",
+      "По будням": "Weekdays",
+      "По выходным": "Weekends",
+      "сегодня": "today",
+      "завтра": "tomorrow",
+      "Новый будильник": "New alarm",
+      "Подпись (необязательно)": "Label (optional)",
+      "Подпись будильника": "Alarm label",
+      "Нет включённых будильников": "No alarms set",
+      "мин": "min",
+      "сек": "sec",
+      "Запустить": "Start",
+      "{n} мин": "{n} min",
+      "Свой…": "Custom…",
+      "Ещё таймер": "Another timer",
+      "Отмена": "Cancel",
+      "Сохранить": "Save"
     }
   }
 }

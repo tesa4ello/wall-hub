@@ -564,3 +564,23 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
   background: transparent; color: var(--muted); font-size: 12px; line-height: 1.4; resize: none; word-break: break-all; }
 .ssh-private { flex-wrap: wrap; }
 .ssh-private textarea { flex: 1 1 100%; width: 100%; margin-left: 0; font-size: 12px; }
+
+/* Будильники: строка — время, дни недели, подпись, выключатель, удаление. */
+.alarm-row .item-main { flex-wrap: wrap; gap: 10px; }
+.alarm-row input[type="time"] { width: 140px; font-variant-numeric: tabular-nums; }
+.alarm-row input[name="label"] { flex: 1; min-width: 140px; }
+.alarm-days { display: flex; gap: 4px; }
+.alarm-day input { position: absolute; opacity: 0; pointer-events: none; }
+.alarm-day span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.alarm-day input:checked + span { background: var(--accent); color: #fff; }
+.alarm-day input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }

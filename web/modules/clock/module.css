@@ -84,3 +84,90 @@
 .clock-hand-s { stroke: var(--accent); stroke-width: 1; stroke-linecap: round; }
 .clock-pin { fill: var(--accent); }
 .clock-analog .clock-date, .clock-minimal .clock-date { margin-top: min(2cqh, 10px); font-size: min(9cqh, 5.5cqw); }
+
+/* --- будильник и таймер ---------------------------------------------------- */
+
+.widget-clock-alarm, .widget-clock-timer { display: flex; }
+.clock-al, .clock-tm {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  padding: min(5cqh, 16px) min(5cqw, 18px);
+}
+.clock-al-head { display: flex; align-items: center; gap: 8px; font-size: min(8cqh, 17px); color: var(--muted); }
+.clock-al-head .icon { width: 1.2em; height: 1.2em; }
+.clock-al-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock-al-add {
+  display: grid;
+  place-items: center;
+  width: 2.2em;
+  height: 2.2em;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.clock-al-next { margin: min(3cqh, 10px) 0; }
+.clock-al-time { font-size: min(30cqh, 22cqw); font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-al-when { margin-top: 4px; font-size: min(8cqh, 16px); color: var(--muted); }
+.clock-al-when::first-letter { text-transform: uppercase; }
+.clock-al-empty { font-size: min(9cqh, 18px); color: var(--muted); }
+.clock-al-list { flex: 1; min-height: 0; overflow-y: auto; }
+.clock-al-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+.clock-al-row.off .clock-al-row-time, .clock-al-row.off .clock-al-row-days { opacity: 0.5; }
+.clock-al-row-time { font-size: 20px; font-variant-numeric: tabular-nums; }
+.clock-al-row-days { flex: 1; min-width: 0; overflow: hidden; color: var(--muted); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+
+.clock-tm-presets {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(30cqw, 120px), 1fr));
+  align-content: center;
+  gap: min(3cqh, 10px);
+}
+.clock-tm-preset {
+  min-height: min(18cqh, 56px);
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: min(8cqh, 17px);
+}
+.clock-tm-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(36cqh, 22cqw);
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.clock-tm-left.paused, .clock-tm-rest .paused { color: var(--muted); }
+.clock-tm-actions { display: flex; justify-content: center; gap: 10px; }
+.clock-tm-btn { min-width: 64px; min-height: min(16cqh, 52px); }
+.clock-tm-rest { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Редактор будильника и своего таймера (окно поверх экрана). */
+.clock-editor { width: min(520px, calc(100% - 32px)); }
+.clock-ed-time { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 16px 0; }
+.clock-ed-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.clock-ed-col .btn { width: 84px; min-height: 48px; }
+.clock-ed-col small { color: var(--muted); }
+.clock-ed-h, .clock-ed-m, .clock-ed-colon { font-size: 64px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-ed-days { display: flex; justify-content: center; gap: 6px; }
+.clock-ed-day {
+  width: 52px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.clock-ed-day[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.clock-ed-label { width: 100%; margin-top: 14px; justify-content: flex-start; }
+.clock-ed-label.muted { color: var(--muted); }
+.clock-ed-delete { margin-right: auto; }
