@@ -12,6 +12,7 @@ import { DesktopEditor } from "/admin/desktops.js";
 import { StorePanel } from "/admin/store.js";
 import { AlarmsPanel } from "/admin/alarms.js";
 import { BackupPanel } from "/admin/backup.js";
+import { Transfer } from "/admin/transfer.js";
 import { ScreenView } from "/admin/screen.js";
 import { NetworkPanel } from "/admin/network.js";
 import { WeatherPanel } from "/admin/weather.js";
@@ -83,6 +84,8 @@ async function boot() {
     $("login-repeat").hidden = !setupMode;
     $("login-repeat").required = setupMode;
     $("login-submit").textContent = t(setupMode ? "Задать пароль и войти" : "Войти");
+    $("login-transfer").hidden = !setupMode;
+    $("login-form").hidden = false;
     $("login").hidden = false;
     $("app").hidden = true;
     $("login-password").focus();
@@ -110,6 +113,17 @@ $("login-form").addEventListener("submit", async (e) => {
   } catch (err) {
     $("login-error").textContent = err.message;
   }
+});
+
+// Перенос на новую панель вместо нового пароля (только при первом входе).
+const transfer = new Transfer($("transfer"), {
+  // Сменились настройки, а может, и язык: начинаем со свежей страницы.
+  onDone: () => location.reload(),
+  onBack: () => { $("login-form").hidden = false; },
+});
+$("login-transfer").addEventListener("click", () => {
+  $("login-form").hidden = true;
+  transfer.show();
 });
 
 $("logout").addEventListener("click", async () => {
@@ -739,6 +753,7 @@ $("content").addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (state.tab === "modules" && (await store.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "alarms" && (await alarmsPanel.onSubmit(e, data).catch(() => true))) return;
+  if (state.tab === "backup" && (await backupPanel.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "weather" && (await weather.onSubmit(e, data).catch(() => true))) return;
   if (state.tab === "wifi" && (await network.onSubmit(e, data).catch(() => true))) return;
   if (e.target.id === "hidden-form") {

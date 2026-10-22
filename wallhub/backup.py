@@ -31,6 +31,9 @@ import socket
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import zipfile
 
 from . import __version__
@@ -49,6 +52,7 @@ AUTO_EVERY = 24 * 3600
 MAX_UPLOAD = 256 * 1024 * 1024
 MAX_UNPACKED = 512 * 1024 * 1024
 MAX_JSON = 4 * 1024 * 1024
+PULL_TIMEOUT = 60
 SNAPSHOT_RE = re.compile(r"^auto-\d{8}-\d{6}(-[a-z]+)?\.zip$")
 MODULE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 CAT_RE = re.compile(r"^(main|c\d{1,4})$")
@@ -106,6 +110,24 @@ def _add_tree(zf, root, prefix):
                 continue
             rel = os.path.relpath(full, root).replace(os.sep, "/")
             zf.write(full, f"{prefix}/{rel}")
+
+
+def _panel_url(address):
+    """«192.168.1.20», «panel.local:8080», «http://…» -> http://хост[:порт]."""
+    text = str(address or "").strip()
+    if not text:
+        raise BackupError("Укажите адрес старой панели")
+    if "://" not in text:
+        text = "http://" + text
+    url = urllib.parse.urlsplit(text)
+    if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password:
+        raise BackupError("Укажите адрес старой панели")
+    try:
+        port = url.port
+    except ValueError:
+        raise BackupError("Укажите адрес старой панели")
+    host = f"[{url.hostname}]" if ":" in url.hostname else url.hostname
+    return f"{url.scheme}://{host}{f':{port}' if port else ''}"
 
 
 class Backups:
@@ -290,6 +312,40 @@ class Backups:
         except BackupError:
             os.remove(path)
             raise
+
+    def pull(self, address, password, opener=None):
+        """Забирает полную копию со старой панели по сети (её админка, вход
+        по паролю) и кладёт как загруженную. Старой панели нужна версия 1.1.0+."""
+        base = _panel_url(address)
+        # Старая панель в той же сети: системный прокси (если он задан) только мешает.
+        opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor())
+
+        def call(path, data=None):
+            req = urllib.request.Request(base + path, data=data, headers={"Content-Type": "application/json"})
+            return opener.open(req, timeout=PULL_TIMEOUT)
+
+        try:
+            call("/api/login", json.dumps({"password": str(password)}).encode()).close()
+            parts = ",".join(PARTS)
+            with call(f"/api/admin/backup/export?parts={parts}") as resp:
+                length = int(resp.headers.get("Content-Length") or 0)
+                if not length:
+                    raise BackupError("Старая панель не отдала копию")
+                info = self.save_upload(resp, length)
+            try:
+                call("/api/logout", b"{}").close()
+            except (OSError, urllib.error.URLError):
+                pass
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise BackupError("Неверный пароль старой панели")
+            if e.code == 404:
+                raise BackupError("Старая панель не умеет отдавать копию: обновите её до 1.1.0")
+            raise BackupError("Старая панель ответила ошибкой {code}", code=e.code)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            reason = getattr(e, "reason", e)
+            raise BackupError("Старая панель не отвечает: {error}", error=str(reason))
+        return info
 
     def source(self, name):
         """Путь к копии: "upload" — загруженная, иначе имя автокопии."""
