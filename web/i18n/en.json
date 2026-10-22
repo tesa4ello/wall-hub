@@ -737,5 +737,6 @@
   "Время напоминания — ЧЧ:ММ": "Reminder time must be HH:MM",
   "Напишите текст напоминания": "Enter the reminder text",
   "Не больше {n} напоминаний": "No more than {n} reminders",
-  "Напоминание {time}": "Reminder {time}"
+  "Напоминание {time}": "Reminder {time}",
+  "Выключить звонок": "Stop"
 }
