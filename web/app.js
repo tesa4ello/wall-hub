@@ -567,7 +567,7 @@ const ringer = {
       ${more}
       <div class="ring-actions">
         ${alarm ? `<button class="btn ring-btn" data-ring="snooze">${t("Отложить на {n} мин", { n: this.settings.snooze || 10 })}</button>` : ""}
-        <button class="btn btn-primary ring-btn" data-ring="dismiss">${t("Выключить")}</button>
+        <button class="btn btn-primary ring-btn" data-ring="dismiss">${t("Выключить звонок")}</button>
       </div>`;
   },
 
