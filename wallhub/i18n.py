@@ -59,8 +59,9 @@ def current():
     return _current
 
 
-def tr(text, **params):
-    """Перевод на текущий язык; {имя} в тексте заменяются на params."""
+def tr(text, /, **params):
+    """Перевод на текущий язык; {имя} в тексте заменяются на params.
+    text — только позиционный: подстановка может называться и «text»."""
     if _current != _source:
         text = _catalogs.get(_current, {}).get(text, text)
     return text.format(**params) if params else text

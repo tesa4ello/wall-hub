@@ -27,6 +27,8 @@ from .background import ID_RE as BG_ID_RE, BackgroundError, Backgrounds
 from . import screen
 from . import display
 from .backends import Backends, ModuleError
+from .alarms import AlarmError, Alarms
+from .reminders import ReminderError, Reminders
 from .notifications import Notifications, Tiles
 from .netconfig import NetConfig, NetConfigError, parse_ipv4
 from .modules import Registry
@@ -213,6 +215,11 @@ class App:
         # Уведомления и плитки шторки (wallhub/notifications.py).
         self.notifications = Notifications(os.path.join(state_dir, "notifications.json"), notify=config.notify)
         self.tiles = Tiles(notify=config.notify)
+        # Будильники и таймеры: звонит экран, срабатывания считает сервер.
+        self.alarms = Alarms(config, state_dir, notifications=self.notifications, tiles=self.tiles)
+        self.alarms.start()
+        self.reminders = Reminders(config, notifications=self.notifications)
+        self.reminders.start()
         # Серверные части модулей: запускаются здесь и при каждой смене модулей.
         self.backends = Backends(config, os.path.join(state_dir, "module-data"),
                                  notifications=self.notifications, tiles=self.tiles)
@@ -301,7 +308,7 @@ class App:
         """Перевод уведомления; подстановки от модуля могут не совпасть с текстом."""
         try:
             return tr(text, **params)
-        except (KeyError, IndexError, ValueError):
+        except (KeyError, IndexError, ValueError, TypeError):
             return tr(text)
 
     def system_notes(self):
@@ -647,9 +654,12 @@ def make_handler(app, trusted, port):
                         or (started is not None and time.monotonic() - started < UPDATE_START_GRACE))
                 sound = app.sound["seq"]
                 notes = app.notes_rev()
+                alarms = app.alarms.rev
+                calendar = app.reminders.rev
                 app.config.wait(lambda: (app.config.revision, app.modules_rev) != seen
                                 or app.update_started != started or app.sound["seq"] != sound
-                                or app.notes_rev() != notes,
+                                or app.notes_rev() != notes or app.alarms.rev != alarms
+                                or app.reminders.rev != calendar,
                                 LONG_POLL_BUSY if busy else LONG_POLL)
             # build: киоск перезагружает страницу, когда версия сменилась.
             # update: шестерёнка на экране показывает значок новой версии.
@@ -668,7 +678,65 @@ def make_handler(app, trusted, port):
                 # notes: номер последнего уведомления (новое — всплывашка и звук)
                 # и счётчик изменений уведомлений и плиток (перечитать шторку).
                 "notes": {"seq": app.notifications.seq, "rev": app.notes_rev()},
+                # alarms: счётчик изменений будильников, таймеров и звонков.
+                "alarms": app.alarms.rev,
+                # calendar: счётчик изменений напоминаний.
+                "calendar": app.reminders.rev,
             }
+
+        # Будильники и таймеры
+
+        def api_alarms(self, **_):
+            return app.alarms.state()
+
+        def alarm_call(self, fn, *args):
+            try:
+                fn(*args)
+            except AlarmError as e:
+                raise ApiError(tr(e.text, **e.params))
+            return app.alarms.state()
+
+        def api_alarms_action(self, body, **_):
+            action = body.get("action")
+            if action == "save":
+                return self.alarm_call(app.alarms.save_alarm, body.get("alarm"))
+            if action == "delete":
+                return self.alarm_call(app.alarms.delete_alarm, str(body.get("id", "")))
+            if action in ("enable", "disable"):
+                return self.alarm_call(app.alarms.set_enabled, str(body.get("id", "")), action == "enable")
+            if action == "settings":
+                return self.alarm_call(app.alarms.save_settings, body.get("settings"), SOUNDS)
+            raise ApiError(tr("Неизвестное действие"))
+
+        def api_timers(self, body, **_):
+            return self.alarm_call(app.alarms.timer_action, str(body.get("action", "")), body.get("id"),
+                                   body.get("seconds"), body.get("label", ""))
+
+        def api_alarms_ring(self, body, **_):
+            if body.get("action") not in ("snooze", "dismiss"):
+                raise ApiError(tr("Неизвестное действие"))
+            return self.alarm_call(app.alarms.ring_action, body["action"], body.get("key"))
+
+        # Календарь и напоминания
+
+        def api_calendar(self, **_):
+            return app.reminders.state()
+
+        def api_calendar_action(self, body, **_):
+            action = body.get("action")
+            rid = str(body.get("id", ""))
+            try:
+                if action == "save":
+                    app.reminders.save(body.get("item"))
+                elif action == "delete":
+                    app.reminders.delete(rid)
+                elif action in ("done", "undone"):
+                    app.reminders.set_done(rid, action == "done")
+                else:
+                    raise ApiError(tr("Неизвестное действие"))
+            except ReminderError as e:
+                raise ApiError(tr(e.text, **e.params))
+            return app.reminders.state()
 
         def api_settings(self, body, **_):
             patch = validate_ui(body.get("ui", {}))
@@ -907,10 +975,31 @@ def make_handler(app, trusted, port):
             return self.start_session()
 
         def api_time(self, **_):
-            return {"timezone": app.system.timezone(), "timezones": app.system.timezones()}
+            return dict(app.system.time_state(), timezones=app.system.timezones())
+
+        def api_admin_time(self, body, **_):
+            """Синхронизация по сети, свои NTP-серверы, ручная установка времени."""
+            # Время проверяем до любых изменений: ошибка в нём не должна
+            # успеть выключить синхронизацию по сети.
+            if body.get("time"):
+                app.system.parse_time(str(body["time"]))
+            if "servers" in body:
+                servers = body["servers"]
+                if isinstance(servers, str):
+                    servers = servers.replace(",", " ").split()
+                if not isinstance(servers, list):
+                    raise ApiError(tr("Некорректный адрес NTP-сервера"))
+                app.system.set_ntp_servers(servers)
+            if "ntp" in body:
+                app.system.set_ntp(bool(body["ntp"]))
+            if body.get("time"):
+                app.system.set_time(str(body["time"]))
+            return self.api_time()
 
         def api_admin_timezone(self, body, **_):
             app.system.set_timezone(str(body.get("timezone", "")))
+            # Ближайший будильник и плитка в шторке — уже по новому поясу.
+            app.alarms.refresh()
 
         def api_admin_desktops(self, body, **_):
             layout = app.config.get("layout")
@@ -1191,6 +1280,12 @@ def make_handler(app, trusted, port):
         ("GET", "/shade"): (H.api_shade, False),
         ("POST", "/shade"): (H.api_shade_set, False),
         ("POST", "/notifications"): (H.api_notify, False),
+        ("GET", "/alarms"): (H.api_alarms, False),
+        ("POST", "/alarms"): (H.api_alarms_action, False),
+        ("POST", "/alarms/ring"): (H.api_alarms_ring, False),
+        ("GET", "/calendar"): (H.api_calendar, False),
+        ("POST", "/calendar"): (H.api_calendar_action, False),
+        ("POST", "/timers"): (H.api_timers, False),
         ("POST", "/notifications/dismiss"): (H.api_notify_dismiss, False),
         ("POST", "/notifications/action"): (H.api_notify_action, False),
         ("POST", "/admin/password"): (H.api_admin_password, False),
@@ -1205,6 +1300,7 @@ def make_handler(app, trusted, port):
         ("POST", "/m/weather/test"): (H.api_weather_test, False),
         ("GET", "/time"): (H.api_time, False),
         ("POST", "/admin/timezone"): (H.api_admin_timezone, False),
+        ("POST", "/admin/time"): (H.api_admin_time, False),
         ("POST", "/admin/desktops"): (H.api_admin_desktops, False),
         ("GET", "/backgrounds"): (H.api_backgrounds, False),
         ("POST", "/admin/background"): (H.api_admin_background, False),

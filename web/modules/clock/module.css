@@ -10,27 +10,241 @@
   align-items: center;
   font-variant-numeric: tabular-nums;
 }
-.clock-time {
-  display: flex;
-  align-items: flex-start;
-  line-height: 1;
-}
-.clock-hm {
-  font-size: min(62cqh, 30cqw);
-  font-weight: 300;
-  letter-spacing: -0.03em;
-}
-.clock-s {
-  margin: 0.22em 0 0 0.25em;
-  font-size: min(20cqh, 9cqw);
-  font-weight: 400;
-  color: var(--muted);
-}
 .clock-date {
   margin-top: min(4cqh, 18px);
   font-size: min(11cqh, 5.5cqw);
   color: var(--muted);
 }
 .clock-date::first-letter { text-transform: uppercase; }
-/* Без даты часы могут занять больше высоты. */
-.clock.no-date .clock-hm { font-size: min(80cqh, 30cqw); }
+
+/* Классический и крупный: ЧЧ:ММ и секунды справа сверху. */
+.clock-time {
+  display: flex;
+  align-items: flex-start;
+  line-height: 1;
+  font-size: min(62cqh, 30cqw);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+.clock.no-date .clock-time { font-size: min(80cqh, 30cqw); }
+.clock-time .clock-s {
+  margin: 0.22em 0 0 0.25em;
+  font-size: 0.32em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.clock-bold .clock-time { font-weight: 700; letter-spacing: -0.05em; font-size: min(66cqh, 32cqw); }
+.clock-bold.no-date .clock-time { font-size: min(84cqh, 32cqw); }
+.clock-bold .clock-colon { color: var(--accent); }
+.clock-bold .clock-time .clock-s { font-weight: 600; color: var(--accent); }
+
+/* Столбиком: часы над минутами, для узких высоких виджетов. */
+.clock-stacked .clock-face { display: flex; align-items: center; gap: min(3cqw, 3cqh); }
+.clock-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.86;
+  font-size: min(40cqh, 44cqw);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.clock-stacked.no-date .clock-stack { font-size: min(48cqh, 44cqw); }
+.clock-stack .clock-m { color: var(--accent); }
+.clock-stacked .clock-s { font-size: min(12cqh, 10cqw); color: var(--muted); writing-mode: vertical-rl; }
+
+/* Карточки: каждая пара цифр на своей плитке. */
+.clock-cards { display: flex; align-items: center; gap: min(2.5cqw, 3cqh); }
+.clock-card {
+  padding: 0.06em 0.12em;
+  border-radius: 0.14em;
+  background: var(--surface-2);
+  line-height: 1;
+  font-size: min(48cqh, 22cqw);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.no-date .clock-card { font-size: min(62cqh, 24cqw); }
+.clock-cards .clock-s { font-size: min(24cqh, 11cqw); color: var(--muted); align-self: flex-end; }
+
+/* Стрелочные. Размер — от меньшей стороны виджета. */
+.clock-analog .clock-face, .clock-minimal .clock-face { width: min(78cqh, 90cqw); aspect-ratio: 1; }
+.no-date.clock-analog .clock-face, .no-date.clock-minimal .clock-face { width: min(94cqh, 94cqw); }
+.clock-dial { display: block; width: 100%; height: 100%; overflow: visible; }
+.clock-rim { fill: none; stroke: var(--muted); stroke-opacity: 0.35; stroke-width: 1; }
+.clock-minimal .clock-rim { stroke-opacity: 0; }
+.clock-mark { stroke: var(--muted); stroke-width: 0.8; stroke-linecap: round; }
+.clock-mark.major { stroke: var(--text); stroke-width: 1.6; }
+.clock-minimal .clock-mark.major { stroke-width: 2.4; }
+.clock-num { fill: var(--text); font-size: 10px; font-weight: 500; text-anchor: middle; }
+.clock-hand-h, .clock-hand-m { stroke: var(--text); stroke-linecap: round; }
+.clock-hand-h { stroke-width: 4; }
+.clock-hand-m { stroke-width: 2.6; }
+.clock-hand-s { stroke: var(--accent); stroke-width: 1; stroke-linecap: round; }
+.clock-pin { fill: var(--accent); }
+.clock-analog .clock-date, .clock-minimal .clock-date { margin-top: min(2cqh, 10px); font-size: min(9cqh, 5.5cqw); }
+
+/* --- будильник и таймер ---------------------------------------------------- */
+
+.widget-clock-alarm, .widget-clock-timer { display: flex; }
+.clock-al, .clock-tm {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  padding: min(5cqh, 16px) min(5cqw, 18px);
+}
+.clock-al-head { display: flex; align-items: center; gap: 8px; font-size: min(8cqh, 17px); color: var(--muted); }
+.clock-al-head .icon { width: 1.2em; height: 1.2em; }
+.clock-al-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock-al-add {
+  display: grid;
+  place-items: center;
+  width: 2.2em;
+  height: 2.2em;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.clock-al-next { margin: min(3cqh, 10px) 0; }
+.clock-al-time { font-size: min(30cqh, 22cqw); font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-al-when { margin-top: 4px; font-size: min(8cqh, 16px); color: var(--muted); }
+.clock-al-when::first-letter { text-transform: uppercase; }
+.clock-al-empty { font-size: min(9cqh, 18px); color: var(--muted); }
+.clock-al-list { flex: 1; min-height: 0; overflow-y: auto; }
+.clock-al-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+.clock-al-row.off .clock-al-row-time, .clock-al-row.off .clock-al-row-days { opacity: 0.5; }
+.clock-al-row-time { font-size: 20px; font-variant-numeric: tabular-nums; }
+.clock-al-row-days { flex: 1; min-width: 0; overflow: hidden; color: var(--muted); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+
+.clock-tm-presets {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(30cqw, 120px), 1fr));
+  align-content: center;
+  gap: min(3cqh, 10px);
+}
+.clock-tm-preset {
+  min-height: min(18cqh, 56px);
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: min(8cqh, 17px);
+}
+.clock-tm-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(36cqh, 22cqw);
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.clock-tm-left.paused, .clock-tm-rest .paused { color: var(--muted); }
+.clock-tm-actions { display: flex; justify-content: center; gap: 10px; }
+.clock-tm-btn { min-width: 64px; min-height: min(16cqh, 52px); }
+.clock-tm-rest { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Редактор будильника и своего таймера (окно поверх экрана). */
+.clock-editor { width: min(520px, calc(100% - 32px)); }
+.clock-ed-time { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 16px 0; }
+.clock-ed-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.clock-ed-col .btn { width: 84px; min-height: 48px; }
+.clock-ed-col small { color: var(--muted); }
+.clock-ed-h, .clock-ed-m, .clock-ed-colon { font-size: 64px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-ed-days { display: flex; justify-content: center; gap: 6px; }
+.clock-ed-day {
+  width: 52px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.clock-ed-day[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.clock-ed-label { width: 100%; margin-top: 14px; justify-content: flex-start; }
+.clock-ed-label.muted { color: var(--muted); }
+.clock-ed-delete { margin-right: auto; }
+
+/* --- календарь (окно по нажатию на часы) ---------------------------------- */
+
+.widget-clock-clock { cursor: pointer; }
+.dlg.cal {
+  display: flex;
+  gap: 24px;
+  width: min(940px, calc(100% - 32px));
+  height: min(540px, calc(100% - 32px));
+  padding: 20px 24px;
+}
+.cal-month { flex: 0 0 auto; display: flex; flex-direction: column; width: 480px; }
+.cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.cal-title { flex: 1; text-align: center; font-size: 22px; font-weight: 600; }
+.cal-title::first-letter { text-transform: uppercase; }
+.cal-nav { width: 52px; min-height: 44px; padding: 0; }
+.cal-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(6, 1fr); gap: 4px; }
+.cal-wd { padding: 4px 0; text-align: center; color: var(--muted); font-size: 14px; }
+.cal-cell {
+  position: relative;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell.weekend { color: var(--accent); }
+.cal-cell.other { opacity: 0.35; }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-cell.selected { background: var(--accent); color: #fff; }
+.cal-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.cal-dot.done { background: var(--muted); }
+.cal-cell.selected .cal-dot { background: #fff; }
+
+.cal-day { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-left: 24px; border-left: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+.cal-day-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.cal-day-title { flex: 1; font-size: 20px; font-weight: 600; line-height: 1.3; }
+.cal-close { width: 44px; min-height: 44px; padding: 0; }
+.cal-list { flex: 1; min-height: 0; overflow-y: auto; }
+.cal-empty { margin: 8px 0; color: var(--muted); }
+.cal-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent); }
+.cal-item:first-child { border-top: 0; }
+.cal-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+}
+.cal-check[aria-pressed="true"] { border-color: var(--ok); background: var(--ok); }
+.cal-check .icon { width: 18px; height: 18px; }
+.cal-item-time { flex: none; color: var(--accent); font-variant-numeric: tabular-nums; }
+.cal-item-time:empty { display: none; }
+.cal-item-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cal-item.done .cal-item-text, .cal-item.done .cal-item-time { color: var(--muted); text-decoration: line-through; }
+.cal-add { margin-top: 12px; min-height: 48px; }
+
+.cal-ed-text { white-space: normal; text-align: left; }
+.cal-ed-timed { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.cal-ed-time[hidden] { display: none; }
+.dlg-text.cal-ed-date::first-letter { text-transform: uppercase; }

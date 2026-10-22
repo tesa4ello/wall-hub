@@ -6,11 +6,16 @@
 """
 
 import logging
+import re
 import subprocess
 import threading
 import time
 
 from .i18n import tr
+
+# Drop-in systemd-timesyncd со своими серверами (создаёт install.sh).
+NTP_DROPIN = "/etc/systemd/timesyncd.conf.d/50-wallhub.conf"
+NTP_SERVER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$|^[0-9a-fA-F:]{2,39}$")
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +49,7 @@ class System:
         # «Дача» сохранена, но не видна: для списка известных сетей.
         self._fake_saved = {"Home", "Дача"}
         self._fake_radio = True
+        self._fake_ntp = {"enabled": True, "servers": [], "offset": 0.0, "tz": "Europe/Moscow"}
         self._lock = threading.Lock()
 
     def _run(self, args, timeout=30):
@@ -256,15 +262,108 @@ class System:
 
     def timezone(self):
         if self.dry_run:
-            return "Europe/Moscow"
+            return self._fake_ntp["tz"]
         return self._run(["timedatectl", "show", "-p", "Timezone", "--value"]).strip()
 
     def set_timezone(self, tz):
         if tz not in self.timezones():
             raise CommandError(tr("Неизвестный часовой пояс"))
         if self.dry_run:
+            self._fake_ntp["tz"] = tz
             return
         self._run(["timedatectl", "set-timezone", tz])
+        # Процесс сервиса запомнил пояс при старте: без tzset будильники и
+        # напоминания считали бы местное время по старому поясу.
+        time.tzset()
+
+    def time_state(self):
+        """Время панели: пояс, синхронизация по сети и её серверы."""
+        if self.dry_run:
+            ntp = self._fake_ntp
+            return {"timezone": ntp["tz"], "time": time.time() + ntp["offset"], "ntp": ntp["enabled"],
+                    "synchronized": ntp["enabled"], "timesyncd": True, "server": "ntp.ubuntu.com" if ntp["enabled"] else "",
+                    "servers": list(ntp["servers"]), "default_servers": ["0.debian.pool.ntp.org", "1.debian.pool.ntp.org"]}
+        props = self._show(["timedatectl", "show"])
+        state = {"timezone": props.get("Timezone", ""), "time": time.time(), "ntp": props.get("NTP") == "yes",
+                 "synchronized": props.get("NTPSynchronized") == "yes", "timesyncd": False, "server": "",
+                 "servers": self.ntp_servers(), "default_servers": []}
+        try:
+            sync = self._show(["timedatectl", "show-timesync"])
+        except CommandError:
+            return state  # нет systemd-timesyncd (например, chrony): свои серверы не настроить
+        state["timesyncd"] = True
+        state["server"] = sync.get("ServerName", "")
+        state["default_servers"] = (sync.get("FallbackNTPServers") or "").split()
+        return state
+
+    def _show(self, args):
+        props = {}
+        for line in self._run(args).splitlines():
+            key, _, value = line.partition("=")
+            props[key] = value
+        return props
+
+    def set_ntp(self, enabled):
+        if self.dry_run:
+            self._fake_ntp["enabled"] = bool(enabled)
+            return
+        self._run(["timedatectl", "set-ntp", "true" if enabled else "false"])
+
+    @staticmethod
+    def parse_time(value):
+        """«ГГГГ-ММ-ДД ЧЧ:ММ[:СС]» -> datetime или CommandError."""
+        import datetime
+        try:
+            when = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S" if value.count(":") == 2 else "%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            raise CommandError(tr("Неверные дата или время"))
+        if not 2020 <= when.year <= 2099:
+            raise CommandError(tr("Неверные дата или время"))
+        return when
+
+    def set_time(self, value):
+        """Ручная установка «ГГГГ-ММ-ДД ЧЧ:ММ[:СС]» (местное время). Только без NTP."""
+        when = self.parse_time(value)
+        if self.dry_run:
+            if self._fake_ntp["enabled"]:
+                raise CommandError(tr("Сначала выключите синхронизацию по сети"))
+            from zoneinfo import ZoneInfo
+            # Как timedatectl: введённое время — в поясе панели.
+            self._fake_ntp["offset"] = when.replace(tzinfo=ZoneInfo(self._fake_ntp["tz"])).timestamp() - time.time()
+            return
+        if self.time_state()["ntp"]:
+            raise CommandError(tr("Сначала выключите синхронизацию по сети"))
+        self._run(["timedatectl", "set-time", when.strftime("%Y-%m-%d %H:%M:%S")])
+
+    def ntp_servers(self):
+        if self.dry_run:
+            return list(self._fake_ntp["servers"])
+        try:
+            with open(NTP_DROPIN, encoding="utf-8") as f:
+                for line in f:
+                    key, _, value = line.strip().partition("=")
+                    if key.strip() == "NTP":
+                        return value.split()
+        except OSError:
+            pass
+        return []
+
+    def set_ntp_servers(self, servers):
+        """Свои NTP-серверы (пусто — серверы системы по умолчанию)."""
+        servers = [str(s).strip() for s in servers if str(s).strip()]
+        if len(servers) > 5 or not all(NTP_SERVER_RE.match(s) for s in servers):
+            raise CommandError(tr("Некорректный адрес NTP-сервера"))
+        if self.dry_run:
+            self._fake_ntp["servers"] = servers
+            return
+        text = "# Пишет Wall-HUB (админка → Система → Время).\n[Time]\n" + (f"NTP={' '.join(servers)}\n" if servers else "")
+        try:
+            # Файл принадлежит сервису, каталог — нет: переписываем на месте.
+            with open(NTP_DROPIN, "w", encoding="utf-8") as f:
+                f.write(text)
+        except OSError as e:
+            raise CommandError(tr("Не удалось сохранить NTP-серверы: {error}", error=e.strerror or e))
+        self._run(["systemctl", "restart", "systemd-timesyncd.service"])
 
     def hostname(self):
         import socket

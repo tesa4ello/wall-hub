@@ -41,12 +41,13 @@ export function soundFor(source) {
 }
 
 // Играет звук name (по умолчанию звук источника source или общий).
-// force — игнорировать выключатель, «Не беспокоить» и тихие часы (проверка из админки).
-export function play(name, { force = false, source = null } = {}) {
+// force — игнорировать выключатель, «Не беспокоить» и тихие часы (проверка из
+// админки, будильник). volume — своя громкость 0..100 (у будильника).
+export function play(name, { force = false, source = null, volume: own = null } = {}) {
   name ||= soundFor(source);
   if (name === "off" && !force) return false;
   if (!force && (!settings.sound_enabled || settings.dnd || isQuiet())) return false;
-  const volume = (settings.sound_volume ?? 60) / 100;
+  const volume = (own ?? settings.sound_volume ?? 60) / 100;
   if (volume <= 0) return false;
   const notes = NOTES[name] || NOTES[settings.sound_name] || NOTES.chime;
   try {

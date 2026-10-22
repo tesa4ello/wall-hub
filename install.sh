@@ -147,7 +147,9 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 systemctl enable --now NetworkManager
-if ! dpkg -s chrony >/dev/null 2>&1; then
+# Синхронизацию времени включаем только при установке: при обновлении
+# остаётся то, что выбрали в админке (Система → Время).
+if [ "$UPDATER" = 0 ] && ! dpkg -s chrony >/dev/null 2>&1; then
     timedatectl set-ntp true || true
 fi
 # Armbian поднимает Wi‑Fi через netplan + networkd, и NetworkManager его не
@@ -274,6 +276,14 @@ install -m 0644 "$SRC_DIR/deploy/wallhub-vnc.service" /etc/systemd/system/wallhu
 install -m 0644 "$SRC_DIR/deploy/wallhub-net-ethernet.service" /etc/systemd/system/wallhub-net-ethernet.service
 install -d /etc/polkit-1/rules.d
 install -m 0644 "$SRC_DIR/deploy/50-wallhub.rules" /etc/polkit-1/rules.d/50-wallhub.rules
+# Свои NTP-серверы из админки: сервис переписывает этот drop-in
+# systemd-timesyncd (файл его, каталог — нет). Пустая секция = серверы по умолчанию.
+install -d -m 0755 /etc/systemd/timesyncd.conf.d
+if [ ! -f /etc/systemd/timesyncd.conf.d/50-wallhub.conf ]; then
+    printf '[Time]\n' > /etc/systemd/timesyncd.conf.d/50-wallhub.conf
+fi
+chown "$SERVICE_USER:$SERVICE_USER" /etc/systemd/timesyncd.conf.d/50-wallhub.conf
+chmod 0644 /etc/systemd/timesyncd.conf.d/50-wallhub.conf
 systemctl restart polkit 2>/dev/null || true
 
 systemctl daemon-reload

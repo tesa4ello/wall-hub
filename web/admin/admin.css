@@ -564,3 +564,33 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
   background: transparent; color: var(--muted); font-size: 12px; line-height: 1.4; resize: none; word-break: break-all; }
 .ssh-private { flex-wrap: wrap; }
 .ssh-private textarea { flex: 1 1 100%; width: 100%; margin-left: 0; font-size: 12px; }
+
+/* Будильники: строка — время, дни недели, подпись, выключатель, удаление. */
+.alarm-row .item-main { flex-wrap: wrap; gap: 10px; }
+.alarm-row input[type="time"] { flex: none; width: 140px; font-variant-numeric: tabular-nums; }
+.alarm-row input[name="label"] { flex: 1 1 140px; min-width: 0; }
+.alarm-days { display: flex; gap: 4px; }
+/* Перебиваем .item-main > div:nth-child(2), который сжал бы дни. */
+.alarm-row .item-main > .alarm-days { flex: none; min-width: auto; }
+/* На телефоне дни недели — отдельной строкой на всю ширину. */
+@media (max-width: 760px) {
+  .alarm-row .item-main > .alarm-days { flex: 1 1 100%; order: 1; }
+  .alarm-day { flex: 1; }
+  .alarm-day span { display: grid; min-width: 0; padding: 0; }
+  .alarm-row input[name="label"] { order: 2; }
+  .alarm-row .switch, .alarm-row [data-alarm-delete] { order: 3; }
+}
+.alarm-day input { position: absolute; opacity: 0; pointer-events: none; }
+.alarm-day span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.alarm-day input:checked + span { background: var(--accent); color: #fff; }
+.alarm-day input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
