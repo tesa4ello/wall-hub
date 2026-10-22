@@ -34,6 +34,8 @@ export class BackupPanel {
     // Что восстанавливаем: {source: "upload" | имя автокопии, info, parts}.
     this.pending = null;
     this.busy = false;
+    // Форма «С другой панели»: render() её пересоздаёт, введённое храним тут.
+    this.pullForm = { address: "", password: "" };
   }
 
   async load() {
@@ -84,8 +86,8 @@ export class BackupPanel {
           </div>
           <form class="field" id="backup-pull"><span>${t("С другой панели по сети")}<small>${t("Её адрес и пароль админки, нужна версия 1.1.0 или новее")}</small></span>
             <div class="field-controls">
-              <input name="address" placeholder="192.168.1.20" autocomplete="off" required ${this.busy ? "disabled" : ""}>
-              <input type="password" name="password" placeholder="${t("Пароль")}" autocomplete="off" required ${this.busy ? "disabled" : ""}>
+              <input name="address" value="${esc(this.pullForm.address)}" placeholder="192.168.1.20" autocomplete="off" required ${this.busy ? "disabled" : ""}>
+              <input type="password" name="password" value="${esc(this.pullForm.password)}" placeholder="${t("Пароль")}" autocomplete="off" required ${this.busy ? "disabled" : ""}>
               <button class="btn btn-small" type="submit" ${this.busy ? "disabled" : ""}>${t("Забрать")}</button>
             </div>
           </form>`}
@@ -128,6 +130,7 @@ export class BackupPanel {
 
   async onSubmit(e, data) {
     if (e.target.id !== "backup-pull") return false;
+    this.pullForm = data;
     await this.fetchUpload(() => api.post("/admin/backup/pull", data), true);
     return true;
   }

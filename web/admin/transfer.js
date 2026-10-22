@@ -48,6 +48,8 @@ export class Transfer {
     this.parts = null;
     this.busy = "";
     this.error = "";
+    // Введённое в форму: render() пересоздаёт её, а после ошибки поля нужны.
+    this.form = { address: "", password: "" };
     root.addEventListener("submit", (e) => this.onSubmit(e));
     root.addEventListener("click", (e) => this.onClick(e));
     root.addEventListener("change", (e) => this.onChange(e));
@@ -69,8 +71,8 @@ export class Transfer {
         <div class="transfer-info">${backupSummary(this.info).map((line) => `<div>${esc(line)}</div>`).join("")}</div>
         ${this.info.parts.map((p) => `<label class="check"><input type="checkbox" data-part="${p}" ${this.parts.has(p) ? "checked" : ""}> ${t(PARTS[p])}</label>`).join("")}
         ${this.info.parts.includes("secrets") ? "" : `<p class="muted small">${t("В копии нет пароля: его попросят придумать после переноса.")}</p>`}
-        <button class="btn btn-primary" data-restore ${busy || (this.parts.size ? "" : "disabled")}>${esc(this.busy || t("Перенести"))}</button>
-        <button class="btn" data-back ${busy}>${t("Назад")}</button>
+        <button type="button" class="btn btn-primary" data-restore ${busy || (this.parts.size ? "" : "disabled")}>${esc(this.busy || t("Перенести"))}</button>
+        <button type="button" class="btn" data-back ${busy}>${t("Назад")}</button>
         ${error}`;
       return;
     }
@@ -78,15 +80,15 @@ export class Transfer {
       <div class="transfer-head">${t("Перенос с другой панели")}</div>
       <p class="muted">${t("Новая панель заберёт настройки, столы, будильники, модули, фоны и пароль со старой. Старой панели нужна версия 1.1.0 или новее.")}</p>
       <form class="transfer-form" id="transfer-pull">
-        <input name="address" placeholder="${t("Адрес старой панели, например 192.168.1.20")}" autocomplete="off" required ${busy}>
-        <input type="password" name="password" placeholder="${t("Пароль админки старой панели")}" autocomplete="off" required ${busy}>
+        <input name="address" value="${esc(this.form.address)}" placeholder="${t("Адрес старой панели, например 192.168.1.20")}" autocomplete="off" required ${busy}>
+        <input type="password" name="password" value="${esc(this.form.password)}" placeholder="${t("Пароль админки старой панели")}" autocomplete="off" required ${busy}>
         <button class="btn btn-primary" type="submit" ${busy}>${esc(this.busy || t("Забрать настройки"))}</button>
       </form>
       <div class="transfer-or muted">${t("или из файла копии")}</div>
       <label class="btn ${this.busy ? "disabled" : ""}">${t("Выбрать файл…")}
         <input type="file" accept=".zip,application/zip" data-file hidden ${busy}>
       </label>
-      <button class="btn" data-back ${busy}>${t("Назад")}</button>
+      <button type="button" class="btn" data-back ${busy}>${t("Назад")}</button>
       ${error}`;
   }
 
@@ -116,6 +118,7 @@ export class Transfer {
     if (e.target.id !== "transfer-pull") return;
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
+    this.form = data;
     this.preview(await this.run(t("Забираю…"), () => api.post("/setup/transfer/pull", data)));
   }
 
