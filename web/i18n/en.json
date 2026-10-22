@@ -770,7 +770,6 @@
   "Восстановить…": "Restore…",
   "Автокопий пока нет": "No automatic backups yet",
   "Сделать копию сейчас": "Back up now",
-  "Панель хранит {n} последних автокопий: раз в сутки и перед восстановлением. Фоны в них не входят.": "The panel keeps the last {n} automatic backups: daily and before each restore. Backgrounds are not included.",
   "Копия сохранена": "Backup saved",
   "Восстановить настройки из копии?": "Restore settings from the backup?",
   "Выбранное на панели заменится данными из копии. Текущие настройки сохранятся в автокопию.": "The selected parts will be replaced with data from the backup. The current settings will be saved to an automatic backup.",
@@ -785,7 +784,6 @@
   "Копия сделана более новой версией панели, сначала обновите панель": "The backup was made by a newer panel version, update the panel first",
   "Выберите, что восстановить": "Choose what to restore",
   "Ожидается application/octet-stream": "Expected application/octet-stream",
-  "Адрес старой панели, например 192.168.1.20": "Old panel address, e.g. 192.168.1.20",
   "В копии нет пароля: его попросят придумать после переноса.": "The backup has no password: you will set a new one after the transfer.",
   "Её адрес и пароль админки, нужна версия 1.1.0 или новее": "Its address and admin password, version 1.1.0 or newer required",
   "Забираю…": "Fetching…",
@@ -806,5 +804,8 @@
   "Старая панель не умеет отдавать копию: обновите её до 1.1.0": "The old panel cannot send backups: update it to 1.1.0",
   "Старая панель ответила ошибкой {code}": "The old panel returned error {code}",
   "Укажите адрес старой панели": "Enter the old panel address",
-  "или из файла копии": "or from a backup file"
+  "или из файла копии": "or from a backup file",
+  "Панель хранит последние автокопии: {daily} ежедневных, {restore} перед восстановлением и {manual} сделанных вручную. Фоны в них не входят.": "The panel keeps the latest automatic backups: {daily} daily, {restore} before restore and {manual} manual. Backgrounds are not included.",
+  "Адрес, например 192.168.1.20": "Address, e.g. 192.168.1.20",
+  "Неверная длина запроса": "Invalid request length"
 }

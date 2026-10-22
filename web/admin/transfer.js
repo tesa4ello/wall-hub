@@ -80,7 +80,7 @@ export class Transfer {
       <div class="transfer-head">${t("Перенос с другой панели")}</div>
       <p class="muted">${t("Новая панель заберёт настройки, столы, будильники, модули, фоны и пароль со старой. Старой панели нужна версия 1.1.0 или новее.")}</p>
       <form class="transfer-form" id="transfer-pull">
-        <input name="address" value="${esc(this.form.address)}" placeholder="${t("Адрес старой панели, например 192.168.1.20")}" autocomplete="off" required ${busy}>
+        <input name="address" value="${esc(this.form.address)}" placeholder="${t("Адрес, например 192.168.1.20")}" autocomplete="off" required ${busy}>
         <input type="password" name="password" value="${esc(this.form.password)}" placeholder="${t("Пароль админки старой панели")}" autocomplete="off" required ${busy}>
         <button class="btn btn-primary" type="submit" ${busy}>${esc(this.busy || t("Забрать настройки"))}</button>
       </form>

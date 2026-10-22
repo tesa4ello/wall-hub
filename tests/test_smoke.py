@@ -3,6 +3,7 @@
 Ловит поломки вроде «маршруты погоды отдают 404» после изменений в server.py.
 """
 
+import http.client
 import json
 import os
 import socket
@@ -136,6 +137,14 @@ class TransferTest(unittest.TestCase):
         old.alarms.save_alarm({"time": "06:30", "days": [0, 1, 2, 3, 4], "label": "Работа"})
         new, new_url = self.start("new")
         address = old_url.removeprefix("http://")
+        # Испорченный Content-Length — ошибка запроса, а не сервера.
+        conn = http.client.HTTPConnection(new_url.removeprefix("http://"), timeout=10)
+        conn.putrequest("POST", "/api/setup/transfer/upload")
+        conn.putheader("Content-Type", "application/octet-stream")
+        conn.putheader("Content-Length", "abc")
+        conn.endheaders()
+        self.assertEqual(conn.getresponse().status, 400)
+        conn.close()
         status, body, _ = self.post(new_url + "/api/setup/transfer/pull", {"address": address, "password": "wrong"})
         self.assertEqual(status, 400, body)
         status, info, _ = self.post(new_url + "/api/setup/transfer/pull", {"address": address, "password": "secret12"})
@@ -145,6 +154,7 @@ class TransferTest(unittest.TestCase):
         status, body, cookie = self.post(new_url + "/api/setup/transfer/restore", {"parts": info["parts"]})
         self.assertEqual(status, 200, body)
         self.assertTrue(cookie and "wallhub_session=" in cookie)
+        self.assertFalse(os.path.exists(new.backups.upload_path()))
         self.assertEqual([a["label"] for a in new.config.get("alarms")], ["Работа"])
         self.assertEqual(new.config.get("admin", "password_hash"), old.config.get("admin", "password_hash"))
         # Пароль задан: перенос в режиме первого запуска больше недоступен.

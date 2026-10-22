@@ -612,17 +612,42 @@ class BackupTest(unittest.TestCase):
         state, cfg, b, _ = self.make(tmp.name)
         now = [1_900_000_000]
         b.clock = lambda: now[0]
-        for _ in range(KEEP_AUTO + 2):
+        for _ in range(KEEP_AUTO["daily"] + 2):
             b.snapshot("daily")
             now[0] += 10
         snaps = b.snapshots()
-        self.assertEqual(len(snaps), KEEP_AUTO)
+        self.assertEqual(len(snaps), KEEP_AUTO["daily"])
         self.assertEqual(snaps[0]["reason"], "daily")
+        # Ручные копии вытесняют только ручные.
+        for _ in range(KEEP_AUTO["manual"] + 2):
+            b.snapshot("manual")
+            now[0] += 10
+        reasons = [x["reason"] for x in b.snapshots()]
+        self.assertEqual(reasons.count("manual"), KEEP_AUTO["manual"])
+        self.assertEqual(reasons.count("daily"), KEEP_AUTO["daily"])
+        snaps = [x for x in b.snapshots() if x["reason"] == "daily"]
         self.assertEqual(os.stat(os.path.join(state, "backups")).st_mode & 0o777, 0o700)
         # Восстановление из самой старой автокопии её не теряет.
         cfg.update({"ui": {"theme": "light"}})
         b.restore(snaps[-1]["name"], ["settings"])
         self.assertEqual(cfg.get("ui", "theme"), "dark")
+        # Защищённая на время восстановления копия потом уходит по лимиту.
+        reasons = [x["reason"] for x in b.snapshots()]
+        self.assertEqual(reasons.count("daily"), KEEP_AUTO["daily"])
+        self.assertEqual(reasons.count("restore"), 1)
+        # Загруженный файл копии удаляется после восстановления.
+        path, _ = b.export(["settings", "secrets"])
+        with open(path, "rb") as f:
+            data = f.read()
+        os.remove(path)
+        b.save_upload(io.BytesIO(data), len(data))
+        b.restore("upload", ["settings"])
+        self.assertFalse(os.path.exists(b.upload_path()))
+        # Русское имя панели остаётся в имени файла латиницей.
+        cfg.update({"ui": {"panel_name": "Кухня 2"}})
+        path, filename = b.export(["settings"])
+        os.remove(path)
+        self.assertTrue(filename.startswith("wallhub-Kukhnya-2-"), filename)
         with self.assertRaises(BackupError):
             b.snapshot_path("../config.json")
         bad = io.BytesIO()

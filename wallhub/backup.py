@@ -21,6 +21,7 @@ settings, backgrounds, modules, secrets (секреты, токены и дан�
 без части backgrounds их не трогает).
 """
 
+import contextlib
 import datetime
 import json
 import logging
@@ -46,7 +47,9 @@ FORMAT = 1
 PARTS = ("settings", "backgrounds", "modules", "secrets")
 EXPORT_DEFAULT = ("settings", "backgrounds", "modules")
 AUTO_PARTS = ("settings", "modules", "secrets")
-KEEP_AUTO = 5
+# Сколько автокопий хранить по каждой причине: ручные не вытесняют
+# ежедневные и сделанные перед восстановлением.
+KEEP_AUTO = {"daily": 5, "restore": 3, "manual": 3}
 AUTO_EVERY = 24 * 3600
 # Загрузка копии и распаковка: фонов может быть много.
 MAX_UPLOAD = 256 * 1024 * 1024
@@ -130,6 +133,25 @@ def _panel_url(address):
     return f"{url.scheme}://{host}{f':{port}' if port else ''}"
 
 
+_TRANSLIT = dict(zip(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t",
+     "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"]))
+
+
+def _translit(text):
+    """Имя панели для имени файла: «Кухня» → «Kukhnya»."""
+    out = []
+    for ch in str(text):
+        low = ch.lower()
+        if low in _TRANSLIT:
+            lat = _TRANSLIT[low]
+            out.append(lat.capitalize() if ch != low else lat)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 class Backups:
     def __init__(self, config, state_dir, backgrounds_dir, modules_dir, data_dir, update_token, store_tokens,
                  before_restore=lambda parts: None, on_restore=lambda parts: None, clock=time.time):
@@ -203,7 +225,7 @@ class Backups:
         except BaseException:
             os.remove(path)
             raise
-        panel = re.sub(r"[^A-Za-z0-9_-]+", "-", manifest["panel"]).strip("-") or "panel"
+        panel = re.sub(r"[^A-Za-z0-9_-]+", "-", _translit(manifest["panel"])).strip("-") or "panel"
         stamp = _now().strftime("%Y%m%d-%H%M")
         return path, f"wallhub-{panel}-{stamp}.zip"
 
@@ -218,8 +240,9 @@ class Backups:
     # --- автокопии --------------------------------------------------------------
 
     def snapshot(self, reason="", protect=None):
-        """Полная копия (без фонов) в state/backups; хранится KEEP_AUTO последних.
-        protect — автокопия, которую сейчас восстанавливают: её не удаляем."""
+        """Полная копия (без фонов) в state/backups; по каждой причине хранится
+        KEEP_AUTO последних. protect — автокопия, которую сейчас
+        восстанавливают: её не удаляем."""
         with self.lock:
             self._ensure_dir()
             stamp = datetime.datetime.fromtimestamp(self.clock()).strftime("%Y%m%d-%H%M%S")
@@ -228,11 +251,17 @@ class Backups:
             self.build(path + ".tmp", AUTO_PARTS)
             os.chmod(path + ".tmp", 0o600)
             os.replace(path + ".tmp", path)
-            for old in self.snapshots()[KEEP_AUTO:]:
-                if old["name"] != protect:
-                    os.remove(os.path.join(self.dir, old["name"]))
+            self._prune(protect)
         log.info("автокопия настроек %s", name)
         return name
+
+    def _prune(self, protect=None):
+        seen = {}
+        for old in self.snapshots():
+            reason = old["reason"] if old["reason"] in KEEP_AUTO else "daily"
+            seen[reason] = seen.get(reason, 0) + 1
+            if seen[reason] > KEEP_AUTO[reason] and old["name"] != protect:
+                os.remove(os.path.join(self.dir, old["name"]))
 
     def snapshots(self):
         """Автокопии, новые первыми."""
@@ -419,6 +448,14 @@ class Backups:
             self._apply(path, parts)
         finally:
             self.on_restore(parts)
+        if source == "upload":
+            # Загруженная копия может хранить пароль и ключи: лишняя копия
+            # секретов на диске не нужна.
+            with contextlib.suppress(OSError):
+                os.remove(path)
+        else:
+            with self.lock:
+                self._prune()
         log.info("восстановлено из копии %s: %s", source, ", ".join(parts))
         return {"parts": parts, "snapshot": before}
 

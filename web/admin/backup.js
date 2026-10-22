@@ -104,7 +104,7 @@ export class BackupPanel {
           </div></div>`).join("") || `<p class="muted pad">${t("Автокопий пока нет")}</p>`}
         <div class="row-buttons"><button class="btn" data-backup-create>${t("Сделать копию сейчас")}</button></div>
       </section>
-      <p class="muted small panel-inset">${t("Панель хранит {n} последних автокопий: раз в сутки и перед восстановлением. Фоны в них не входят.", { n: 5 })}</p>`;
+      <p class="muted small panel-inset">${t("Панель хранит последние автокопии: {daily} ежедневных, {restore} перед восстановлением и {manual} сделанных вручную. Фоны в них не входят.", { daily: 5, restore: 3, manual: 3 })}</p>`;
   }
 
   preview(source, info) {
