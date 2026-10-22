@@ -399,6 +399,31 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TimeSettingsTest(unittest.TestCase):
+    def test_ntp_and_manual_time(self):
+        from wallhub.system import CommandError, System
+        system = System(dry_run=True)
+        self.assertTrue(system.time_state()["ntp"])
+        # С включённым NTP время руками не ставится.
+        with self.assertRaises(CommandError):
+            system.set_time("2030-01-02 03:04")
+        system.set_ntp(False)
+        system.set_time("2030-01-02 03:04")
+        self.assertGreater(system.time_state()["time"], 1893456000)
+        for bad in ("2030-13-01 00:00", "завтра", "1999-01-01 00:00"):
+            with self.assertRaises(CommandError):
+                system.set_time(bad)
+
+    def test_ntp_servers(self):
+        from wallhub.system import CommandError, System
+        system = System(dry_run=True)
+        system.set_ntp_servers(["ntp1.vniiftri.ru", "192.168.1.1", ""])
+        self.assertEqual(system.ntp_servers(), ["ntp1.vniiftri.ru", "192.168.1.1"])
+        for bad in (["a b"], ["x;rm -rf /"], ["-o"], ["s"] * 6):
+            with self.assertRaises(CommandError):
+                system.set_ntp_servers(bad)
+
+
 class KnownWifiTest(unittest.TestCase):
     def test_forget_out_of_range_network(self):
         from wallhub.system import CommandError, System

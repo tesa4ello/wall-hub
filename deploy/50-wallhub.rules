@@ -1,4 +1,4 @@
-// Сервис wallhub управляет Wi‑Fi, питанием и часовым поясом без root,
+// Сервис wallhub управляет Wi‑Fi, питанием, часовым поясом и временем без root,
 // а также запускает проверку и установку обновлений, перенос Ethernet под
 // NetworkManager (кнопки в админке)
 // и трансляцию экрана в админку.
@@ -10,7 +10,9 @@ polkit.addRule(function (action, subject) {
     if (id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
         id.indexOf("org.freedesktop.login1.reboot") === 0 ||
         id.indexOf("org.freedesktop.login1.power-off") === 0 ||
-        id === "org.freedesktop.timedate1.set-timezone") {
+        id === "org.freedesktop.timedate1.set-timezone" ||
+        id === "org.freedesktop.timedate1.set-ntp" ||
+        id === "org.freedesktop.timedate1.set-time") {
         return polkit.Result.YES;
     }
     if (id === "org.freedesktop.systemd1.manage-units" &&
@@ -19,6 +21,12 @@ polkit.addRule(function (action, subject) {
          action.lookup("unit") === "wallhub-update@install.service" ||
          action.lookup("unit") === "wallhub-update@rollback.service" ||
          action.lookup("unit") === "wallhub-net-ethernet.service")) {
+        return polkit.Result.YES;
+    }
+    // Свои NTP-серверы: после правки drop-in timesyncd перезапускается.
+    if (id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "systemd-timesyncd.service" &&
+        action.lookup("verb") === "restart") {
         return polkit.Result.YES;
     }
     if (id === "org.freedesktop.systemd1.manage-units" &&

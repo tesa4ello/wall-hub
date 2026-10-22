@@ -675,5 +675,22 @@
   "Не в зоне": "Out of range",
   "Панель перестанет к ней подключаться. Чтобы вернуться, понадобится пароль.": "The panel will stop connecting to it. You will need the password to connect again.",
   "Сеть {ssid} не сохранена": "Network {ssid} is not saved",
-  "Модуль выключен. Включите его, чтобы настроить.": "The module is turned off. Turn it on to configure it."
+  "Модуль выключен. Включите его, чтобы настроить.": "The module is turned off. Turn it on to configure it.",
+  "Время": "Time",
+  "Время задано вручную": "Time is set manually",
+  "Синхронизировано с {server}": "Synchronized with {server}",
+  "Синхронизировано": "Synchronized",
+  "Ещё не синхронизировано": "Not synchronized yet",
+  "Сейчас на панели": "Panel time",
+  "Синхронизировать по сети (NTP)": "Network time (NTP)",
+  "Панель сама берёт точное время из интернета": "The panel gets the exact time from the internet",
+  "NTP-серверы через пробел; пусто — {list}": "NTP servers separated by spaces; empty means {list}",
+  "по умолчанию": "defaults",
+  "Установить время": "Set time",
+  "NTP-серверы сохранены": "NTP servers saved",
+  "Время установлено": "Time set",
+  "Неверные дата или время": "Invalid date or time",
+  "Сначала выключите синхронизацию по сети": "Turn off network time first",
+  "Некорректный адрес NTP-сервера": "Invalid NTP server address",
+  "Не удалось сохранить NTP-серверы: {error}": "Could not save NTP servers: {error}"
 }

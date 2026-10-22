@@ -521,6 +521,42 @@ function displayNote(d) {
   return parts.filter(Boolean).join(" · ");
 }
 
+// Время панели: пояс, синхронизация по сети (NTP), свои серверы, ручная установка.
+function renderTime(time) {
+  if (!time) return `<h1>${t("Время")}</h1><section class="panel"><p class="muted pad">…</p></section>`;
+  const tz = time.timezone || undefined;
+  const now = new Date(time.time * 1000);
+  const shown = new Intl.DateTimeFormat(locale(), { dateStyle: "long", timeStyle: "short", timeZone: tz }).format(now);
+  const sync = !time.ntp ? t("Время задано вручную")
+    : time.synchronized ? (time.server ? t("Синхронизировано с {server}", { server: time.server }) : t("Синхронизировано"))
+      : t("Ещё не синхронизировано");
+  // Для поля datetime-local: местное время панели в её поясе.
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(now).map((p) => [p.type, p.value]));
+  const local = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  return `
+    <h1>${t("Время")}</h1>
+    <section class="panel">
+      <div class="field"><span>${t("Сейчас на панели")}<small>${esc(sync)}</small></span><b>${esc(shown)}</b></div>
+      <label class="field"><span>${t("Часовой пояс")}</span>
+        <select id="tz">${time.timezones.map((z) => `<option ${z === time.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>
+      </label>
+      <label class="field"><span>${t("Синхронизировать по сети (NTP)")}<small>${t("Панель сама берёт точное время из интернета")}</small></span>
+        <button class="switch" data-time-ntp aria-checked="${time.ntp}"></button>
+      </label>
+    </section>
+    ${time.ntp && time.timesyncd ? `
+    <form class="panel inline-form" id="ntp-form">
+      <input name="servers" value="${esc(time.servers.join(" "))}" placeholder="${esc(t("NTP-серверы через пробел; пусто — {list}", { list: time.default_servers.slice(0, 2).join(", ") || t("по умолчанию") }))}">
+      <button class="btn btn-primary" type="submit">${t("Сохранить")}</button>
+    </form>` : ""}
+    ${!time.ntp ? `
+    <form class="panel inline-form" id="time-form">
+      <input name="time" type="datetime-local" value="${local}" required>
+      <button class="btn btn-primary" type="submit">${t("Установить время")}</button>
+    </form>` : ""}`;
+}
+
 function renderSystem() {
   const time = state.time;
   const info = state.info || {};
@@ -532,10 +568,8 @@ function renderSystem() {
       ${info.display ? `
       <div class="field"><span>${t("Экран")}<small>${esc(displayNote(info.display))}</small></span><b>${info.display.width}×${info.display.height}</b></div>
       <div class="field"><span>${t("Сенсорный экран")}<small>${esc(info.display.touch_devices.join(", ") || t("Управление мышью: колесо листает столы, правая кнопка открывает настройки"))}</small></span><b>${info.display.touch ? t("Есть") : t("Не найден")}</b></div>` : ""}
-      <label class="field"><span>${t("Часовой пояс")}</span>
-        ${time ? `<select id="tz">${time.timezones.map((z) => `<option ${z === time.timezone ? "selected" : ""}>${esc(z)}</option>`).join("")}</select>` : "…"}
-      </label>
     </section>
+    ${renderTime(time)}
     <h1>${t("Пароль админки")}</h1>
     <form class="panel inline-form" id="password-form">
       <input name="current" type="password" placeholder="${t("Текущий пароль")}" autocomplete="current-password" required>
@@ -671,6 +705,8 @@ $("content").addEventListener("change", async (e) => {
   } else if (el.id === "tz") {
     await guarded(() => api.post("/admin/timezone", { timezone: el.value }));
     toast(t("Часовой пояс: {tz}", { tz: el.value }));
+    state.time = await api.get("/time");
+    render();
   }
 });
 
@@ -704,6 +740,18 @@ $("content").addEventListener("submit", async (e) => {
       toast(t("Токен сохранён"));
       return loadUpdate();
     }).catch(() => {});
+  } else if (e.target.id === "ntp-form") {
+    await guarded(() => api.post("/admin/time", { servers: data.servers || "" })).then((res) => {
+      state.time = res;
+      toast(t("NTP-серверы сохранены"));
+      render();
+    }).catch(() => {});
+  } else if (e.target.id === "time-form") {
+    await guarded(() => api.post("/admin/time", { time: data.time.replace("T", " ") })).then((res) => {
+      state.time = res;
+      toast(t("Время установлено"));
+      render();
+    }).catch(() => {});
   } else if (e.target.id === "password-form") {
     await guarded(() => api.post("/admin/password", data)).then(() => {
       e.target.reset();
@@ -734,6 +782,9 @@ $("content").addEventListener("click", async (e) => {
       await saveUi({ location_name: r.name, latitude: r.lat, longitude: r.lon });
     } else if ("wifiRescan" in d) {
       await loadWifi(true);
+    } else if ("timeNtp" in d) {
+      state.time = await guarded(() => api.post("/admin/time", { ntp: !state.time.ntp }));
+      render();
     } else if ("wifiRadio" in d) {
       if (state.wifi.radio && !(await confirmWifiOff(state.wifi))) return;
       await guarded(() => api.post("/wifi/radio", { enabled: !state.wifi.radio }));
