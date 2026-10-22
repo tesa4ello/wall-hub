@@ -260,7 +260,12 @@ const shade = {
     if (state.config?.ui.dnd) return;
     for (const n of fresh.reverse()) {
       toast(n.text ? `${n.title} · ${n.text}` : n.title, n.level === "crit" ? "error" : undefined);
-      if (n.sound) sound.play(null, { source: n.source });
+      if (!n.sound) continue;
+      const played = sound.play(null, { source: n.source });
+      if (sound.wantsVoice(n.level, n.source)) {
+        const ui = state.config?.ui || {};
+        sound.speak(ui.voice_details && n.text ? `${n.title}. ${n.text}` : n.title, { delay: played ? 1200 : 0 });
+      }
     }
   },
 
@@ -494,7 +499,10 @@ let soundSeq = null;
 function notifySounds(update, progress, req, moduleUpdates) {
   // Проверка звука из админки: играем, даже если звук выключен.
   if (req) {
-    if (soundSeq !== null && req.seq !== soundSeq) sound.play(req.name, { force: true });
+    if (soundSeq !== null && req.seq !== soundSeq) {
+      if (req.say) sound.speak(req.say);
+      else sound.play(req.name, { force: true });
+    }
     soundSeq = req.seq;
   }
   const ui = state.config?.ui;

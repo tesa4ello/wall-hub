@@ -1627,3 +1627,47 @@ class NotificationsTest(unittest.TestCase):
         ctx.remove_tile()
         self.assertEqual(self.tiles.listing(self.tr), [])
         self.assertGreater(self.tiles.rev, rev)
+
+
+class VoiceTest(unittest.TestCase):
+    def test_engines_and_cache(self):
+        from wallhub.voice import Voice, VoiceError
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        voices = os.path.join(tmp.name, "voices")
+        for name, lang, gender in (("aleksandr", "Russian", "male"), ("anna", "Russian", "female"), ("slt", "English", "female")):
+            os.makedirs(os.path.join(voices, name))
+            with open(os.path.join(voices, name, "voice.info"), "w") as f:
+                f.write(f"name={name.title()}\nlanguage={lang}\ngender={gender}\n")
+        calls = []
+
+        def run(cmd, input=None, **_):
+            calls.append(cmd)
+            out = cmd[cmd.index("-o" if cmd[0] == "RHVoice-test" else "-w") + 1]
+            with open(out, "wb") as f:
+                f.write(b"RIFF" + input)
+
+        installed = {"RHVoice-test", "espeak-ng"}
+        v = Voice(os.path.join(tmp.name, "cache"), which=lambda c: c in installed and "/usr/bin/" + c, run=run,
+                  voices_dirs=[voices])
+        self.assertEqual(v.state()["engine"], "rhvoice")
+        self.assertEqual([x["id"] for x in v.state()["voices"]], ["aleksandr", "anna", "slt"])
+        # Без выбора — женский голос языка; чужой голос не подходит.
+        path = v.synth("Сервер  недоступен", "ru", voice="slt", rate=120)
+        self.assertEqual(calls[-1][:5], ["RHVoice-test", "-p", "anna", "-r", "120"])
+        with open(path, "rb") as f:
+            self.assertEqual(f.read(), "RIFFСервер недоступен".encode())
+        # Повтор — из кэша, без синтеза.
+        self.assertEqual(v.synth("Сервер недоступен", "ru", voice="slt", rate=120), path)
+        self.assertEqual(len(calls), 1)
+        v.synth("Hello", "en", voice="aleksandr")
+        self.assertEqual(calls[-1][2], "slt")
+        installed.discard("RHVoice-test")
+        self.assertEqual(v.state(), {"engine": "espeak-ng", "voices": []})
+        v.synth("Привет", "ru", rate=200)
+        self.assertEqual(calls[-1][:5], ["espeak-ng", "-v", "ru", "-s", "350"])
+        installed.clear()
+        with self.assertRaises(VoiceError):
+            v.synth("Привет")
+        with self.assertRaises(VoiceError):
+            Voice(tmp.name, which=lambda c: True, run=run).synth("   ")

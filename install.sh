@@ -49,7 +49,12 @@ PACKAGES=(
     x11vnc
     # для модулей: ssh (мониторинг серверов) и цветные эмодзи (флаги стран)
     openssh-client fonts-noto-color-emoji
+    # голосовые подсказки: синтезатор речи (wallhub/voice.py)
+    espeak-ng
 )
+# Голоса RHVoice звучат естественнее eSpeak NG, но есть не во всех
+# репозиториях (в Debian — в contrib): ставим, только если apt их знает.
+OPTIONAL_PACKAGES=(rhvoice rhvoice-russian rhvoice-english)
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
@@ -144,6 +149,18 @@ if [ ${#MISSING[@]} -gt 0 ]; then
     apt-get install -y --no-install-recommends "${MISSING[@]}"
     # python3 мог появиться только сейчас: перечитываем переводы.
     load_tr
+fi
+OPTIONAL_MISSING=()
+for pkg in "${OPTIONAL_PACKAGES[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" \
+        && apt-cache policy "$pkg" 2>/dev/null | grep -q 'Candidate: [0-9]'; then
+        OPTIONAL_MISSING+=("$pkg")
+    fi
+done
+if [ ${#OPTIONAL_MISSING[@]} -gt 0 ]; then
+    log "$(L 'Устанавливаю: %s' "${OPTIONAL_MISSING[*]}")"
+    apt-get install -y --no-install-recommends "${OPTIONAL_MISSING[@]}" \
+        || warn "$(L 'Не удалось установить %s, голос будет попроще' "${OPTIONAL_MISSING[*]}")"
 fi
 
 systemctl enable --now NetworkManager

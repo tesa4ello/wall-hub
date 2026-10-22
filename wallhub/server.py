@@ -40,6 +40,7 @@ from .i18n import tr
 from .network import SPEED_PROVIDERS, Network
 from .update import CHANNELS, SCHEDULES, Updates, normalize_settings
 from .system import CommandError
+from .voice import Voice, VoiceError
 from .weather import Weather, WeatherError, fake_fetch, get_json, normalize_settings as weather_settings
 from .weather_providers import PROVIDERS as WEATHER_PROVIDERS
 
@@ -70,13 +71,18 @@ class ApiError(Exception):
         self.code = code
 
 
-class FileResponse:
-    """Ответ API файлом для скачивания (копия настроек). delete — удалить после отправки."""
+VOICE_RE = re.compile(r"^[a-z0-9-]{0,40}$")
 
-    def __init__(self, path, filename, delete=False):
+
+class FileResponse:
+    """Ответ API файлом: копия настроек для скачивания (filename) или фраза
+    для киоска (filename None). delete — удалить после отправки."""
+
+    def __init__(self, path, filename, delete=False, content_type="application/zip"):
         self.path = path
         self.filename = filename
         self.delete = delete
+        self.content_type = content_type
 
 
 def _int(v):
@@ -120,6 +126,11 @@ def validate_ui(patch):
         "sound_update": lambda v: isinstance(v, bool),
         "sound_sources": lambda v: isinstance(v, dict) and len(v) <= 64 and all(
             isinstance(k, str) and SOURCE_RE.match(k) and val in SOUNDS + ("off",) for k, val in v.items()),
+        "voice_enabled": lambda v: isinstance(v, bool),
+        "voice_level": lambda v: v in ("info", "warn", "crit"),
+        "voice_details": lambda v: isinstance(v, bool),
+        "voice_name": lambda v: isinstance(v, str) and VOICE_RE.match(v),
+        "voice_rate": lambda v: _int(v) and 50 <= v <= 200,
         "dnd": lambda v: isinstance(v, bool),
         "brightness": lambda v: _int(v) and 10 <= v <= 100,
         "panel_name": lambda v: isinstance(v, str) and len(v.strip()) <= 40,
@@ -221,6 +232,8 @@ class App:
         # Звук, который киоск должен сыграть (кнопка «Проверить» в админке):
         # номер растёт с каждой просьбой, киоск играет, когда номер сменился.
         self.sound = {"seq": 0, "name": ""}
+        # Голосовые подсказки: фразы синтезирует сервер, играет киоск.
+        self.voice = Voice(os.path.join(state_dir, "voice-cache"))
         builtin = [m.id for m in self.modules.scan().values() if m.builtin]
         # Смахнутые уведомления ядра (ключи вида update:<коммит>).
         self.dismissed = set()
@@ -443,9 +456,10 @@ def make_handler(app, trusted, port):
             try:
                 size = os.path.getsize(result.path)
                 self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Type", result.content_type)
                 self.send_header("Content-Length", str(size))
-                self.send_header("Content-Disposition", f'attachment; filename="{result.filename}"')
+                if result.filename:
+                    self.send_header("Content-Disposition", f'attachment; filename="{result.filename}"')
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 with open(result.path, "rb") as f:
@@ -1220,11 +1234,30 @@ def make_handler(app, trusted, port):
 
 
         def api_sound_test(self, body, **_):
+            if body.get("voice"):
+                # Проверка голоса: киоск зачитает пример выбранным голосом.
+                app.sound = {"seq": app.sound["seq"] + 1, "name": "",
+                             "say": tr("Голосовые подсказки включены. Так панель прочитает уведомление.")}
+                app.config.notify()
+                return
             name = body.get("name") or app.config.get("ui", "sound_name")
             if name not in SOUNDS:
                 raise ApiError(tr("Недопустимое значение: {key}", key="name"))
             app.sound = {"seq": app.sound["seq"] + 1, "name": name}
             app.config.notify()
+
+        def api_voice_say(self, body, **_):
+            """WAV с фразой для киоска (голос и скорость из настроек)."""
+            ui = app.config.get("ui")
+            try:
+                path = app.voice.synth(body.get("text"), ui.get("language", "ru"), ui.get("voice_name", ""),
+                                       ui.get("voice_rate", 100))
+            except VoiceError as e:
+                raise ApiError(tr(str(e)))
+            return FileResponse(path, None, content_type="audio/wav")
+
+        def api_admin_voice(self, **_):
+            return app.voice.state()
 
         def api_update_token(self, body, **_):
             token = str(body.get("token", "")).strip()
@@ -1456,6 +1489,8 @@ def make_handler(app, trusted, port):
         ("POST", "/update/token"): (H.api_update_token, False),
         ("POST", "/update/run"): (H.api_update_run, False),
         ("POST", "/sound/test"): (H.api_sound_test, False),
+        ("POST", "/voice/say"): (H.api_voice_say, False),
+        ("GET", "/admin/voice"): (H.api_admin_voice, False),
         ("GET", "/store"): (H.api_store, False),
         ("POST", "/store/refresh"): (H.api_store_refresh, False),
         ("GET", "/store/updates"): (H.api_store_updates, False),
