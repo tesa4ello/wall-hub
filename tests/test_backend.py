@@ -399,6 +399,54 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class KnownWifiTest(unittest.TestCase):
+    def test_forget_out_of_range_network(self):
+        from wallhub.system import CommandError, System
+        system = System(dry_run=True)
+        state = system.wifi_state()
+        self.assertIn("Дача", state["saved"])
+        self.assertNotIn("Дача", [n["ssid"] for n in state["networks"]])
+        system.wifi_forget("Дача")
+        self.assertNotIn("Дача", system.wifi_state()["saved"])
+        # Только сохранённые сети Wi‑Fi: чужое имя не удаляется.
+        with self.assertRaises(CommandError):
+            system.wifi_forget("Wired connection 1")
+
+
+class ModuleDisableTest(unittest.TestCase):
+    """Выключенный модуль: серверная часть остановлена, виджеты в каталоге
+    с пометкой disabled, настройки и расстановка на столах сохраняются."""
+
+    def test_disable_and_enable(self):
+        from wallhub.server import App, ApiError
+        from wallhub.system import System
+        with tempfile.TemporaryDirectory() as tmp:
+            mods = os.path.join(tmp, "mods")
+            os.makedirs(os.path.join(mods, "srv", "backend"))
+            with open(os.path.join(mods, "srv", "module.json"), "w") as f:
+                json.dump({"id": "srv", "version": "1.0.0", "core": "1", "title": "S", "backend": "backend/main.py",
+                           "widgets": [{"id": "x", "title": "X"}]}, f)
+            with open(os.path.join(mods, "srv", "backend", "main.py"), "w") as f:
+                f.write("def setup(ctx):\n    ctx.save_settings({'a': 1})\n")
+            config = Config(os.path.join(tmp, "state", "c.json"))
+            app = App(config, System(dry_run=True), WEB, 80, modules_dirs=[mods])
+            try:
+                self.assertIn("srv", app.backends.running)
+                app.set_module_enabled("srv", False)
+                self.assertNotIn("srv", app.backends.running)
+                self.assertEqual(config.get("modules_disabled"), ["srv"])
+                self.assertTrue(app.widget_catalog()["srv/x"]["disabled"])
+                self.assertNotIn("srv", app.active_modules())
+                self.assertEqual(config.get("module_settings")["srv"], {"a": 1})
+                with self.assertRaises(ApiError):
+                    app.set_module_enabled("clock", False)
+                app.set_module_enabled("srv", True)
+                self.assertIn("srv", app.backends.running)
+                self.assertNotIn("disabled", app.widget_catalog()["srv/x"])
+            finally:
+                app.backends.stop_all()
+
+
 class FirstLoginTest(unittest.TestCase):
     """Пароль админки задаётся при первом входе."""
 

@@ -476,9 +476,27 @@ function renderWifi() {
         <input name="ssid" placeholder="${t("Скрытая сеть: имя")}" required>
         <input name="password" type="password" placeholder="${t("Пароль")}">
         <button class="btn" type="submit">${t("Подключиться")}</button>
-      </form>`;
+      </form>
+      ${renderKnownWifi(w)}`;
   }
   return `<h1>${t("Сеть")}</h1><h1>Wi‑Fi <button class="btn btn-small" data-wifi-rescan>${icon("refresh")} ${t("Искать сети")}</button></h1>${body}${network.renderWifiIpv4()}${network.renderEthernet()}`;
+}
+
+// Известные (сохранённые) сети, в том числе те, что сейчас не видны.
+function renderKnownWifi(w) {
+  if (!(w.saved || []).length) return "";
+  const visible = new Set(w.networks.map((n) => n.ssid));
+  return `
+    <h1>${t("Известные сети")}</h1>
+    <section class="panel list">
+      ${w.saved.map((name, i) => `
+        <div class="item"><div class="item-main">
+          <div class="item-title grow">${esc(name)}
+            <div class="muted small">${name === w.connection ? t("Подключено") : !w.radio ? "" : visible.has(name) ? t("Рядом") : t("Не в зоне")}</div>
+          </div>
+          <button class="btn btn-small" data-known-forget="${i}">${t("Забыть")}</button>
+        </div></div>`).join("")}
+    </section>`;
 }
 
 async function wifiConnect(body) {
@@ -723,6 +741,12 @@ $("content").addEventListener("click", async (e) => {
     } else if ("wifiDisconnect" in d) {
       await guarded(() => api.post("/wifi/disconnect"));
       await loadWifi(false);
+    } else if (d.knownForget !== undefined) {
+      const ssid = state.wifi.saved[Number(d.knownForget)];
+      if (await confirmDialog({ title: t("Забыть сеть {ssid}?", { ssid }), text: t("Панель перестанет к ней подключаться. Чтобы вернуться, понадобится пароль."), ok: t("Забыть"), danger: true })) {
+        await guarded(() => api.post("/wifi/forget", { ssid }));
+        await loadWifi(false);
+      }
     } else if (d.wifiForget !== undefined) {
       const net = state.wifi.networks[Number(d.wifiForget)];
       if (await confirmDialog({ title: t("Забыть сеть {ssid}?", { ssid: net.ssid }), ok: t("Забыть"), danger: true })) {

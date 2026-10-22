@@ -29,6 +29,10 @@ function notifier(module) {
   };
 }
 
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
 function ensureStyle(href) {
   if (document.querySelector(`link[href="${href}"]`)) return;
   const link = document.createElement("link");
@@ -63,6 +67,12 @@ export async function mountWidget(el, w, catalog) {
   el.classList.add("widget", `widget-${module}-${id}`);
   // Подложку можно включить или убрать у конкретного виджета (w.card).
   el.classList.toggle("widget-card", Boolean(w.card ?? (meta && meta.card)));
+  // Модуль выключен в админке: виджет остаётся на месте, но не работает.
+  if (meta?.disabled) {
+    el.classList.add("widget-disabled");
+    el.innerHTML = `<div class="widget-error"><b>${esc(t(meta.title))}</b>${t("Модуль «{title}» отключён", { title: t(meta.module_title) })}</div>`;
+    return {};
+  }
   try {
     if (!meta) throw new Error("нет в каталоге");
     const mod = await loadModule(module);

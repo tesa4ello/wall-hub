@@ -41,7 +41,8 @@ class System:
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
         self._fake_active = "Home"
-        self._fake_saved = {"Home"}
+        # «Дача» сохранена, но не видна: для списка известных сетей.
+        self._fake_saved = {"Home", "Дача"}
         self._fake_radio = True
         self._lock = threading.Lock()
 
@@ -180,12 +181,19 @@ class System:
             self._run(["nmcli", "device", "disconnect", device["device"]])
 
     def wifi_forget(self, ssid):
+        """Удаляет сохранённую сеть Wi‑Fi, в том числе ту, что сейчас не видна.
+        Только профили Wi‑Fi: Ethernet и прочие подключения так не удалить."""
         if self.dry_run:
+            if ssid not in self._fake_saved:
+                raise CommandError(tr("Сеть {ssid} не сохранена", ssid=ssid))
             self._fake_saved.discard(ssid)
             if self._fake_active == ssid:
                 self._fake_active = None
             return
-        self._run(["nmcli", "connection", "delete", "id", ssid])
+        with self._lock:
+            if ssid not in self._saved_wifi():
+                raise CommandError(tr("Сеть {ssid} не сохранена", ssid=ssid))
+            self._run(["nmcli", "connection", "delete", "id", ssid])
 
     def wifi_radio(self, enabled):
         if self.dry_run:

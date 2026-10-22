@@ -213,7 +213,9 @@ modules come from the module store, the repository
 [tesa4ello/wallhub-modules](https://github.com/tesa4ello/wallhub-modules) (its
 `CLAUDE.md` describes the format). The admin panel's "Modules" tab lists the
 modules of all connected catalogs and installs, updates and deletes them;
-deleting a module also removes its widgets from the desktops. A catalog is any
+deleting a module also removes its widgets from the desktops. A module can also
+be turned off without deleting it: its server part stops, its widgets stay on
+the desktops, inactive and labelled as turned off, and its settings are kept. A catalog is any
 GitHub repository with the same layout (`modules/<id>/` plus `catalog.json`);
 more catalogs are connected on the same tab, and if two catalogs have a module
 with the same id, the one higher in the list wins. Connecting a catalog means
