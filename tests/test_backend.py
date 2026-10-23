@@ -1662,6 +1662,27 @@ class VoiceTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         v.synth("Hello", "en", voice="aleksandr")
         self.assertEqual(calls[-1][2], "slt")
+        # Английская панель, русский текст: русский голос.
+        v.synth("Позвонить маме", "en", voice="slt")
+        self.assertEqual(calls[-1][2], "anna")
+        # Голос завершился без файла: пробуем следующий.
+        silent = {"slt"}
+        base_run = run
+
+        def flaky(cmd, input=None, **kw):
+            calls.append(cmd)
+            if cmd[0] == "RHVoice-test" and cmd[2] in silent:
+                return
+            calls.pop()
+            base_run(cmd, input=input, **kw)
+
+        v.run = flaky
+        v.synth("Good morning", "en")
+        self.assertEqual([c[2] for c in calls[-2:]], ["slt", "anna"])
+        silent.add("anna")
+        v.synth("Good night", "en")
+        self.assertEqual(calls[-1][:3], ["espeak-ng", "-v", "en-gb"])
+        v.run = run
         installed.discard("RHVoice-test")
         self.assertEqual(v.state(), {"engine": "espeak-ng", "voices": []})
         v.synth("Привет", "ru", rate=200)

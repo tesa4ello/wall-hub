@@ -264,7 +264,9 @@ const shade = {
       const played = sound.play(null, { source: n.source });
       if (sound.wantsVoice(n.level, n.source)) {
         const ui = state.config?.ui || {};
-        sound.speak(ui.voice_details && n.text ? `${n.title}. ${n.text}` : n.title, { delay: played ? 1200 : 0 });
+        // У напоминания весь смысл в тексте («Позвонить маме»): его читаем всегда.
+        const details = n.text && (ui.voice_details || n.source === "calendar");
+        sound.speak(details ? `${n.title}. ${n.text}` : n.title, { delay: played ? 1200 : 0 });
       }
     }
   },
