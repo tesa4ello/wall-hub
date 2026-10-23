@@ -563,6 +563,11 @@ p.panel-inset { margin: -6px 4px 16px; line-height: 1.45; }
   .field > select, .field > input:not([type]), .field > input[type="text"], .field > input[type="password"] { flex: 1 1 100%; width: 100%; min-width: 0; margin-left: 0; }
   .item-options { margin-left: 0; }
   .inline-form .btn { flex: 1 1 auto; }
+  /* Список с кнопкой («Голос», «Звук») — тоже под подписью, иначе подсказка
+     сжимается в узкий столбик. */
+  .field:has(> .field-controls select) > span { flex-basis: 100%; }
+  .field > .field-controls:has(select) { flex: 1 1 100%; flex-wrap: nowrap; margin-left: 0; }
+  .field > .field-controls select { flex: 1 1 auto; min-width: 0; }
 }
 
 /* --- SSH-ключи --------------------------------------------------------------- */

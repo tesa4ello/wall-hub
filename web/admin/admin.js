@@ -285,6 +285,7 @@ function renderDisplay() {
       </label>
     </section>
     ${renderSound(ui)}
+    ${renderVoice(ui)}
     ${backgrounds.render(ui)}`;
 }
 
@@ -319,6 +320,44 @@ function renderSound(ui) {
       </label>
       <label class="field"><span>${t("Тихо с")}</span><input type="time" data-ui="sound_quiet_from" value="${ui.sound_quiet_from}" ${quiet}></label>
       <label class="field"><span>${t("Тихо до")}</span><input type="time" data-ui="sound_quiet_to" value="${ui.sound_quiet_to}" ${quiet}></label>
+    </section>`;
+}
+
+// Голосовые подсказки: панель зачитывает уведомления (wallhub/voice.py).
+// Голоса RHVoice грузим один раз, когда открыли вкладку.
+function renderVoice(ui) {
+  if (state.voice === undefined) {
+    state.voice = null;
+    api.get("/admin/voice").then((v) => { state.voice = v; if (state.tab === "display") render(); }).catch(() => {});
+  }
+  const v = state.voice;
+  const missing = v && !v.engine;
+  const on = ui.voice_enabled && !missing;
+  const off = on ? "" : "disabled";
+  const lang = (ui.language || "ru").startsWith("en") ? "en" : "ru";
+  const voices = (v?.voices || []).filter((x) => x.lang === lang);
+  const levels = [["info", t("Все")], ["warn", t("Предупреждения и важные")], ["crit", t("Только важные")]];
+  return `
+    <h1>${t("Голосовые подсказки")}</h1>
+    <section class="panel">
+      <label class="field"><span>${t("Зачитывать уведомления")}<small>${missing ? t("На панели нет синтезатора речи: обновите панель, установщик поставит его сам") : t("Панель произносит уведомление после его звука. Работают громкость, тихие часы и «Не беспокоить»")}</small></span>
+        <input type="checkbox" data-ui="voice_enabled" ${ui.voice_enabled ? "checked" : ""} ${missing ? "disabled" : ""}>
+      </label>
+      <label class="field"><span>${t("Какие уведомления")}</span>
+        <select data-ui="voice_level" ${off}>${levels.map(([val, l]) => `<option value="${val}" ${val === ui.voice_level ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      </label>
+      <label class="field"><span>${t("Читать и текст")}<small>${t("Не только заголовок, но и подробности под ним")}</small></span>
+        <input type="checkbox" data-ui="voice_details" ${ui.voice_details ? "checked" : ""} ${off}>
+      </label>
+      <div class="field"><span>${t("Голос")}<small>${voices.length ? t("«Проверить» говорит на панели") : t("Голос eSpeak NG. Голоса RHVoice звучат естественнее, если они установлены")}</small></span>
+        <div class="field-controls">
+          ${voices.length ? `<select data-ui="voice_name" ${off}><option value="">${t("Авто")}</option>${voices.map((x) => `<option value="${esc(x.id)}" ${x.id === ui.voice_name ? "selected" : ""}>${esc(x.title)}</option>`).join("")}</select>` : ""}
+          <button class="btn btn-small" type="button" data-voice-test ${missing ? "disabled" : ""}>${t("Проверить")}</button>
+        </div>
+      </div>
+      <label class="field"><span>${t("Скорость речи, %")}</span>
+        <input type="number" min="50" max="200" step="10" data-ui="voice_rate" data-int value="${ui.voice_rate}" ${off}>
+      </label>
     </section>`;
 }
 
@@ -864,6 +903,8 @@ $("content").addEventListener("click", async (e) => {
     } else if (d.soundTestSource) {
       const name = state.config.ui.sound_sources?.[d.soundTestSource] || state.config.ui.sound_name;
       await guarded(() => api.post("/sound/test", { name })).then(() => toast(t("Звук отправлен на панель"))).catch(() => {});
+    } else if ("voiceTest" in d) {
+      await guarded(() => api.post("/sound/test", { voice: true })).then(() => toast(t("Фраза отправлена на панель"))).catch(() => {});
     } else if ("soundTest" in d) {
       const name = document.querySelector('[data-ui="sound_name"]')?.value;
       await guarded(() => api.post("/sound/test", { name })).then(() => toast(t("Звук отправлен на панель"))).catch(() => {});

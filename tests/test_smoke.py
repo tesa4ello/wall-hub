@@ -101,6 +101,32 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(self.request("/api/timers", {"action": "add", "id": timer, "seconds": "abc"})[0], 400)
         self.assertEqual(self.request("/api/timers", {"action": "cancel", "id": timer})[0], 200)
 
+    def test_voice(self):
+        # Синтезатор подменяем: в CI его может не быть.
+        wav = os.path.join(self.tmp.name, "say.wav")
+        with open(wav, "wb") as f:
+            f.write(b"RIFF....WAVE")
+        said = []
+        orig = self.app.voice.synth
+        self.app.voice.synth = lambda text, *a: said.append(text) or wav
+        self.addCleanup(setattr, self.app.voice, "synth", orig)
+        req = urllib.request.Request(self.base + "/api/voice/say", data=json.dumps({"text": "Привет"}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            self.assertEqual(r.headers.get_content_type(), "audio/wav")
+            self.assertIsNone(r.headers.get("Content-Disposition"))
+            self.assertEqual(r.read(), b"RIFF....WAVE")
+        self.assertEqual(said, ["Привет"])
+        self.assertTrue(os.path.exists(wav))
+        # «Проверить» в админке: киоск получает фразу в revision.
+        seq = self.app.sound["seq"]
+        self.assertEqual(self.request("/api/sound/test", {"voice": True})[0], 200)
+        self.assertEqual(self.app.sound["seq"], seq + 1)
+        self.assertTrue(self.app.sound["say"])
+        status, body = self.request("/api/admin/voice")
+        self.assertEqual(status, 200)
+        self.assertIn("engine", json.loads(body))
+
 
 class TransferTest(unittest.TestCase):
     """Перенос на новую панель: новая забирает копию у старой по сети."""

@@ -65,6 +65,15 @@ DEFAULTS = {
         # Звук уведомлений по источнику: {"system": "bell", "<модуль>": "off"}.
         # Нет записи — общий sound_name.
         "sound_sources": {},
+        # Голосовые подсказки (wallhub/voice.py): панель зачитывает уведомления
+        # уровня не ниже voice_level (info, warn, crit); voice_details — и
+        # текст под заголовком. voice_name — голос RHVoice ("" — первый
+        # подходящий), voice_rate — скорость речи в процентах.
+        "voice_enabled": False,
+        "voice_level": "info",
+        "voice_details": False,
+        "voice_name": "",
+        "voice_rate": 100,
         # «Не беспокоить»: без звуков и всплывашек, уведомления копятся в шторке.
         "dnd": False,
         # Яркость интерфейса 10..100 (затемнение поверх экрана, без подсветки).

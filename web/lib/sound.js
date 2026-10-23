@@ -76,3 +76,52 @@ export function play(name, { force = false, source = null, volume: own = null } 
     return false;
   }
 }
+
+// Голосовые подсказки: фразу синтезирует сервер (/api/voice/say, голос и
+// скорость из настроек), а играем здесь, чтобы работали громкость, тихие
+// часы и «Не беспокоить». Фразы идут по очереди, лишние отбрасываются.
+const LEVELS = ["info", "ok", "warn", "crit"];
+const MAX_QUEUE = 3;
+let speech = Promise.resolve();
+let queued = 0;
+
+// Зачитывать ли уведомление такого уровня от такого источника.
+export function wantsVoice(level, source) {
+  if (!settings.voice_enabled || !settings.sound_enabled || settings.dnd || isQuiet()) return false;
+  if (source && settings.sound_sources?.[source] === "off") return false;
+  const min = settings.voice_level === "crit" ? 3 : settings.voice_level === "warn" ? 2 : 0;
+  return Math.max(0, LEVELS.indexOf(level)) >= min;
+}
+
+// delay (мс) — пауза перед фразой, чтобы не наложиться на звук уведомления.
+export function speak(text, { delay = 0 } = {}) {
+  const volume = (settings.sound_volume ?? 60) / 100;
+  if (!text || volume <= 0 || queued >= MAX_QUEUE) return false;
+  queued += 1;
+  speech = speech
+    .then(() => say(text, volume, delay))
+    .catch((e) => console.error("speech failed", e))
+    .finally(() => { queued -= 1; });
+  return true;
+}
+
+async function say(text, volume, delay) {
+  const response = await fetch("/api/voice/say", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw new Error(`voice ${response.status}`);
+  const data = await response.arrayBuffer();
+  ctx ??= new AudioContext();
+  if (ctx.state === "suspended") await ctx.resume();
+  const buffer = await ctx.decodeAudioData(data);
+  if (delay) await new Promise((r) => setTimeout(r, delay));
+  const src = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  gain.gain.value = Math.min(1, volume * volume * 1.5);
+  src.buffer = buffer;
+  src.connect(gain).connect(ctx.destination);
+  await new Promise((resolve) => {
+    src.onended = resolve;
+    src.start();
+  });
+}
