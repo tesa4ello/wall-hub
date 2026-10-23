@@ -9,6 +9,7 @@ WAV, а играет киоск через Web Audio, как и остальны
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -19,6 +20,7 @@ RHVOICE_DIRS = ("/usr/share/RHVoice/voices", "/usr/local/share/RHVoice/voices")
 LANGS = {"Russian": "ru", "English": "en"}
 ESPEAK_VOICES = {"ru": "ru", "en": "en-gb"}
 MAX_TEXT = 400
+CYRILLIC_RE = re.compile("[\u0400-\u04ff]")
 CACHE_KEEP = 60
 TIMEOUT = 20
 
@@ -83,51 +85,69 @@ class Voice:
         female = [v for v in same if v["gender"] == "female"]
         return (female or same)[0]["id"] if same else None
 
+    def _candidates(self, lang, voice):
+        """Чем пробовать произнести: [(движок, голос)] по порядку. Русские
+        голоса RHVoice читают и английский, eSpeak NG — запасной вариант."""
+        voices = self.rhvoice_voices()
+        out = []
+        for want in (lang, "ru"):
+            name = self._pick(voices, want, voice)
+            if name and ("rhvoice", name) not in out:
+                out.append(("rhvoice", name))
+        if self.which("espeak-ng"):
+            out.append(("espeak-ng", ESPEAK_VOICES[lang]))
+        return out
+
     def synth(self, text, lang="ru", voice="", rate=100):
         """Путь к WAV с фразой. Повторные фразы берутся из кэша."""
         text = " ".join(str(text or "").split())[:MAX_TEXT]
         if not text:
             raise VoiceError("Нечего произносить")
         lang = "en" if str(lang).startswith("en") else "ru"
+        # Кириллицу английский голос RHVoice молча пропускает (код 0, без
+        # файла): русский текст читаем русским голосом при любом языке панели.
+        if CYRILLIC_RE.search(text):
+            lang = "ru"
         rate = max(50, min(200, int(rate or 100)))
-        voices = self.rhvoice_voices()
-        engine = "rhvoice" if voices else "espeak-ng" if self.which("espeak-ng") else None
-        if engine is None:
+        candidates = self._candidates(lang, voice)
+        if not candidates:
             raise VoiceError("Синтезатор речи не установлен")
-        name = self._pick(voices, lang, voice) if voices else ESPEAK_VOICES[lang]
-        if engine == "rhvoice" and name is None:
-            # Голосов этого языка у RHVoice нет: выручает eSpeak NG.
-            if not self.which("espeak-ng"):
-                raise VoiceError("Нет голоса для этого языка")
-            engine, name = "espeak-ng", ESPEAK_VOICES[lang]
+        with self.lock:
+            for engine, name in candidates:
+                path = self._make(engine, name, rate, text)
+                if path:
+                    return path
+        raise VoiceError("Не удалось синтезировать речь")
+
+    def _make(self, engine, name, rate, text):
+        """WAV из кэша или новый; None — движок не справился."""
         key = hashlib.sha256(f"{engine}\0{name}\0{rate}\0{text}".encode()).hexdigest()[:32]
         path = os.path.join(self.cache_dir, key + ".wav")
-        with self.lock:
-            if os.path.isfile(path):
-                os.utime(path)
-                return path
-            os.makedirs(self.cache_dir, mode=0o700, exist_ok=True)
-            tmp = path + ".tmp"
-            if engine == "rhvoice":
-                # RHVoice: скорость в процентах, 100 — обычная.
-                cmd = ["RHVoice-test", "-p", name, "-r", str(rate), "-o", tmp]
-            else:
-                # eSpeak NG: слов в минуту, обычная — 175.
-                cmd = ["espeak-ng", "-v", name, "-s", str(round(175 * rate / 100)), "-w", tmp, "--stdin"]
+        if os.path.isfile(path):
+            os.utime(path)
+            return path
+        os.makedirs(self.cache_dir, mode=0o700, exist_ok=True)
+        tmp = path + ".tmp"
+        if engine == "rhvoice":
+            # RHVoice: скорость в процентах, 100 — обычная.
+            cmd = ["RHVoice-test", "-p", name, "-r", str(rate), "-o", tmp]
+        else:
+            # eSpeak NG: слов в минуту, обычная — 175.
+            cmd = ["espeak-ng", "-v", name, "-s", str(round(175 * rate / 100)), "-w", tmp, "--stdin"]
+        try:
+            self.run(cmd, input=text.encode(), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                     timeout=TIMEOUT, check=True)
+            if not os.path.getsize(tmp):
+                raise OSError("empty output")
+            os.replace(tmp, path)
+        except (OSError, subprocess.SubprocessError) as e:
+            log.warning("синтез речи не удался (%s %s): %s", engine, name, e)
             try:
-                self.run(cmd, input=text.encode(), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                         timeout=TIMEOUT, check=True)
-                if not os.path.getsize(tmp):
-                    raise OSError("empty output")
-                os.replace(tmp, path)
-            except (OSError, subprocess.SubprocessError) as e:
-                log.warning("синтез речи не удался (%s): %s", engine, e)
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
-                raise VoiceError("Не удалось синтезировать речь")
-            self._prune()
+                os.remove(tmp)
+            except OSError:
+                pass
+            return None
+        self._prune()
         return path
 
     def _prune(self):
