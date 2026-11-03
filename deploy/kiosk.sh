@@ -11,6 +11,9 @@ xset s off
 xset s noblank
 xset -dpms
 xsetroot -solid black
+# Сервис панели (пользователь wallhub) открывает на экране свои окна:
+# например, SSH-терминал модуля «Серверы» (xterm на весь экран).
+xhost +SI:localuser:wallhub >/dev/null 2>&1 || true
 
 # Ждём, пока поднимется бэкенд, чтобы не показывать страницу ошибки.
 i=0
