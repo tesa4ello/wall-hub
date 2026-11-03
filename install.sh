@@ -51,6 +51,8 @@ PACKAGES=(
     openssh-client fonts-noto-color-emoji
     # голосовые подсказки: синтезатор речи (wallhub/voice.py)
     espeak-ng
+    # терминал на экране панели для модулей (SSH-сессия модуля «Серверы»)
+    xterm
 )
 # Голоса RHVoice звучат естественнее eSpeak NG, но есть не во всех
 # репозиториях (в Debian — в contrib): ставим, только если apt их знает.
@@ -219,7 +221,7 @@ RELEASE="$RELEASES_DIR/$RELEASE_ID"
 kiosk_files_hash() {
     # При первой установке current ещё нет: cat падает, а с pipefail это
     # прервало бы весь скрипт, поэтому ошибку cat гасим.
-    { cat "$1"/deploy/{kiosk.sh,display-sync.py,xinitrc,bash_profile,openbox-rc.xml,chromium-policy.json,autologin.conf} 2>/dev/null || true; } | sha256sum
+    { cat "$1"/deploy/{kiosk.sh,display-sync.py,xinitrc,bash_profile,openbox-rc.xml,chromium-policy.json,autologin.conf,xorg-wallhub.conf} 2>/dev/null || true; } | sha256sum
 }
 OLD_KIOSK_HASH="$(kiosk_files_hash "$CURRENT")"
 PREVIOUS="$(readlink "$CURRENT" 2>/dev/null || true)"
@@ -313,7 +315,8 @@ systemctl restart wallhub.service
 # --- киоск ----------------------------------------------------------------------------
 
 log "$(L 'Настраиваю киоск')"
-install -d /etc/chromium/policies/managed
+install -d /etc/chromium/policies/managed /etc/X11/xorg.conf.d
+install -m 0644 "$SRC_DIR/deploy/xorg-wallhub.conf" /etc/X11/xorg.conf.d/10-wallhub.conf
 install -m 0644 "$SRC_DIR/deploy/chromium-policy.json" /etc/chromium/policies/managed/wallhub.json
 
 KIOSK_HOME="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
